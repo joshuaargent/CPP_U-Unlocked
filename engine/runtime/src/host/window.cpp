@@ -279,7 +279,7 @@ void assign_pad_slots(const SDL_JoystickID* ids, int count) {
     if (assigned_gamepad && controller_profiles::for_device(assigned_gamepad).player_slot == 0) return;
     static SDL_JoystickID used = 0;
     if (g_pad_slots[0] != 0 && g_pad_slots[0] == used) return;
-    for (size_t slot = 1; slot < g_pad_slots.size(); ++slot) {
+    for (size_t slot = 0; slot < g_pad_slots.size(); ++slot) {
         SDL_Gamepad* pad = g_pad_slots[slot] && g_pad_slots[slot] != kGuestSlot
             ? SDL_GetGamepadFromID(g_pad_slots[slot]) : nullptr;
         if (pad == nullptr || controller_profiles::for_device(pad).player_slot >= 0) continue;
@@ -289,7 +289,7 @@ void assign_pad_slots(const SDL_JoystickID* ids, int count) {
         }
         if (!pressed) continue;
         used = g_pad_slots[slot];
-        std::swap(g_pad_slots[0], g_pad_slots[slot]);
+        if (slot != 0) std::swap(g_pad_slots[0], g_pad_slots[slot]);
         break;
     }
 }
