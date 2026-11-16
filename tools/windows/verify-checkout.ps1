@@ -19,6 +19,7 @@ $requiredSource = @(
     (Join-Path $enginePath 'tools\setup_deps.py'),
     (Join-Path $enginePath 'tools\windows\build-smash.ps1'),
     (Join-Path $repoRoot 'tools\windows\build-from-library.ps1'),
+    (Join-Path $repoRoot 'tools\windows\setup-build-environment.ps1'),
     (Join-Path $enginePath 'tools\windows\package-release.ps1'),
     (Join-Path $repoRoot 'tools\windows\update-launcher.ps1'),
     (Join-Path $enginePath 'third_party\cemu_nex\LICENSE.txt'),
