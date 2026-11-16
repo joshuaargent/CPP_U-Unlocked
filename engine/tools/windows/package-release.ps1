@@ -118,7 +118,12 @@ Clone the U Unlocked source repository and follow the README build instructions 
 
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 if (-not (Test-Path -LiteralPath $tar -PathType Leaf)) { throw "tar.exe was not found: $tar" }
-& $tar -a -cf $zip -C $dist $name
+# The updater expects package-manifest.json and each binary at the ZIP root.
+# Archiving the containing directory would add a top-level folder and make a
+# correctly signed release impossible to install.
+$archiveEntries = @(Get-ChildItem -LiteralPath $stage -Force | ForEach-Object { $_.Name })
+if ($archiveEntries.Count -eq 0) { throw 'The launcher package staging directory is empty.' }
+& $tar -a -cf $zip -C $stage @archiveEntries
 if ($LASTEXITCODE -ne 0) { throw "Launcher archive creation failed with exit code $LASTEXITCODE." }
 $archiveHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 "$archiveHash  $([System.IO.Path]::GetFileName($zip))" |
