@@ -115,6 +115,38 @@ jobs:
           cmake --build build/launcher-release --config Release --parallel 2
           if ($LASTEXITCODE -ne 0) { throw 'The redistributable launcher failed to compile or link.' }
 
+  windows-vulkan-runtime-build:
+    name: Compile complete Vulkan runtime without game data
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Bootstrap compiler and use runner build utilities
+        shell: pwsh
+        run: |
+          ./tools/windows/setup-build-environment.ps1 -UseSystemTools
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime toolchain bootstrap failed.' }
+
+      - name: Fetch and build pinned Vulkan/runtime dependencies
+        shell: pwsh
+        run: |
+          ./engine/tools/windows/build-deps.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned runtime dependency build failed.' }
+
+      - name: Build recompiler and runtime build utilities
+        shell: pwsh
+        run: |
+          ./engine/tools/windows/build-recomp.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Recompiler and function finder build failed.' }
+
+      - name: Compile complete Vulkan runtime
+        shell: pwsh
+        run: |
+          ninja -C engine/build cafe_runtime
+          if ($LASTEXITCODE -ne 0) { throw 'The complete Vulkan runtime failed to compile.' }
+
   validate:
     name: Validate source tree and project scripts
     runs-on: windows-latest
