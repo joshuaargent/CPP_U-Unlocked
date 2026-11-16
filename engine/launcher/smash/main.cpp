@@ -547,6 +547,9 @@ public:
         refresh();
         font_.open({dir_ / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/segoeui.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf"});
+
+        // Check in the background on startup; installation remains an explicit user action.
+        check_launcher_updates();
     }
 
     bool running() const { return !quit_; }
@@ -1182,7 +1185,6 @@ private:
         room_watch_enabled_.store(s == Screen::kNetplay, std::memory_order_release);
         if (s == Screen::kNetplay) watch_rooms();
         screen_ = s;
-        if (s == Screen::kUpdates) check_launcher_updates();
         selected_ = 0;
         selection_y_ = 0;
         fade_ = 0;
