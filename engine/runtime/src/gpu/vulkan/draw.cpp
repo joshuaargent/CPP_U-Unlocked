@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 
@@ -410,8 +411,12 @@ void Renderer::resolve_module(ShaderModule& entry) {
 }
 
 void Renderer::compile_async(std::function<void()> job) {
+    // Shader compilation is bursty when a new scene is first visited. Keep
+    // worker count and queued source/IR memory bounded on low-memory systems.
+    constexpr size_t kMaxQueuedShaderJobs = 64;
     if (workers_.empty()) {
-        const unsigned count = std::max(2u, std::thread::hardware_concurrency() / 2);
+        const unsigned hardware_threads = std::thread::hardware_concurrency();
+        const unsigned count = hardware_threads == 0 ? 2u : std::clamp(hardware_threads / 2u, 1u, 4u);
         for (unsigned i = 0; i < count; ++i) {
             workers_.emplace_back([this] {
                 for (;;) {
@@ -422,14 +427,24 @@ void Renderer::compile_async(std::function<void()> job) {
                         next = std::move(jobs_.front());
                         jobs_.pop_front();
                     }
-                    next();
+                    jobs_cv_.notify_all();
+                    try {
+                        next();
+                    } catch (const std::exception& error) {
+                        std::fprintf(stderr, "ttt2: gpu: shader worker failed: %s\\n", error.what());
+                    } catch (...) {
+                        std::fprintf(stderr, "ttt2: gpu: shader worker failed with an unknown exception\\n");
+                    }
                 }
             });
+            // The renderer and its Vulkan device are process-lifetime objects;
+            // worker shutdown is tied to process shutdown in this runtime.
             workers_.back().detach();
         }
     }
     {
-        std::lock_guard lock(jobs_mutex_);
+        std::unique_lock lock(jobs_mutex_);
+        jobs_cv_.wait(lock, [&] { return jobs_.size() < kMaxQueuedShaderJobs; });
         jobs_.push_back(std::move(job));
     }
     jobs_cv_.notify_one();
