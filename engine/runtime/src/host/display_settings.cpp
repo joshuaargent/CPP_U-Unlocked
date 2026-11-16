@@ -80,8 +80,8 @@ const Named& named(Resolution resolution) {
 
 std::string summary(const Settings& s) {
     return std::string("fullscreen ") + (s.fullscreen ? "yes" : "no") + ", resolution " +
-           std::string(name_of(s.resolution)) + ", interpolation " + (s.interpolation ? "yes" : "no") +
-           ", frame rate " + frame_rate_name(s.frame_rate);
+           std::string(name_of(s.resolution)) + ", presentation interpolation " + (s.interpolation ? "yes" : "no") +
+           ", presentation rate " + frame_rate_name(s.frame_rate);
 }
 
 bool set(const char* value) { return value != nullptr && *value != '\0'; }
@@ -222,9 +222,9 @@ std::string format(const Settings& settings) {
     text += "resolution = " + std::string(name_of(settings.resolution)) +
             "  # auto, 1280x720, 1920x1080, 2560x1440, 3840x2160 or 5120x2880\n";
     text += std::string("interpolation = ") + (settings.interpolation ? "yes" : "no") +
-            "  # yes: 120 frames per second on displays of 100 Hz and more\n";
+            "  # yes: additional presentation frames on displays of 100 Hz and more\n";
     text += "frame_rate = " + frame_rate_name(settings.frame_rate) +
-            "  # auto, 60, 120, 180, 240 or uncapped (with interpolation; above the display's refresh it tears)\n";
+            "  # presentation rate: auto, 60, 120, 180, 240 or uncapped\n";
     return text;
 }
 
