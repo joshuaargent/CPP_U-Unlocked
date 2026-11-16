@@ -122,6 +122,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Test pinned dependency archive validation
+        shell: pwsh
+        run: |
+          python -m py_compile engine/tools/setup_deps.py
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency bootstrap Python syntax check failed.' }
+          python -m unittest discover -s engine/tests -p 'test_setup_deps.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned dependency archive security tests failed.' }
+
       - name: Verify in-repository native source
         shell: pwsh
         run: ./tools/windows/verify-checkout.ps1 -SkipToolchainCheck
