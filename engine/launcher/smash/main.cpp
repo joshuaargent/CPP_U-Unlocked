@@ -1396,7 +1396,7 @@ private:
     bool ready() const { return valid_[kGame]; } // the update and DLC are optional
 
     // ------------------------------------------------------------ the mod installer
-    void choose_mod_archive() {
+    void choose_mod_folder() {
         if (installing_) return;
         static const auto callback = [](void* self, const char* const* files, int) {
             auto* l = static_cast<Launcher*>(self);
@@ -1409,7 +1409,7 @@ private:
         SDL_ShowOpenFolderDialog(callback, this, window_, nullptr, false);
     }
 
-    // Unpacks off the launcher's thread (a big pack takes a while).
+    // Copies and validates the selected folder off the launcher's thread.
     void start_install(const std::string& source) {
         if (installing_) return;
         installing_ = true;
