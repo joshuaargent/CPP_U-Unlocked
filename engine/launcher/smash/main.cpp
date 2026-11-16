@@ -1118,8 +1118,7 @@ private:
                        << "Update: " << (valid_[kUpdate] ? std::to_string(update_version_) : "not installed") << "\n"
                        << "Active mods: " << std::count_if(mods_.begin(), mods_.end(), [](const Mod& m) { return m.on; }) << "\n"
                        << "Shader cache files: " << shaders_ << "\n"
-                       << "Launcher directory: " << dir_.string() << "\n"
-                       << "Game log: " << (dir_ / "smash.log").string();
+                       << "Game log: smash.log (stored beside the launcher)";
                 if (SDL_SetClipboardText(report.str().c_str())) diagnostics_status_ = "Copied to clipboard";
                 else diagnostics_status_ = std::string("Copy failed: ") + SDL_GetError();
             } else back();
