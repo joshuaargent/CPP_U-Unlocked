@@ -419,14 +419,33 @@ std::array<int, 3> numeric_version(std::string version) {
     return parts;
 }
 
+std::array<int, 2> release_stage(const std::string& version) {
+    const size_t suffix_at = version.find_first_of("-+");
+    if (suffix_at == std::string::npos) return {4, 0}; // stable
+    std::string suffix = version.substr(suffix_at + 1);
+    std::transform(suffix.begin(), suffix.end(), suffix.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    int stage = 0; // development / unknown prerelease
+    if (suffix.starts_with("alpha")) stage = 1;
+    else if (suffix.starts_with("beta")) stage = 2;
+    else if (suffix.starts_with("rc")) stage = 3;
+    int sequence = 0;
+    const size_t dot = suffix.find_last_of('.');
+    if (dot != std::string::npos) {
+        const char* first = suffix.data() + dot + 1;
+        const char* last = suffix.data() + suffix.size();
+        const auto parsed = std::from_chars(first, last, sequence);
+        if (parsed.ec != std::errc{} || parsed.ptr != last) sequence = 0;
+    }
+    return {stage, sequence};
+}
+
 bool is_newer_release(const std::string& latest, const std::string& current) {
     const auto a = numeric_version(latest);
     const auto b = numeric_version(current);
     if (a == std::array<int, 3>{} || b == std::array<int, 3>{}) return false;
     if (a != b) return a > b;
-    const bool current_development = current.find("-dev") != std::string::npos;
-    const bool latest_stable = latest.find_first_of("-+") == std::string::npos;
-    return current_development && latest_stable;
+    return release_stage(latest) > release_stage(current);
 }
 
 // ------------------------------------------------------------------ the launcher
