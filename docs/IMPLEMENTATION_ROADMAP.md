@@ -26,7 +26,7 @@
 - [ ] Complete responsive layouts, high-DPI scaling, focus states, keyboard/controller navigation, and accessibility.
 - [x] Check for application updates automatically in a background worker at launcher startup; retain stable/beta channels, GitHub release links, SHA-256 package verification, per-file manifest verification, staged replacement, backups, and automatic rollback if replacement or relaunch fails. Installing an update remains an explicit user action. This is separate from managing the game's update dump.
 - [x] Add launcher release packaging with a versioned ZIP, per-file manifest, and SHA-256 sidecar asset.
-- [x] Add a tag-triggered Windows release workflow that builds and links the launcher, builds the bounded WUA extractor, creates and verifies the package, and publishes the ZIP and checksum as GitHub release assets.
+- [x] Add a tag-triggered Windows release workflow that builds and links the launcher, builds the bounded WUA extractor, creates and verifies the package, and publishes the ZIP and checksum as GitHub release assets. The first tagged run remains outstanding.
 - [ ] Run the release workflow against a version-matched prerelease tag, then verify the published assets through both stable/beta update discovery paths.
 - [ ] Add a user-facing version history and rollback selector for previously installed U Unlocked releases.
 - [ ] Exercise clean install, stable/beta upgrade, interrupted update, rollback, and user-data preservation on Windows.
@@ -55,7 +55,8 @@
 - [x] Correct launcher guidance to explain the direct host connection and current security boundary.
 - [ ] Add authenticated guest pairing and explicit host approval.
 - [ ] Add encryption and message integrity protection for video, audio, and controller datagrams.
-- [ ] Add replay protection, strict packet validation, connection limits, and rate limiting.
+- [x] Enforce exact host-side UDP packet lengths, reject stale input sequence numbers, clamp controller axes, rate-limit total incoming packets and handshakes with token buckets, and limit each guest to one keyframe request per second.
+- [ ] Add authenticated guest pairing, cryptographic replay protection, per-peer abuse controls, and host approval before enabling public internet connectivity.
 - [ ] Add secure public-internet connectivity only after the authentication and transport security work is complete.
 - [ ] Add an optional U Unlocked-owned room directory and NAT traversal service, with no third-party room-service dependency.
 
@@ -71,6 +72,7 @@
 - [x] Add opt-in measurements for previous-frame GPU retirement waits and presentation-image pool waits; see [GPU frame pacing and simulation decoupling](GPU_FRAME_PACING.md).
 - [x] Bound asynchronous shader compilation to at most four workers and 64 queued jobs, with failed jobs transitioned out of the pending state.
 - [x] Report the selected Vulkan device, driver, API version, vendor/device IDs, memory heaps, and enabled optional capabilities in the runtime log.
+- [x] Filter Vulkan adapters by the renderer's required Vulkan 1.3 features and a combined graphics/compute queue before preferring a discrete GPU, allowing fallback to a compatible integrated GPU.
 - [ ] Capture and compare repeatable GPU/CPU frame-time baselines on the Intel Iris Xe target and a discrete GPU.
 - [ ] Profile and remove unintended GPU-completion back-pressure from guest simulation without weakening guest-memory/resource lifetime guarantees.
 - [ ] Design a bounded frames-in-flight queue so the guest can continue at the title's 59.94 Hz cadence when rendering is slower, with explicit input/audio/netplay timing and deterministic replay tests.
@@ -87,7 +89,8 @@
 
 ## Release engineering
 
-- [ ] Add Windows build validation for the actual native targets.
+- [ ] Add Windows build validation for the complete native game-runtime targets.
+- [x] Add Windows CI that compiles and links the redistributable launcher target and compiles the bounded WUA extractor.
 - [x] Add a launcher-only Windows package with a file manifest and SHA-256 sidecar; game runtime binaries and user game data remain excluded.
-- [ ] Add a versioned release workflow that uploads both the ZIP and checksum assets after review.
+- [x] Add a tag-triggered versioned release workflow that verifies the launcher version, package root layout, and per-file manifest hashes before publishing the ZIP and checksum assets.
 - [ ] Test clean installation, upgrade, rollback, and user-data preservation on a clean Windows machine.
