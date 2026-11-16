@@ -1,5 +1,6 @@
 #include "os/sect233.h"
 
+#include <bit>
 #include <cstring>
 
 namespace cafe::os::sect233 {
@@ -44,7 +45,7 @@ F mul(const F& a, const F& b) {
 
 int degree(const uint64_t* w, int words) {
     for (int k = words - 1; k >= 0; --k) {
-        if (w[k]) return k * 64 + 63 - __builtin_clzll(w[k]);
+        if (w[k]) return k * 64 + 63 - std::countl_zero(w[k]);
     }
     return -1;
 }
