@@ -1545,8 +1545,8 @@ private:
 
         const std::string footer = "ARROWS / D-PAD NAVIGATE     ENTER / A SELECT     ESC / B BACK";
         font_.draw(r_, margin, H * 0.965f, footer, H * 0.013f, mix_alpha(muted, 0.78f));
-        font_.draw(r_, W - margin - font_.width(r_, "MELEE UNLOCKED-INSPIRED DESIGN", H * 0.012f),
-                   H * 0.965f, "MELEE UNLOCKED-INSPIRED DESIGN", H * 0.012f, mix_alpha(muted, 0.55f));
+        font_.draw(r_, W - margin - font_.width(r_, "BUILT FOR COMPETITIVE PLAY", H * 0.012f),
+                   H * 0.965f, "BUILT FOR COMPETITIVE PLAY", H * 0.012f, mix_alpha(muted, 0.55f));
     }
 
     void draw_status() {
