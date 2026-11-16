@@ -83,7 +83,11 @@
 - [x] Report the selected Vulkan device, driver, API version, vendor/device IDs, memory heaps, and enabled optional capabilities in the runtime log.
 - [x] Filter Vulkan adapters by the renderer's required Vulkan 1.3 features and a combined graphics/compute queue before preferring a discrete GPU, allowing fallback to a compatible integrated GPU.
 - [ ] Capture and compare repeatable GPU/CPU frame-time baselines on the Intel Iris Xe target and a discrete GPU.
-- [ ] Benchmark Vulkan against D3D11 and D3D12 on identical deterministic scenes before deciding whether either alternative backend is worth implementing.
+- [x] Bound startup Vulkan pipeline prewarming to at most four workers, seed worker-local caches from the persisted driver cache, merge them after compilation, and serialize shared runtime-cache access.
+- [ ] Compile the complete Vulkan runtime in CI with the pinned Vulkan headers, shaderc, SDL3, and runtime dependencies; current source-validation CI does not compile the Vulkan renderer.
+- [ ] Audit and implement the Smash Wii U GX2 paths exercised by the game, including unsupported geometry-shader/tessellation/stream-out draws, blend/ROP3 modes, and any unsupported target or texture formats found in real-game logs.
+- [ ] Verify boot, title screen, character select, full match, pause, results, and repeated scene transitions with Vulkan validation enabled; fix every reproducible rendering or synchronization error.
+- [ ] Validate the Vulkan backend against identical deterministic Smash Wii U scenes on the target integrated GPU and at least one discrete GPU. Alternative graphics backends are deferred until after the first complete playable release.
 - [ ] Profile and remove unintended GPU-completion back-pressure from guest simulation without weakening guest-memory/resource lifetime guarantees.
 - [ ] Design a bounded frames-in-flight queue so the guest can continue at the title's 59.94 Hz cadence when rendering is slower, with explicit input/audio/netplay timing and deterministic replay tests.
 - [ ] Add stress tests that deliberately limit rendering below 60 FPS and verify guest simulation ticks, input sampling, audio timing, and frame queue bounds independently.
