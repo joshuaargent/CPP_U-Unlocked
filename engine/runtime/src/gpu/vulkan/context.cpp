@@ -135,15 +135,49 @@ void Context::init(const std::vector<const char*>& instance_extensions) {
                                             VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME};
     int best = -1;
     for (uint32_t i = 0; i < count; ++i) {
-        uint32_t n = 0;
-        vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &n, nullptr);
-        std::vector<VkExtensionProperties> exts(n);
-        vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &n, exts.data());
-        bool ok = true;
-        for (const char* r : kRequired) ok &= has_extension(exts, r);
         VkPhysicalDeviceProperties p;
         vkGetPhysicalDeviceProperties(devices[i], &p);
-        if (!ok || p.apiVersion < VK_API_VERSION_1_3) continue;
+        if (p.apiVersion < VK_API_VERSION_1_3) continue;
+
+        uint32_t extension_count = 0;
+        vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &extension_count, nullptr);
+        std::vector<VkExtensionProperties> exts(extension_count);
+        vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &extension_count, exts.data());
+        bool extensions_ok = true;
+        for (const char* required : kRequired) extensions_ok &= has_extension(exts, required);
+        if (!extensions_ok) {
+            std::fprintf(stderr, "ttt2: GPU: skipping %s: missing a required Vulkan device extension\n", p.deviceName);
+            continue;
+        }
+
+        VkPhysicalDeviceVulkan12Features candidate12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+        VkPhysicalDeviceVulkan13Features candidate13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+        VkPhysicalDeviceFeatures2 candidate_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        candidate_features.pNext = &candidate12;
+        candidate12.pNext = &candidate13;
+        vkGetPhysicalDeviceFeatures2(devices[i], &candidate_features);
+        const bool features_ok = candidate12.bufferDeviceAddress && candidate13.dynamicRendering &&
+                                 candidate13.synchronization2 && candidate13.shaderDemoteToHelperInvocation &&
+                                 candidate_features.features.vertexPipelineStoresAndAtomics &&
+                                 candidate_features.features.textureCompressionBC;
+        if (!features_ok) {
+            std::fprintf(stderr, "ttt2: GPU: skipping %s: missing a required Vulkan feature\n", p.deviceName);
+            continue;
+        }
+
+        uint32_t family_count = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(devices[i], &family_count, nullptr);
+        std::vector<VkQueueFamilyProperties> families(family_count);
+        vkGetPhysicalDeviceQueueFamilyProperties(devices[i], &family_count, families.data());
+        const bool queue_ok = std::any_of(families.begin(), families.end(), [](const VkQueueFamilyProperties& family) {
+            return (family.queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) ==
+                   (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT);
+        });
+        if (!queue_ok) {
+            std::fprintf(stderr, "ttt2: GPU: skipping %s: no combined graphics/compute queue\n", p.deviceName);
+            continue;
+        }
+
         const bool discrete = p.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
         if (best < 0 || (discrete && properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)) {
             best = static_cast<int>(i);
