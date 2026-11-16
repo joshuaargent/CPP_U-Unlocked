@@ -110,6 +110,14 @@ foreach ($dll in $dlls) {
     Copy-Item -LiteralPath $dll.FullName -Destination $play -Force
 }
 
+# SDL3 and other shared dependencies are built with llvm-mingw and can depend on
+# compiler runtime DLLs. Keep these beside the game executables in the runtime folder.
+$compilerDllDirectory = Join-Path $toolchain 'llvm-mingw\\bin'
+$compilerDlls = @(Get-ChildItem -LiteralPath $compilerDllDirectory -Filter '*.dll' -File)
+foreach ($dll in $compilerDlls) {
+    Copy-Item -LiteralPath $dll.FullName -Destination $play -Force
+}
+
 New-Item -ItemType Directory -Force (Join-Path $play 'mods') | Out-Null
 $updater = Join-Path $root 'tools\windows\update-launcher.ps1'
 if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
