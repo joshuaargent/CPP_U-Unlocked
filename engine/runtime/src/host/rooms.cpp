@@ -10,7 +10,7 @@
 namespace cafe::host::netplay {
 
 std::string room_server() {
-    const char* server = std::getenv("SMASH_ROOM_SERVER");
+    const char* server = std::getenv("U_UNLOCKED_ROOM_SERVER");
     return server && *server ? server : kRoomServer;
 }
 
@@ -34,7 +34,7 @@ uint32_t parse_ip(const std::string& text) {
 
 } // namespace
 
-// The server's protocol (server/worker/src/index.js): text lines each way.
+// The optional U Unlocked room-directory protocol: text lines each way.
 CheckInReply check_in(const CheckIn& c) {
     char line[160];
     std::string body = "v 1\n";
@@ -54,7 +54,9 @@ CheckInReply check_in(const CheckIn& c) {
     }
     if (c.list) body += "list 1\n";
     CheckInReply reply;
-    const HttpResponse r = http_request("POST", room_server() + "/hello", {"Content-Type: text/plain"}, body);
+    const std::string server = room_server();
+    if (server.empty()) return reply;
+    const HttpResponse r = http_request("POST", server + "/hello", {"Content-Type: text/plain"}, body);
     if (r.status != 200) return reply;
     std::istringstream in(r.body);
     std::string text;
@@ -86,6 +88,7 @@ CheckInReply check_in(const CheckIn& c) {
 }
 
 bool list_rooms(std::vector<Room>& rooms) {
+    if (room_server().empty()) return false;
     static const uint32_t id = random_id();
     CheckIn c;
     c.id = id;
