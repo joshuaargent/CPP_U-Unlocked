@@ -55,8 +55,8 @@ void update_window_refresh() {
     if (hz > 0.0f) g_window_refresh = hz;
 }
 
-// The keyboard's keys (host/keymap.h): the player's from keyboard.ini, read
-// again when the launcher's Settings change it, so new keys apply at once.
+// The keyboard's keys (host/keymap.h): the player's from keyboard.ini, reloaded
+// when the file changes so new bindings apply without restarting the game.
 // Main thread only.
 keymap::Keys g_keymap = keymap::default_keys();
 std::optional<keymap::Watcher> g_keymap_file;
