@@ -6,8 +6,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $toolchain = Join-Path $root 'toolchain'
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$prefix = Join-Path $engineRoot 'build-deps\prefix'
 $python = (Get-Command python).Source
-$buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^\d+$env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
+$buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^\d+$env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $prefix 'bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
 
 & $python (Join-Path $engineRoot 'tools\setup_deps.py')
 if ($LASTEXITCODE) { throw 'setup_deps.py failed' }
