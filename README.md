@@ -37,6 +37,7 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 - **Controller configuration** - the Controls page supports per-device button/axis remapping, per-player slot assignment, per-axis dead zones and stick inversion, trigger thresholds, a live input monitor, JSON profile saving, and automatic discovery of standard Cemu profile folders.
 - **Cemu profile import** - imports Cemu Wii U GamePad and Pro Controller XML profiles using explicit SDLController mapping translation. Unsupported input APIs and settings are reported; imported mappings remain unsaved until reviewed and saved by the user.
 - **Graphics settings** - the existing display controls are available; expanded renderer options and hardware-aware quality presets remain planned.
+- **Netplay** - host game streaming and direct IP/VPN joining; room discovery remains disabled until a U Unlocked-owned compatible service is deployed.
 - **Mod management** - existing archive installation and enable/disable support, with profiles, dependency checks, conflict reporting, and transactional rollback planned.
 - **Performance profiles** - Low Spec, Balanced, and Quality modes are planned, with Intel Iris Xe integrated graphics included in the initial optimisation target.
 - **Diagnostics** - hardware detection, Vulkan capability reporting, shader-cache information, and actionable troubleshooting are planned.
