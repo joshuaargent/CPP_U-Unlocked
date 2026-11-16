@@ -532,6 +532,10 @@ class Launcher {
 public:
     Launcher(SDL_Window* window, SDL_Renderer* renderer) : window_(window), r_(renderer), paint_(renderer) {
         dir_ = exe_dir();
+        logo_ = load_image(r_, dir_ / "title-logo.png");
+        if (!logo_.texture) {
+            std::fprintf(stderr, "launcher: project title logo is missing; using the text fallback\\n");
+        }
         display::set_file(dir_ / "display.ini", "U Unlocked");
         settings_ = display::load(display::file_path()).settings;
         const auto ini = read_ini(dir_ / "launcher.ini");
@@ -567,6 +571,14 @@ public:
         if (!wua_stage_path_.empty()) {
             std::error_code cleanup_error;
             fs::remove_all(wua_stage_path_, cleanup_error);
+        }
+        if (logo_.texture) {
+            SDL_DestroyTexture(logo_.texture);
+            logo_.texture = nullptr;
+        }
+        if (background_.texture) {
+            SDL_DestroyTexture(background_.texture);
+            background_.texture = nullptr;
         }
     }
 
