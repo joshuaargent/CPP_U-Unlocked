@@ -124,7 +124,8 @@ try{
   foreach($file in $files){
    $name=[string]$file.name;$target=Join-Path $InstallDirectory $name;$backup=Join-Path $rollback $name
    if(Test-Path -LiteralPath $target -PathType Leaf){Copy-Item -LiteralPath $target -Destination $backup}
-   Move-Item -LiteralPath (Join-Path $new $name) -Destination $target -Force;$changed.Add($name)
+   $changed.Add($name)
+   Move-Item -LiteralPath (Join-Path $new $name) -Destination $target -Force
   }
   Start-Process -FilePath (Join-Path $InstallDirectory 'U Unlocked.exe') -WorkingDirectory $InstallDirectory|Out-Null
  }catch{
