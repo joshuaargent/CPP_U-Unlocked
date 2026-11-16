@@ -79,6 +79,23 @@ jobs:
           if (-not (Test-Path 'engine/runtime/res/u-unlocked.ico')) {
             throw 'The release launcher icon was not generated.'
           }
+          $logoPath = 'engine/runtime/res/title-logo.png'
+          if (-not (Test-Path -LiteralPath $logoPath -PathType Leaf)) {
+            throw 'The project-owned in-game title logo was not generated.'
+          }
+          Add-Type -AssemblyName System.Drawing
+          $logo = [System.Drawing.Bitmap]::new($logoPath)
+          try {
+            if ($logo.Width -ne 1600 -or $logo.Height -ne 500) {
+              throw "Unexpected title-logo dimensions: $($logo.Width)x$($logo.Height)"
+            }
+            if ($logo.GetPixel(0, 0).A -ne 0 -or $logo.GetPixel(250, 76).A -eq 0) {
+              throw 'The title logo must have transparent padding and visible artwork.'
+            }
+          }
+          finally {
+            $logo.Dispose()
+          }
 
       - name: Configure linked launcher release target
         shell: pwsh
@@ -109,6 +126,23 @@ jobs:
           ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
           if (-not (Test-Path 'engine/runtime/res/u-unlocked.ico')) {
             throw 'The U Unlocked icon was not generated.'
+          }
+          $logoPath = 'engine/runtime/res/title-logo.png'
+          if (-not (Test-Path -LiteralPath $logoPath -PathType Leaf)) {
+            throw 'The U Unlocked in-game title logo was not generated.'
+          }
+          Add-Type -AssemblyName System.Drawing
+          $logo = [System.Drawing.Bitmap]::new($logoPath)
+          try {
+            if ($logo.Width -ne 1600 -or $logo.Height -ne 500) {
+              throw "Unexpected title-logo dimensions: $($logo.Width)x$($logo.Height)"
+            }
+            if ($logo.GetPixel(0, 0).A -ne 0 -or $logo.GetPixel(250, 76).A -eq 0) {
+              throw 'The title logo must have transparent padding and visible artwork.'
+            }
+          }
+          finally {
+            $logo.Dispose()
           }
 
       - name: Parse project PowerShell scripts
