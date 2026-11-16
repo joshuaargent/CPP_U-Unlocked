@@ -61,6 +61,13 @@ The existing native game runtime and static recompilation implementation are con
 - Back up affected files and support rollback.
 - Keep user-created mod data separate from application binaries and game dumps.
 
+### Netplay
+
+- Host streaming is opt-in from the launcher and uses Windows Media Foundation H.264 encoding.
+- Guests can join directly with a host IPv4 address / hostname and UDP port; LAN and private VPN addresses are supported.
+- Internet direct joins require a reachable UDP port (normally port forwarding) unless a private VPN provides connectivity.
+- Room discovery is disabled by default. It may be enabled only with an explicitly deployed compatible service configured through `U_UNLOCKED_ROOM_SERVER`; never contact an inherited third-party endpoint or transmit room metadata to an unrelated service.
+
 ### Settings and diagnostics
 
 - Store settings in a versioned user configuration directory.
