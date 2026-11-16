@@ -28,6 +28,16 @@ if ($missingSource.Count -gt 0) {
     throw 'The U Unlocked source tree is incomplete.'
 }
 
+# Launcher workers must be owned and joined; detached workers can outlive the
+# Launcher object and write into freed state when the user closes the window.
+$launcherMain = Get-Content -LiteralPath (Join-Path $enginePath 'launcher\smash\main.cpp') -Raw
+if ($launcherMain -match '\.detach\s*\(') {
+    throw 'Detached launcher threads are forbidden; own and join background workers.'
+}
+if ($launcherMain -notmatch '~Launcher\s*\(') {
+    throw 'Launcher shutdown must join its owned background workers.'
+}
+
 # Keep the retired upstream project name out of all tracked source and documentation.
 # Split the token so this guard does not match itself.
 $legacyName = 'Smash' + '4PC'
