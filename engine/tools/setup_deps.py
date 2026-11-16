@@ -121,11 +121,10 @@ def fetch_dependency(name, dependency):
                     raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
                 output.write(block)
         safe_extract(archive, extraction)
-        roots = list(extraction.iterdir())
-        if len(roots) != 1 or not roots[0].is_dir():
-            raise RuntimeError(f"{name}: source archive has an unexpected root layout.")
-        (roots[0] / MARKER).write_text(revision + "\n", encoding="ascii")
-        os.replace(roots[0], destination)
+        if not any(extraction.iterdir()):
+            raise RuntimeError(f"{name}: source archive extracted no files.")
+        (extraction / MARKER).write_text(revision + "\n", encoding="ascii")
+        os.replace(extraction, destination)
     print(f"{name}: {revision} (downloaded and pinned)")
 
 
