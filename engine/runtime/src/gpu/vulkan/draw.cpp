@@ -706,7 +706,7 @@ void Renderer::precompile() {
         jobs.push_back({k, vm, pm, layout, VK_NULL_HANDLE});
     }
     if (jobs.empty()) return;
-    
+
     // Bound driver/compiler parallelism. Creating one worker per logical CPU can
     // exhaust memory and starve the game on high-core-count and integrated-GPU systems.
     const unsigned hardware_threads = std::thread::hardware_concurrency();
