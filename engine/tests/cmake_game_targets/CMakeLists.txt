@@ -1,0 +1,57 @@
+cmake_minimum_required(VERSION 3.20)
+project(UUnlockedGameTargetConfiguration LANGUAGES CXX)
+
+get_filename_component(ENGINE_ROOT "\${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+add_library(cafe_runtime INTERFACE)
+include("\${ENGINE_ROOT}/cmake/SmashTargets.cmake")
+
+add_smash_game_pair(smash_update "\${CMAKE_CURRENT_SOURCE_DIR}/fixtures/update" smash smash-compat)
+add_smash_game_pair(smash_base "\${CMAKE_CURRENT_SOURCE_DIR}/fixtures/base" smash-base smash-base-compat)
+
+function(assert_output target expected)
+    get_target_property(actual "\${target}" OUTPUT_NAME)
+    if(NOT actual STREQUAL expected)
+        message(FATAL_ERROR "\${target}: expected OUTPUT_NAME='\${expected}', got '\${actual}'")
+    endif()
+endfunction()
+
+function(assert_architecture target architecture)
+    get_target_property(options "\${target}" COMPILE_OPTIONS)
+    if(NOT "\${options}" MATCHES "-march=\${architecture}")
+        message(FATAL_ERROR "\${target}: missing -march=\${architecture}: \${options}")
+    endif()
+endfunction()
+
+function(assert_compatibility_definition target expected)
+    get_target_property(definitions "\${target}" COMPILE_DEFINITIONS)
+    if(expected AND NOT "SMASH_COMPAT" IN_LIST definitions)
+        message(FATAL_ERROR "\${target}: missing SMASH_COMPAT definition")
+    endif()
+    if(NOT expected AND "SMASH_COMPAT" IN_LIST definitions)
+        message(FATAL_ERROR "\${target}: unexpectedly defines SMASH_COMPAT")
+    endif()
+endfunction()
+
+assert_output(smash_update_v3 smash)
+assert_output(smash_update_v2 smash-compat)
+assert_output(smash_base_v3 smash-base)
+assert_output(smash_base_v2 smash-base-compat)
+
+assert_architecture(smash_update_generated_v3 x86-64-v3)
+assert_architecture(smash_update_generated_v2 x86-64-v2)
+assert_architecture(smash_base_generated_v3 x86-64-v3)
+assert_architecture(smash_base_generated_v2 x86-64-v2)
+
+assert_compatibility_definition(smash_update_v3 FALSE)
+assert_compatibility_definition(smash_update_v2 TRUE)
+assert_compatibility_definition(smash_base_v3 FALSE)
+assert_compatibility_definition(smash_base_v2 TRUE)
+
+foreach(target IN ITEMS smash_update_v3 smash_update_v2 smash_base_v3 smash_base_v2)
+    get_target_property(link_libraries "\${target}" LINK_LIBRARIES)
+    if(NOT "cafe_runtime" IN_LIST link_libraries)
+        message(FATAL_ERROR "\${target}: does not link the shared cafe_runtime")
+    endif()
+endforeach()
+
+message(STATUS "Verified all four game targets, CPU architectures, executable names, and shared runtime linkage.")
