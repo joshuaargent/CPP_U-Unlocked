@@ -136,7 +136,13 @@ A first build requires the user's game/update RPX files and the toolchain descri
 
 ### Package the launcher for a release
 
-After building the launcher, run the package script from the repository root with the release version. It creates a launcher-only ZIP and a matching SHA-256 sidecar. Attach both files to the GitHub release, using the corresponding v-prefixed version tag. The update checker expects the asset name U-Unlocked-vVERSION-Windows-Launcher.zip and its .sha256 sidecar. The package does not include the game runtime; each user builds that locally from their own game files.
+After building the launcher, run the package script from the repository root with the release version:
+
+```powershell
+.\engine\tools\windows\package-release.ps1 -Version 0.2.0
+```
+
+It creates a launcher-only ZIP and a matching SHA-256 sidecar. Attach both files to the GitHub release tagged v0.2.0. The update checker expects the asset name U-Unlocked-v0.2.0-Windows-Launcher.zip and its .sha256 sidecar. The package does not include the game runtime; each user builds that locally from their own game files.
 
 ## Development and pull requests
 
