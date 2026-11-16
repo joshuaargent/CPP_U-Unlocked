@@ -53,7 +53,7 @@ Build on SDL3's existing device abstraction. Keep physical-device discovery sepa
 
 Persist versioned profiles with stable device GUID/name hints and per-port assignments. Never silently change a user's mappings after an update. Provide defaults for Xbox, PlayStation, Nintendo and generic SDL controllers, while allowing complete remapping.
 
-The intended interaction is Cemu-like: select a physical device, select the emulated Wii U controller, activate a control, press the physical input, test it, and save the profile. Cemu profile import is not assumed to work. Inspect the real Cemu profile schema and mapping semantics first, then implement a validated importer with a preview and no destructive overwrite.
+The intended interaction is Cemu-like: select a physical device, select the emulated Wii U controller, activate a control, press the physical input, test it, and save the profile. Cemu profile import is not assumed to work. The profile XML structure and the distinction between Cemu's numeric mapping IDs and SDL3 identifiers are documented in [Controller compatibility](CONTROLLER_COMPATIBILITY.md). Implement a validated importer with a preview and no destructive overwrite.
 
 ### Mod management
 

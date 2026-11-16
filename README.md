@@ -33,7 +33,7 @@ U Unlocked is an independent project. Melee Unlocked is a design reference only;
 
 - **Native PC runtime** - the Smash4PC static-recompilation runtime, Vulkan renderer and SDL3 platform layer, retained as a pinned upstream dependency.
 - **Game installation** - support for the game, update and optional DLC folders dumped from a user's own Wii U.
-- **Controller configuration** - planned per-player device assignment, press-to-bind remapping, calibration, dead zones, controller layouts and portable profiles.
+- **Controller configuration** - planned per-player device assignment, press-to-bind remapping, calibration, dead zones, controller layouts and portable profiles. The [Cemu compatibility specification](docs/CONTROLLER_COMPATIBILITY.md) records the XML profile format and safe import constraints.
 - **Graphics settings** - planned resolution, display mode, VSync, frame pacing and hardware-aware quality presets.
 - **Mod management** - existing Smash4PC content mods and Cemu graphic-pack support, with a broader U Unlocked profile and conflict-management experience planned.
 - **Performance profiles** - a Low Spec mode and measured Balanced and Quality presets, with the Intel Iris Xe integrated-graphics configuration included in the initial optimisation target.
