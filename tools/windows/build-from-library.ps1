@@ -162,21 +162,20 @@ try {
         # Rebuilding the runtime must never discard saves, online credentials,
         # user fonts, logs, or display settings from the previous installation.
         foreach ($name in @('save', 'online', 'fonts', 'logs')) {
-            Copy-PreservedDirectory -Source (Join-Path $runtimeTarget $name) -Destination (Join-Path $runtimeStage $name)
-        }
-        if (-not (Test-Path -LiteralPath (Join-Path $runtimeStage 'save') -PathType Container)) {
-            Copy-PreservedDirectory -Source (Join-Path $launcherRoot 'save') -Destination (Join-Path $runtimeStage 'save')
-        }
-        foreach ($name in @('online', 'fonts', 'logs')) {
-            Copy-PreservedDirectory -Source (Join-Path $launcherRoot $name) -Destination (Join-Path $runtimeStage $name)
+            $stagedData = Join-Path $runtimeStage $name
+            Copy-PreservedDirectory -Source (Join-Path $runtimeTarget $name) -Destination $stagedData
+            if (-not (Test-Path -LiteralPath $stagedData -PathType Container)) {
+                Copy-PreservedDirectory -Source (Join-Path $launcherRoot $name) -Destination $stagedData
+            }
         }
         $previousDisplay = Join-Path $runtimeTarget 'display.ini'
         if (Test-Path -LiteralPath $previousDisplay -PathType Leaf) {
             Copy-Item -LiteralPath $previousDisplay -Destination $runtimeStage -Force
-        }
-        $launcherDisplay = Join-Path $launcherRoot 'display.ini'
-        if (Test-Path -LiteralPath $launcherDisplay -PathType Leaf) {
-            Copy-Item -LiteralPath $launcherDisplay -Destination $runtimeStage -Force
+        } else {
+            $launcherDisplay = Join-Path $launcherRoot 'display.ini'
+            if (Test-Path -LiteralPath $launcherDisplay -PathType Leaf) {
+                Copy-Item -LiteralPath $launcherDisplay -Destination $runtimeStage -Force
+            }
         }
 
         if (Test-Path -LiteralPath $runtimeTarget) {
