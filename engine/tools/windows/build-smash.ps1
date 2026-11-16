@@ -40,7 +40,7 @@ if (-not (Test-Path (Join-Path $prefix 'lib\libvulkan-1.a'))) {
 & (Join-Path $PSScriptRoot 'build-recomp.ps1')
 if ($LASTEXITCODE) { throw 'Building the recompilation tools failed.' }
 
-$env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
+$env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $prefix 'bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
 $recompiler = Join-Path $build 'recomp\cafe-recomp.exe'
 if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) {
     throw "The cafe-recomp executable was not built: $recompiler"
