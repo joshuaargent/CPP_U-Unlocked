@@ -354,6 +354,14 @@ Image load_image(SDL_Renderer* renderer, const fs::path& path) {
 }
 
 
+// Clear credential buffers before releasing their storage. Volatile writes
+// prevent the compiler from treating the wipe as an unused optimisation.
+void secure_erase(std::string& value) {
+    volatile char* bytes = value.empty() ? nullptr : value.data();
+    for (size_t i = 0; i < value.size(); ++i) bytes[i] = '\0';
+    value.clear();
+}
+
 // ------------------------------------------------------------------ the launcher
 
 enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay, kControls, kControlTest, kLibrary, kUpdates, kDiagnostics };
@@ -2009,15 +2017,13 @@ private:
                 } catch (...) {
                     result.message = "Sign-in failed because of an unknown error.";
                 }
-                std::fill(password.begin(), password.end(), '\0');
-                password.clear();
+                secure_erase(password);
                 std::lock_guard lock(sign_in_mutex_);
                 sign_in_result_ = std::move(result);
                 sign_in_done_ = true;
             });
         } catch (const std::exception& error) {
-            std::fill(password.begin(), password.end(), '\0');
-            password.clear();
+            secure_erase(password);
             std::lock_guard lock(sign_in_mutex_);
             sign_in_result_.message = std::string("Could not start sign-in: ") + error.what();
             sign_in_done_ = true;
