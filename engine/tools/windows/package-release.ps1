@@ -10,6 +10,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $launcher = Join-Path $engineRoot 'build\U Unlocked.exe'
+$wuaExtractor = Join-Path $engineRoot 'build\wua_extract.exe'
 $prefix = Join-Path $engineRoot 'build-deps\prefix'
 $updater = Join-Path $repoRoot 'tools\windows\update-launcher.ps1'
 if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
@@ -17,6 +18,9 @@ if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
 }
 if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
     throw "The Windows launcher updater is missing: $updater"
+}
+if (-not (Test-Path -LiteralPath $wuaExtractor -PathType Leaf)) {
+    throw "The bounded WUA extractor is missing: $wuaExtractor"
 }
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -38,6 +42,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stage 'licenses') | Out-Nu
 
 Copy-Item -LiteralPath $launcher -Destination $stage
 Copy-Item -LiteralPath $updater -Destination $stage
+Copy-Item -LiteralPath $wuaExtractor -Destination $stage
 $dllDirectory = Join-Path $prefix 'bin'
 if (-not (Test-Path -LiteralPath $dllDirectory -PathType Container)) {
     throw "Launcher dependency directory is missing: $dllDirectory"
@@ -50,11 +55,14 @@ foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $sta
 # infers install targets from arbitrary archive paths.
 $packageFiles = @(
     Get-ChildItem -LiteralPath $stage -File |
-        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Extension -eq '.dll' } |
+        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Extension -eq '.dll' } |
         Sort-Object Name
 )
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'U Unlocked.exe' })) {
     throw 'The launcher executable is missing from the package.'
+}
+if (-not ($packageFiles | Where-Object { $_.Name -eq 'wua_extract.exe' })) {
+    throw 'The bounded WUA extractor is missing from the package.'
 }
 $manifest = [ordered]@{
     schema_version = 1
@@ -101,7 +109,7 @@ stb_image and stb_truetype (Sean Barrett): public domain or MIT, at your choice;
 '@ | Set-Content -LiteralPath (Join-Path $stage 'licenses\stb.txt') -Encoding utf8
 
 @'
-This package contains the U Unlocked launcher only.
+This package contains the U Unlocked launcher and its bounded WUA extraction utility.
 
 The game runtime is built locally for each user from their own legally obtained game files.
 No Nintendo game data, console keys, saves, generated recompiled code, or game executable is included.
