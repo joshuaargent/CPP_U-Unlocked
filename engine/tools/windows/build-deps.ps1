@@ -9,7 +9,8 @@ $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $third = Join-Path $engineRoot 'third_party'
 $work = Join-Path $engineRoot 'build-deps'
 $prefix = Join-Path $work 'prefix'
-$buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^\d+$python = (Get-Command python).Source
+$python = (Get-Command python).Source
+$buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^[0-9]+$') { [int]$env:U_UNLOCKED_BUILD_JOBS } else { 2 }
 $env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Split-Path -Parent $python), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
 
 & $python (Join-Path $engineRoot 'tools\setup_deps.py')
