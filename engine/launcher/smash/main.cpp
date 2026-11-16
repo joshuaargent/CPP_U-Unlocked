@@ -1388,7 +1388,12 @@ private:
                 while (!shutting_down_.load(std::memory_order_acquire)) {
                     if (room_watch_enabled_.load(std::memory_order_acquire)) {
                         std::vector<cafe::host::netplay::Room> rooms;
-                        const bool reached = cafe::host::netplay::list_rooms(rooms);
+                        bool reached = false;
+                        try {
+                            reached = cafe::host::netplay::list_rooms(rooms);
+                        } catch (...) {
+                            reached = false;
+                        }
                         std::lock_guard lock(rooms_mutex_);
                         rooms_reached_ = reached;
                         if (reached) rooms_ = std::move(rooms);
