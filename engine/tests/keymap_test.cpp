@@ -141,7 +141,7 @@ void test_good() {
         all += std::string(keymap::kInputs[i].id) + " = " + std::to_string(100 + i) + "  # Key\n";
     }
     const keymap::Parsed full = keymap::parse(all, nullptr);
-    check(full.warnings.empty() && full.assigned == keymap::kInputCount, "launcher's file: all 19");
+    check(full.warnings.empty() && full.assigned == keymap::kInputCount, "launcher's file: all 25");
     for (size_t i = 0; i < keymap::kInputCount; ++i) {
         check(full.keys[i] == 100 + i, "launcher's file: key " + std::to_string(i));
     }
