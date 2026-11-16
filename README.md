@@ -41,7 +41,7 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 - **Netplay** - host game streaming and direct IP/VPN joining; room discovery remains disabled until a U Unlocked-owned compatible service is deployed. The current UDP protocol has no app-level authentication or encryption, so use trusted LAN/private-VPN peers only; public port forwarding is not safe yet.
 - **Mod management** - folder-based installation and enable/disable support. Archive installation is temporarily disabled until a bounded extractor can safely reject traversal, links, duplicate paths, oversized archives, and overwrite attempts. Profiles, dependency checks, conflict reporting, and transactional rollback remain planned.
 - **Performance profiles** - the launcher provides Performance, Balanced, Quality, and Automatic profiles. Performance uses a 1280x720 render target, Balanced 1920x1080, and Quality 2560x1440. The Iris Xe target still needs on-device benchmarking before any preset can be called optimal.
-- **Application updates** - the Windows launcher checks GitHub releases on demand, supports stable/beta channels, verifies SHA-256 package and per-file hashes, stages updates, backs up replaced launcher files, and rolls back if replacement or relaunch fails. Game files, mods, saves, console files, and settings are not replaced. User-selectable rollback and end-to-end release testing remain outstanding.
+- **Application updates** - the launcher checks GitHub releases automatically in a background worker at startup and supports stable/beta channels. Installing remains a user-confirmed action. The updater verifies SHA-256 package and per-file hashes, stages updates, backs up replaced launcher files, and rolls back if replacement or relaunch fails. Game files, mods, saves, console files, and settings are not replaced. User-selectable rollback and end-to-end update testing remain outstanding.
 - **Diagnostics** - the launcher reports platform, logical CPU cores, system memory, CPU optimisation path, SDL launcher renderer, game/update validation, active mods, shader-cache count, and log location. Vulkan capability reporting and deeper automated troubleshooting remain planned.
 - **Preserved game behaviour** - presentation interpolation creates additional visual frames from recorded render state; it must not advance gameplay simulation, physics, collision checks, or input timing. A 120 Hz display can therefore receive smoother presentation while the game simulation retains its original cadence. Interpolation remains optional and may add visual latency.
 
@@ -145,13 +145,9 @@ A first build requires the user's game/update RPX files and the toolchain descri
 
 ### Package the launcher for a release
 
-After building the launcher, run the package script from the repository root with the release version:
+For a reviewed release, update the launcher version in `engine/launcher/smash/main.cpp`, commit the version change, create a matching `vMAJOR.MINOR.PATCH` tag (or prerelease tag), and push the tag. The `Windows launcher release` GitHub Actions workflow then builds and links the launcher, builds the bounded WUA extractor, creates the versioned package and manifest, verifies the SHA-256 sidecar, and publishes both assets to a GitHub release. The workflow rejects tags that do not match the source version. It also supports a manual run against an existing version tag.
 
-```powershell
-.\engine\tools\windows\package-release.ps1 -Version 0.2.0
-```
-
-It creates a Windows launcher package ZIP containing U Unlocked, the bounded WUA extractor, the updater, runtime DLLs, and required licence notices, plus a matching SHA-256 sidecar. Attach both files to the GitHub release tagged v0.2.0. The update checker expects the asset name U-Unlocked-v0.2.0-Windows-Launcher.zip and its .sha256 sidecar. The package does not include the game runtime; each user builds that locally from their own game files.
+The package contains U Unlocked, the bounded WUA extractor, the updater, runtime DLLs, and required licence notices. The update checker expects the asset name `U-Unlocked-vVERSION-Windows-Launcher.zip` and its `.sha256` sidecar. The package does not include the game runtime; each user builds that locally from their own game files. The first tagged release still needs to run successfully before the automated release path can be considered verified. For a local package build, run `.\engine\tools\windows\package-release.ps1 -Version VERSION` from the repository root.
 
 ## Development and pull requests
 
