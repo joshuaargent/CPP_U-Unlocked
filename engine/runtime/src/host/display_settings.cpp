@@ -206,7 +206,7 @@ Parsed parse(std::string_view text) {
 
 namespace {
 fs::path g_file;                                   // set_file's, else the XDG path
-std::string g_game = "Tekken Tag Tournament 2"; // in the file's header
+std::string g_game = "U Unlocked"; // in the file's header
 } // namespace
 
 void set_file(const fs::path& file, const std::string& game) {
