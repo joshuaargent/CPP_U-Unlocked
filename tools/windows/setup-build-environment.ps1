@@ -1,0 +1,109 @@
+# Install the pinned Windows cross-toolchain and deterministic build utilities.
+# This does not install or modify any game files.
+[CmdletBinding()]
+param()
+
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+if (-not $IsWindows) {
+    throw 'The U Unlocked local game build is currently supported on Windows only.'
+}
+
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$toolchainRoot = Join-Path $repoRoot 'toolchain'
+$downloads = Join-Path $toolchainRoot 'downloads'
+New-Item -ItemType Directory -Force -Path $downloads | Out-Null
+
+function Invoke-WingetInstall {
+    param(
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if (-not $winget) {
+        throw "Windows Package Manager (winget) is required to install $Id. Install or update App Installer from Microsoft, then retry."
+    }
+    Write-Host "Installing $Id $Version..." -ForegroundColor Cyan
+    & $winget.Source install --id $Id --exact --version $Version --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+    if ($LASTEXITCODE -ne 0) {
+        throw "winget failed to install $Id $Version (exit code $LASTEXITCODE)."
+    }
+}
+
+function Find-Executable {
+    param([string]$Name, [string[]]$Candidates = @())
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    foreach ($candidate in $Candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    return $null
+}
+
+$cmake = Find-Executable 'cmake.exe'
+if (-not $cmake) {
+    Invoke-WingetInstall -Id 'Kitware.CMake' -Version '3.31.6'
+    $cmake = Find-Executable 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
+}
+if (-not $cmake) { throw 'CMake 3.31.6 was installed but cmake.exe could not be located.' }
+
+$ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
+if (-not $ninja) {
+    Invoke-WingetInstall -Id 'Ninja-build.Ninja' -Version '1.12.1'
+    $ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
+}
+if (-not $ninja) { throw 'Ninja 1.12.1 was installed but ninja.exe could not be located.' }
+
+$python = Find-Executable 'python.exe'
+if (-not $python) {
+    Invoke-WingetInstall -Id 'Python.Python.3.12' -Version '3.12.10'
+    $python = Find-Executable 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
+}
+if (-not $python) { throw 'Python 3.12.10 was installed but python.exe could not be located.' }
+$pythonVersion = (& $python --version 2>&1 | Out-String).Trim()
+if ($pythonVersion -notmatch '^Python 3\.12\.') { throw "Expected Python 3.12; found '$pythonVersion'." }
+
+$llvmVersion = '20260616'
+$llvmArchiveName = "llvm-mingw-$llvmVersion-ucrt-x86_64.zip"
+$llvmArchive = Join-Path $downloads $llvmArchiveName
+$llvmSha256 = 'b9b68a4d276e16fa25802aaba458e4638f64b3884c290aaccdc2d87083b6ca35'
+$llvmDestination = Join-Path $toolchainRoot 'llvm-mingw'
+$compiler = Join-Path $llvmDestination 'bin\x86_64-w64-mingw32-clang++.exe'
+
+if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+    $llvmUrl = "https://github.com/mstorsjo/llvm-mingw/releases/download/$llvmVersion/$llvmArchiveName"
+    if (-not (Test-Path -LiteralPath $llvmArchive -PathType Leaf)) {
+        Write-Host "Downloading $llvmArchiveName (approximately 180 MB)..." -ForegroundColor Cyan
+        Invoke-WebRequest -Uri $llvmUrl -OutFile $llvmArchive
+    }
+    $actualHash = (Get-FileHash -LiteralPath $llvmArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $llvmSha256) {
+        Remove-Item -LiteralPath $llvmArchive -Force
+        throw "llvm-mingw SHA-256 mismatch. Expected $llvmSha256; got $actualHash."
+    }
+    $staging = Join-Path $toolchainRoot '.llvm-mingw-staging'
+    if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $staging | Out-Null
+    try {
+        Expand-Archive -LiteralPath $llvmArchive -DestinationPath $staging -Force
+        $candidate = Get-ChildItem -LiteralPath $staging -Directory -Recurse | Where-Object {
+            Test-Path -LiteralPath (Join-Path $_.FullName 'bin\x86_64-w64-mingw32-clang++.exe')
+        } | Select-Object -First 1
+        if (-not $candidate) { throw 'The verified llvm-mingw archive did not contain the expected x86_64 compiler.' }
+        if (Test-Path -LiteralPath $llvmDestination) { Remove-Item -LiteralPath $llvmDestination -Recurse -Force }
+        Move-Item -LiteralPath $candidate.FullName -Destination $llvmDestination
+    } finally {
+        if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
+    }
+}
+if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { throw 'The llvm-mingw compiler is still missing after installation.' }
+
+$cmakeVersion = (& $cmake --version | Select-Object -First 1)
+$ninjaVersion = (& $ninja --version | Out-String).Trim()
+Write-Host "Build tools ready: $cmakeVersion; Ninja $ninjaVersion; $pythonVersion; llvm-mingw $llvmVersion." -ForegroundColor Green
+
+$env:PATH = @((Split-Path -Parent $python), (Split-Path -Parent $cmake), (Split-Path -Parent $ninja),
+    (Join-Path $toolchainRoot 'llvm-mingw\bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ }) -join ';'
+& $python (Join-Path $repoRoot 'engine\tools\setup_deps.py') --help | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'Python cannot execute the dependency bootstrap script.' }
