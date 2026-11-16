@@ -91,6 +91,10 @@ std::map<std::string, std::string> read_ini(const fs::path& path) {
 }
 
 fs::path cemu_profiles_directory() {
+    if (const char* configured = std::getenv("CEMU_CONFIG_DIR"); configured && *configured) {
+        const fs::path root(configured);
+        return root.filename() == "controllerProfiles" ? root : root / "controllerProfiles";
+    }
 #ifdef _WIN32
     if (const char* app_data = std::getenv("APPDATA"); app_data && *app_data) {
         return fs::path(app_data) / "Cemu" / "controllerProfiles";
