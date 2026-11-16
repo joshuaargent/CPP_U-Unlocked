@@ -64,11 +64,14 @@ std::wstring folded(std::wstring_view value) {
 bool reserved_device_name(std::wstring_view component) {
     const size_t dot = component.find(L'.');
     std::wstring stem(component.substr(0, dot));
+    while (!stem.empty() && (stem.back() == L' ' || stem.back() == L'.')) stem.pop_back();
     std::transform(stem.begin(), stem.end(), stem.begin(),
                    [](wchar_t c) { return c >= L'a' && c <= L'z' ? c - (L'a' - L'A') : c; });
-    if (stem == L"CON" || stem == L"PRN" || stem == L"AUX" || stem == L"NUL") return true;
-    if (stem.size() == 4 && (stem.compare(0, 3, L"COM") == 0 || stem.compare(0, 3, L"LPT") == 0)
-        && stem[3] >= L'1' && stem[3] <= L'9') return true;
+    if (stem == L"CON" || stem == L"PRN" || stem == L"AUX" || stem == L"NUL" ||
+        stem == L"CONIN$" || stem == L"CONOUT$") return true;
+    if (stem.size() == 4 && (stem.compare(0, 3, L"COM") == 0 || stem.compare(0, 3, L"LPT") == 0) &&
+        ((stem[3] >= L'1' && stem[3] <= L'9') || stem[3] == L'\u00B9' ||
+         stem[3] == L'\u00B2' || stem[3] == L'\u00B3')) return true;
     return false;
 }
 
