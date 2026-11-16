@@ -61,6 +61,12 @@
 - [ ] Add secure public-internet connectivity only after the authentication and transport security work is complete.
 - [ ] Add an optional U Unlocked-owned room directory and NAT traversal service, with no third-party room-service dependency.
 
+## Project branding
+
+- [x] Generate an original U Unlocked Windows application icon.
+- [x] Generate an original transparent U Unlocked title-screen wordmark during the Windows build and place it beside the game runtime so the runtime replaces the original title-logo regions.
+- [x] Keep the retired upstream project name out of tracked file contents through the checkout verification script.
+
 ## Graphics and performance
 
 - [x] Expose the existing resolution, fullscreen/windowed, and presentation-rate controls in the launcher.
