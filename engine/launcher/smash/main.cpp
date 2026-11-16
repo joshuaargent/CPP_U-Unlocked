@@ -1757,8 +1757,12 @@ private:
             launch_error_ = "Enter a host IP address or select an open room.";
             return;
         }
-        if (!valid_[kGame] || !valid_[kUpdate]) {
-            launch_error_ = "Select valid base-game and update folders before joining Netplay.";
+        if (!valid_[kGame]) {
+            choose_folder(kGame);
+            return;
+        }
+        if (!valid_[kUpdate]) {
+            choose_folder(kUpdate);
             return;
         }
         std::error_code runtime_ec;
