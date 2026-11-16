@@ -34,6 +34,8 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cctype>
+#include <cstdlib>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
