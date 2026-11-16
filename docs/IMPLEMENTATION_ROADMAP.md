@@ -58,12 +58,13 @@
 
 ## Graphics and performance
 
-- [x] Expose the existing resolution, fullscreen/windowed, and frame-pacing controls in the launcher.
-- [ ] Add a clear graphics settings hierarchy with render scale, VSync, frame pacing, and advanced options.
-- [ ] Implement hardware-aware Low Spec, Balanced, and Quality presets.
+- [x] Expose the existing resolution, fullscreen/windowed, and presentation-rate controls in the launcher.
+- [x] Add Performance (720p render target), Balanced (1080p), Quality (1440p), and Automatic starting profiles, with manual resolution and presentation-rate overrides.
+- [ ] Add a fuller graphics settings hierarchy with explicit VSync, frame pacing, and advanced options.
+- [ ] Implement hardware-aware preset recommendations using detected GPU capabilities and measured performance.
 - [ ] Add detailed GPU/Vulkan capability detection and diagnostics.
 - [ ] Benchmark the HP EliteBook 640 G9 and tune defaults from measured results.
-- [ ] Verify graphics options do not alter deterministic game simulation.
+- [ ] Verify graphics options do not alter deterministic game simulation; presentation interpolation must remain a render-only operation and must not advance gameplay state.
 
 ## Mod management
 
