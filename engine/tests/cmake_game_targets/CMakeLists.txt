@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(UUnlockedGameTargetConfiguration LANGUAGES CXX)
 
+if(WIN32)
+    enable_language(RC)
+endif()
+
 get_filename_component(ENGINE_ROOT "\${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 add_library(cafe_runtime INTERFACE)
 include("\${ENGINE_ROOT}/cmake/SmashTargets.cmake")
