@@ -41,6 +41,7 @@ fs::path path_from_utf8(std::string_view value) {
 constexpr size_t kMaximumEntries = 100000;
 constexpr unsigned kMaximumDepth = 128;
 constexpr uint64_t kMaximumExpandedBytes = 64ULL * 1024 * 1024 * 1024;
+constexpr uint64_t kMaximumArchiveBytes = 64ULL * 1024 * 1024 * 1024;
 constexpr size_t kMaximumPathCharacters = 32760;
 
 [[noreturn]] void win_error(const std::string& operation) {
@@ -298,7 +299,12 @@ int main(int, char**) {
     }
 
     try {
-        std::unique_ptr<ZArchiveReader> reader(ZArchiveReader::OpenFromFile(fs::path(arguments.values[2])));
+        const fs::path archive_path(arguments.values[2]);
+        std::error_code size_error;
+        const uint64_t archive_size = fs::file_size(archive_path, size_error);
+        if (size_error || archive_size == 0) throw std::runtime_error("Archive is empty or cannot be read");
+        if (archive_size > kMaximumArchiveBytes) throw std::runtime_error("Archive exceeds the 64 GiB input-size safety limit");
+        std::unique_ptr<ZArchiveReader> reader(ZArchiveReader::OpenFromFile(archive_path));
         if (!reader) throw std::runtime_error("Cannot open WUA/ZArchive: archive open failed");
         const auto files = inventory(*reader, analysis);
 
