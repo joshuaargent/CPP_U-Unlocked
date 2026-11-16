@@ -31,7 +31,7 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 
 ## What you'll find here
 
-- **Native PC runtime** - C++20, Vulkan rendering, SDL3 input, and a native Windows game runtime.
+- **Native PC runtime** - C++20, Vulkan rendering, SDL3 input, and a native Windows game runtime. The Windows build generates an original U Unlocked application icon and transparent in-game title wordmark; the runtime overlays that wordmark instead of relying on an optional, user-supplied image.
 - **Game installation** - validation of the game, update, and optional DLC folders supplied by the user.
 - **WUA installation** - the Windows launcher can import a `.wua` archive through the bundled bounded extractor. It extracts into a private staging directory, rejects unsafe paths/reparse points and resource-limit violations, validates the Smash base-game title ID, then activates the imported library without modifying or deleting the original archive. Real-archive end-to-end testing remains outstanding.
 - **Launcher** - a controller- and mouse-friendly home dashboard with Play, Build, game-update management, Online, Netplay, Controls, Graphics, Mods, and Diagnostics pages. Build manages the user-supplied game/update/DLC folders; Diagnostics reports runtime and system information and can copy a support report.
