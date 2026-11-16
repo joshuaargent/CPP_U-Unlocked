@@ -75,34 +75,40 @@ void test_inputs() {
     const struct {
         const char* id;
         uint32_t button;
-        int stick_x, stick_y;
+        int stick_x, stick_y, right_x, right_y;
         uint16_t key;
     } expected[] = {
-        {"dpad_up", cafe::os::vpad::kUp, 0, 0, 26},       {"dpad_down", cafe::os::vpad::kDown, 0, 0, 22},
-        {"dpad_left", cafe::os::vpad::kLeft, 0, 0, 4},    {"dpad_right", cafe::os::vpad::kRight, 0, 0, 7},
-        {"face_top", cafe::os::vpad::kX, 0, 0, 12},       {"face_bottom", cafe::os::vpad::kB, 0, 0, 14},
-        {"face_left", cafe::os::vpad::kY, 0, 0, 13},      {"face_right", cafe::os::vpad::kA, 0, 0, 15},
-        {"l", cafe::os::vpad::kL, 0, 0, 11},              {"r", cafe::os::vpad::kR, 0, 0, 51},
-        {"zl", cafe::os::vpad::kZL, 0, 0, 24},            {"zr", cafe::os::vpad::kZR, 0, 0, 18},
-        {"stick_up", 0, 0, 1, 82},                        {"stick_down", 0, 0, -1, 81},
-        {"stick_left", 0, -1, 0, 80},                     {"stick_right", 0, 1, 0, 79},
-        {"plus", cafe::os::vpad::kPlus, 0, 0, 40},        {"minus", cafe::os::vpad::kMinus, 0, 0, 42},
-        {"home", cafe::os::vpad::kHome, 0, 0, 74},
+        {"dpad_up", cafe::os::vpad::kUp, 0, 0, 0, 0, 26}, {"dpad_down", cafe::os::vpad::kDown, 0, 0, 0, 0, 22},
+        {"dpad_left", cafe::os::vpad::kLeft, 0, 0, 0, 0, 4}, {"dpad_right", cafe::os::vpad::kRight, 0, 0, 0, 0, 7},
+        {"face_top", cafe::os::vpad::kX, 0, 0, 0, 0, 12}, {"face_bottom", cafe::os::vpad::kB, 0, 0, 0, 0, 14},
+        {"face_left", cafe::os::vpad::kY, 0, 0, 0, 0, 13}, {"face_right", cafe::os::vpad::kA, 0, 0, 0, 0, 15},
+        {"l", cafe::os::vpad::kL, 0, 0, 0, 0, 11}, {"r", cafe::os::vpad::kR, 0, 0, 0, 0, 51},
+        {"zl", cafe::os::vpad::kZL, 0, 0, 0, 0, 24}, {"zr", cafe::os::vpad::kZR, 0, 0, 0, 0, 18},
+        {"stick_up", 0, 0, 1, 0, 0, 82}, {"stick_down", 0, 0, -1, 0, 0, 81},
+        {"stick_left", 0, -1, 0, 0, 0, 80}, {"stick_right", 0, 1, 0, 0, 0, 79},
+        {"right_stick_up", 0, 0, 0, 0, 1, 96}, {"right_stick_down", 0, 0, 0, 0, -1, 90},
+        {"right_stick_left", 0, 0, 0, -1, 0, 92}, {"right_stick_right", 0, 0, 0, 1, 0, 94},
+        {"left_stick_click", cafe::os::vpad::kStickL, 0, 0, 0, 0, 93},
+        {"right_stick_click", cafe::os::vpad::kStickR, 0, 0, 0, 0, 98},
+        {"plus", cafe::os::vpad::kPlus, 0, 0, 0, 0, 40}, {"minus", cafe::os::vpad::kMinus, 0, 0, 0, 0, 42},
+        {"home", cafe::os::vpad::kHome, 0, 0, 0, 0, 74},
     };
-    check(std::size(expected) == keymap::kInputCount, "19 inputs");
+    check(std::size(expected) == keymap::kInputCount, "25 inputs");
     const keymap::Keys defaults = keymap::default_keys();
     for (size_t i = 0; i < std::size(expected) && i < keymap::kInputCount; ++i) {
         const keymap::Input& input = keymap::kInputs[i];
         const std::string what = std::string("input ") + expected[i].id;
         check(input.id == expected[i].id, what + " id");
         check(input.button == expected[i].button, what + " button");
-        check(input.stick_x == expected[i].stick_x && input.stick_y == expected[i].stick_y, what + " stick");
+        check(input.stick_x == expected[i].stick_x && input.stick_y == expected[i].stick_y &&
+              input.right_x == expected[i].right_x && input.right_y == expected[i].right_y, what + " stick axes");
         check(input.default_key == expected[i].key && defaults[i] == expected[i].key, what + " default key");
         check(!keymap::reserved(defaults[i]), what + " default not reserved");
     }
     // SDL's names for the defaults are the US keys.
     const char* names[] = {"W", "S", "A", "D", "I", "K", "J", "L", "H", ";",
-                           "U", "O", "Up", "Down", "Left", "Right", "Return", "Backspace", "Home"};
+                           "U", "O", "Up", "Down", "Left", "Right", "Keypad 8", "Keypad 2",
+                           "Keypad 4", "Keypad 6", "Keypad 5", "Keypad 0", "Return", "Backspace", "Home"};
     for (size_t i = 0; i < std::size(names) && i < keymap::kInputCount; ++i) {
         check(sdl_name(names[i]) == defaults[i], std::string("SDL's name of the default key ") + names[i]);
     }
@@ -261,7 +267,7 @@ void test_load(const fs::path& scratch) {
     check(loaded.log == log, "file: log " + joined(loaded.log));
 
     write(file, "");
-    check(keymap::load(file, sdl_name).log == std::vector<std::string>{"keyboard: 0 of 19 keys from " + file.string()},
+    check(keymap::load(file, sdl_name).log == std::vector<std::string>{"keyboard: 0 of 25 keys from " + file.string()},
           "empty file");
 
     // Never opened: a folder, a pipe (reading one would wait for a writer),
@@ -317,7 +323,7 @@ void test_watcher(const fs::path& scratch) {
     replace(file, "l = 5\n");
     loaded = watcher.reload();
     check(loaded && loaded->keys[index_of("l")] == 5, "file created");
-    check(loaded && loaded->log.back() == "keyboard: 1 of 19 keys from " + file.string(), "reload's log line");
+    check(loaded && loaded->log.back() == "keyboard: 1 of 25 keys from " + file.string(), "reload's log line");
     check(!watcher.reload(), "unchanged: not read again");
 
     // The launcher's atomic write of a file of the same size, within the
