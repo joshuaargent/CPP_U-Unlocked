@@ -27,12 +27,14 @@ At startup and in Diagnostics, report:
 - Select the fast build only after checking AVX2/FMA support.
 - Bound shader compilation work and reuse shader caches.
 - Avoid unnecessary per-frame allocations, CPU/GPU synchronisation, and duplicate texture staging.
-- Provide a one-click Low Spec preset, then Balanced and Quality presets.
+- Provide Performance (1280x720 render target), Balanced (1920x1080), Quality (2560x1440), and Automatic starting profiles.
+- Treat these profiles as fixed starting configurations until GPU capabilities and target-device frame-time measurements are available; do not label one as optimal for Iris Xe without testing.
+- Keep the game's simulation/vblank cadence independent from presentation interpolation. Additional presentation frames must use recorded render state and must not advance gameplay, collision, physics, or input processing.
 - Do not hard-code a 640 G9-specific resolution, frame cap, or quality level based only on the model family.
 
 ## Benchmark record
 
-No target-device benchmark has been completed yet. Record the following before changing defaults:
+No target-device benchmark has been completed yet. The launcher profiles are not performance guarantees. Record the following before changing defaults or introducing automatic hardware recommendations:
 
 | Metric | Result |
 | --- | --- |
