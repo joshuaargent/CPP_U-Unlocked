@@ -131,6 +131,10 @@ if (-not $UseSystemTools -and ($cmakeVersion -notmatch '3\.31\.6' -or $ninjaVers
     throw "Unexpected build tool versions: $cmakeVersion; Ninja $ninjaVersion. Expected CMake 3.31.6 and Ninja 1.12.1."
 }
 Write-Host "Build tools ready: $cmakeVersion; Ninja $ninjaVersion; $pythonVersion; llvm-mingw $llvmVersion." -ForegroundColor Green
+$memoryGb = [math]::Floor((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
+$buildJobs = if ($memoryGb -ge 32) { 4 } elseif ($memoryGb -ge 12) { 2 } else { 1 }
+$env:U_UNLOCKED_BUILD_JOBS = [string]$buildJobs
+Write-Host "Build parallelism: $buildJobs job(s) for $memoryGb GiB RAM." -ForegroundColor Green
 
 $env:PATH = (@((Split-Path -Parent $python), (Split-Path -Parent $cmake), (Split-Path -Parent $ninja),
     (Join-Path $toolchainRoot 'llvm-mingw\bin'), "$env:SystemRoot\System32")) + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
