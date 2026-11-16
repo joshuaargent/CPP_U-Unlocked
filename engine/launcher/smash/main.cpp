@@ -1254,8 +1254,11 @@ private:
         if (screen_ == Screen::kControls) {
             if (selected_ == 0) select_control_device(d);
             else if (selected_ == 1) {
-                const int next = (static_cast<int>(control_profile_.player_slot) + 1 + d + 9) % 9;
-                control_profile_.player_slot = static_cast<int8_t>(next - 1);
+                // Player 1 is permanently the keyboard/Wii U GamePad. Physical
+                // controllers can be automatic or explicitly assigned to players 2-8.
+                const int current = control_profile_.player_slot < 0 ? 0 : control_profile_.player_slot;
+                const int next = (current + d + 8) % 8;
+                control_profile_.player_slot = static_cast<int8_t>(next == 0 ? -1 : next);
             } else if (selected_ == 2) {
                 control_button_action_ = (control_button_action_ + d + controller_profiles::kButtonCount) % controller_profiles::kButtonCount;
             } else if (selected_ == 4) {
