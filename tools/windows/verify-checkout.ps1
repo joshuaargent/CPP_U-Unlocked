@@ -43,9 +43,22 @@ if ($launcherMain -notmatch '~Launcher\s*\(') {
 # Keep the retired upstream project name out of all tracked source and documentation.
 # Split the token so this guard does not match itself.
 $legacyName = 'Smash' + '4PC'
-$trackedFiles = @(git -C $repoRoot ls-files)
-if ($LASTEXITCODE -ne 0) {
-    throw 'Unable to enumerate tracked files for the legacy-reference check.'
+$gitCommand = Get-Command git -ErrorAction SilentlyContinue
+if ($gitCommand -and (Test-Path -LiteralPath (Join-Path $repoRoot '.git'))) {
+    $trackedFiles = @(git -C $repoRoot ls-files)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to enumerate tracked files for the legacy-reference check.'
+    }
+} else {
+    # Release source bundles intentionally omit .git metadata. Scan the complete
+    # source tree while excluding generated build outputs and downloaded toolchains.
+    $excludedRoots = @('toolchain', 'generated', 'Play', 'dist', 'engine/build', 'engine/build-deps')
+    $trackedFiles = @(Get-ChildItem -LiteralPath $repoRoot -File -Recurse -Force | Where-Object {
+        $relative = [System.IO.Path]::GetRelativePath($repoRoot, $_.FullName).Replace('\', '/')
+        $parts = $relative.Split('/')
+        ($parts -notcontains '.git') -and
+        -not ($excludedRoots | Where-Object { $relative.StartsWith($_ + '/', [System.StringComparison]::OrdinalIgnoreCase) })
+    } | ForEach-Object { [System.IO.Path]::GetRelativePath($repoRoot, $_.FullName).Replace('\', '/') })
 }
 $legacyPaths = @($trackedFiles | Where-Object {
     $_.IndexOf($legacyName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
