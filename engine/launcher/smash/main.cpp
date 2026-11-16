@@ -374,6 +374,7 @@ public:
         if (auto it = ini.find("game_folder"); it != ini.end()) find_titles(it->second, paths_); // older file
         if (auto it = ini.find("netplay_host"); it != ini.end()) netplay_host_ = it->second == "yes";
         if (auto it = ini.find("netplay_name"); it != ini.end()) netplay_name_ = it->second;
+        if (auto it = ini.find("netplay_address"); it != ini.end()) netplay_address_ = it->second;
         online::load(dir_ / "online");
         refresh();
         font_.open({dir_ / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/segoeui.ttf",
@@ -461,7 +462,9 @@ public:
                 select(i);
                 const bool control_action = screen_ == Screen::kControls &&
                     (i == 3 || i == 5 || i == 9 || i == 10 || i == 11 || i == 12);
-                if (!control_action && !items()[i].value.empty() && !folder_slot(i) && screen_ != Screen::kOnline) {
+                const bool netplay_action = screen_ == Screen::kNetplay &&
+                    (i == kHostSwitch || i == kNameField || i == kAddressField || i >= kFirstRoom);
+                if (!control_action && !netplay_action && !items()[i].value.empty() && !folder_slot(i) && screen_ != Screen::kOnline) {
                     change(e.button.x < layout_.right_chevron - layout_.h * 0.06f ? -1 : 1);
                 } else {
                     activate();
@@ -674,7 +677,7 @@ private:
     enum MainItem { kPlay, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kQuitItem };
     // The Netplay page (host/netplay.h: the host's game streamed to its guests): hosting, a name, joining.
     // Then the open rooms (or a line saying there are none), then Back.
-    enum NetplayItem { kHostSwitch, kNameField, kFirstRoom };
+    enum NetplayItem { kHostSwitch, kNameField, kAddressField, kFirstRoom };
     // The Online page: the console's files, the Pretendo ID and password, signing in and out.
     enum OnlineItem { kConsoleFiles, kUserField, kPasswordField, kSignIn, kSignOut, kOnlineBack };
     static constexpr int kSettingsBack = 3;
@@ -770,7 +773,8 @@ private:
                 return text.empty() ? std::string("Type...") : text;
             };
             list_ = {{"HOST MY GAMES", netplay_host_ ? "On" : "Off"},
-                     {"MY NAME", field(kNameField, netplay_name_)}};
+                     {"MY NAME", field(kNameField, netplay_name_)},
+                     {"JOIN ADDRESS", field(kAddressField, netplay_address_)}};
             std::lock_guard lock(rooms_mutex_);
             for (const auto& room : rooms_) {
                 std::string label = room.name + "'S ROOM";
@@ -779,7 +783,12 @@ private:
                                                             ? "Full"
                                                             : std::to_string(room.players) + "/" + std::to_string(room.max)});
             }
-            if (rooms_.empty()) list_.push_back({rooms_reached_ ? "NO OPEN ROOMS" : "LOOKING FOR ROOMS..."});
+            if (rooms_.empty()) {
+                const bool directory_configured = !cafe::host::netplay::room_server().empty();
+                list_.push_back({rooms_reached_ ? "NO OPEN ROOMS"
+                                                : directory_configured ? "LOOKING FOR ROOMS..." : "ROOM DIRECTORY NOT CONFIGURED",
+                                 directory_configured ? "" : "Enter a host IP or VPN address above to join directly."});
+            }
             list_.push_back({"BACK"});
             break;
         }
@@ -1082,7 +1091,8 @@ private:
         case Screen::kNetplay:
             switch (selected_) {
             case kHostSwitch: change(1); break;
-            case kNameField: start_editing(selected_); break;
+            case kNameField:
+            case kAddressField: start_editing(selected_); break;
             default:
                 if (selected_ + 1 == static_cast<int>(items().size())) back();
                 else join(selected_ - kFirstRoom);
@@ -1270,21 +1280,11 @@ private:
         rooms_thread_.detach();
     }
 
-    // Plays in the listed room `index`: smash.exe --join room:ID NAME (no game folder needed).
-    void join(int index) {
+    void launch_guest(const std::string& target) {
         if (process_) return;
-        std::string target;
-        {
-            std::lock_guard lock(rooms_mutex_);
-            if (index < 0 || index >= static_cast<int>(rooms_.size())) return;
-            const auto& room = rooms_[index];
-            if (room.players >= room.max) {
-                launch_error_ = room.name + "'s room is full";
-                return;
-            }
-            char id[16];
-            std::snprintf(id, sizeof id, "room:%06x", room.id);
-            target = id;
+        if (target.empty()) {
+            launch_error_ = "Enter a host IP address or select an open room.";
+            return;
         }
         save_launcher_ini();
         const std::string exe = (dir_ / "smash.exe").string();
@@ -1299,6 +1299,36 @@ private:
         } else {
             launch_error_ = SDL_GetError();
         }
+    }
+
+    void join_address() {
+        std::string target = netplay_address_;
+        const size_t first = target.find_first_not_of(" \t");
+        if (first == std::string::npos) {
+            launch_error_ = "Enter a host IP address, hostname, or VPN address.";
+            return;
+        }
+        const size_t last = target.find_last_not_of(" \t");
+        target = target.substr(first, last - first + 1);
+        launch_guest(target);
+    }
+
+    // Joins a room from the optional U Unlocked room directory.
+    void join(int index) {
+        std::string target;
+        {
+            std::lock_guard lock(rooms_mutex_);
+            if (index < 0 || index >= static_cast<int>(rooms_.size())) return;
+            const auto& room = rooms_[index];
+            if (room.players >= room.max) {
+                launch_error_ = room.name + "'s room is full";
+                return;
+            }
+            char id[16];
+            std::snprintf(id, sizeof id, "room:%06x", room.id);
+            target = id;
+        }
+        launch_guest(target);
     }
 
     void choose_folder(Slot slot) {
@@ -1340,7 +1370,7 @@ private:
                "# (0005000C10144F00) folders, as chosen in the menu. Only the game is needed.\n";
         for (int s = 0; s < kSlots; ++s) out << kSlotKeys[s] << " = " << paths_[s].string() << "\n";
         out << "netplay_host = " << (netplay_host_ ? "yes" : "no") << "\nnetplay_name = " << netplay_name_
-            << "\n";
+            << "\nnetplay_address = " << netplay_address_ << "\n";
     }
 
     // Shortened with "..." in the middle to fit `width`.
@@ -1685,9 +1715,12 @@ private:
     // Typing in the ID or password field; true if the event was the field's.
     bool text_event(const SDL_Event& e) {
         const bool netplay = screen_ == Screen::kNetplay;
-        std::string& text = netplay ? netplay_name_ : editing_ == kUserField ? user_ : password_;
-        // A PNID is at most 16 characters (and a netplay name, sent in 31 bytes).
-        const size_t limit = editing_ == kUserField || (netplay && editing_ == kNameField) ? 16 : 64;
+        std::string& text = netplay
+            ? (editing_ == kAddressField ? netplay_address_ : netplay_name_)
+            : editing_ == kUserField ? user_ : password_;
+        // A PNID and netplay name are short; a direct host address may be an IP, VPN IP, or hostname.
+        const size_t limit = netplay && editing_ == kAddressField ? 255
+                           : editing_ == kUserField || (netplay && editing_ == kNameField) ? 16 : 64;
         switch (e.type) {
         case SDL_EVENT_TEXT_INPUT:
             for (const char* c = e.text.text; *c && utf8_length(text) < limit; ++c) text += *c;
@@ -1705,7 +1738,9 @@ private:
                 // On from the ID to the password; from the password, sign in.
                 const int was = editing_;
                 stop_editing();
-                if (netplay) {
+                if (netplay && was == kAddressField) {
+                    join_address();
+                } else if (netplay) {
                 } else if (was == kUserField) {
                     selected_ = kPasswordField;
                     start_editing(kPasswordField);
@@ -2152,7 +2187,7 @@ private:
     int editing_ = -1; // the field being typed in
     // Netplay.
     bool netplay_host_ = false;
-    std::string netplay_name_;
+    std::string netplay_name_, netplay_address_;
     std::thread rooms_thread_;
     std::mutex rooms_mutex_;
     std::vector<cafe::host::netplay::Room> rooms_;
