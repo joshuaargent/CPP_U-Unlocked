@@ -1586,8 +1586,8 @@ private:
         }
         if (!ready()) return;
         std::error_code ec;
-        if (!fs::exists(game_exe(), ec)) {
-            launch_error_ = "missing " + game_exe().filename().string();
+        if (ec || !fs::is_regular_file(game_exe(), ec) || ec) {
+            launch_error_ = "The game files are verified, but the local game runtime has not been built yet. This launcher-only release cannot compile it. Build the runtime from your own base-game and update RPX files using the repository's Windows build instructions, then place the generated Play files beside this launcher.";
             return;
         }
         launch_error_.clear();
@@ -2178,15 +2178,20 @@ private:
         font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.145f,
                    "SUPER SMASH BROS. FOR WII U", H * 0.035f, mix_alpha(white, 1.0f));
         const bool game_ready = ready();
+        std::error_code runtime_ec;
+        const bool runtime_ready = game_ready && fs::is_regular_file(game_exe(), runtime_ec) && !runtime_ec;
         const std::string game_state = process_ ? "GAME RUNNING"
-                                      : game_ready ? "GAME FILES VERIFIED"
-                                                   : "SET UP YOUR GAME FILES";
-        const Color state_color = process_ ? kGold : game_ready ? kGood : kBad;
+                                      : !game_ready ? "SET UP YOUR GAME FILES"
+                                      : runtime_ready ? "RUNTIME READY"
+                                                      : "RUNTIME BUILD REQUIRED";
+        const Color state_color = process_ ? kGold : runtime_ready ? kGood : game_ready ? kGold : kBad;
         font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.195f,
                    game_state, H * 0.019f, mix_alpha(state_color, 1.0f));
-        std::string detail = game_ready
-            ? (valid_[kUpdate] ? "Update v" + std::to_string(update_version_) : "Base game only")
-            : "Select your legally obtained game folder to get started.";
+        std::string detail = !game_ready
+            ? "Select your legally obtained game folder to get started."
+            : !runtime_ready
+                ? "Game files found. Build the local Vulkan runtime before launching."
+                : (valid_[kUpdate] ? "Update v" + std::to_string(update_version_) : "Base game only");
         font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.245f,
                    fit(detail, H * 0.019f, hero_w * 0.72f), H * 0.019f, mix_alpha(muted, 1.0f));
 
