@@ -327,36 +327,36 @@ const ShaderModule* Renderer::shader(Stage stage, uint32_t address, uint32_t siz
             compile_async([this, pending, glsl = entry->info.glsl, glsl_hash, vertex = stage == Stage::kVertex,
                            program_hash] {
                 try {
-                std::vector<uint32_t> code = load_cached_spirv(glsl_hash);
-                if (code.empty()) {
-                    // shaderc compilers are per thread.
-                    thread_local shaderc_compiler_t compiler = shaderc_compiler_initialize();
-                    shaderc_compile_options_t options = shaderc_compile_options_initialize();
-                    shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan,
-                                                           shaderc_env_version_vulkan_1_3);
-                    shaderc_compile_options_set_optimization_level(options, shaderc_optimization_level_zero);
-                    shaderc_compilation_result_t result = shaderc_compile_into_spv(
-                        compiler, glsl.data(), glsl.size(), vertex ? shaderc_vertex_shader : shaderc_fragment_shader,
-                        vertex ? "vs" : "ps", "main", options);
-                    shaderc_compile_options_release(options);
-                    if (shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success) {
-                        std::fprintf(stderr, "ttt2: gpu: cannot compile %s %016llx:\n%s\n", vertex ? "vs" : "ps",
-                                     static_cast<unsigned long long>(program_hash),
-                                     shaderc_result_get_error_message(result));
+                    std::vector<uint32_t> code = load_cached_spirv(glsl_hash);
+                    if (code.empty()) {
+                        // shaderc compilers are per thread.
+                        thread_local shaderc_compiler_t compiler = shaderc_compiler_initialize();
+                        shaderc_compile_options_t options = shaderc_compile_options_initialize();
+                        shaderc_compile_options_set_target_env(options, shaderc_target_env_vulkan,
+                                                               shaderc_env_version_vulkan_1_3);
+                        shaderc_compile_options_set_optimization_level(options, shaderc_optimization_level_zero);
+                        shaderc_compilation_result_t result = shaderc_compile_into_spv(
+                            compiler, glsl.data(), glsl.size(), vertex ? shaderc_vertex_shader : shaderc_fragment_shader,
+                            vertex ? "vs" : "ps", "main", options);
+                        shaderc_compile_options_release(options);
+                        if (shaderc_result_get_compilation_status(result) != shaderc_compilation_status_success) {
+                            std::fprintf(stderr, "ttt2: gpu: cannot compile %s %016llx:\n%s\n", vertex ? "vs" : "ps",
+                                         static_cast<unsigned long long>(program_hash),
+                                         shaderc_result_get_error_message(result));
+                            shaderc_result_release(result);
+                            pending->state = Built::kFailed;
+                            return;
+                        }
+                        const auto* words = reinterpret_cast<const uint32_t*>(shaderc_result_get_bytes(result));
+                        code.assign(words, words + shaderc_result_get_length(result) / 4);
                         shaderc_result_release(result);
-                        pending->state = Built::kFailed;
-                        return;
+                        store_cached_spirv(glsl_hash, code);
                     }
-                    const auto* words = reinterpret_cast<const uint32_t*>(shaderc_result_get_bytes(result));
-                    code.assign(words, words + shaderc_result_get_length(result) / 4);
-                    shaderc_result_release(result);
-                    store_cached_spirv(glsl_hash, code);
-                }
-                VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-                mci.codeSize = code.size() * 4;
-                mci.pCode = code.data();
-                VK_CHECK(vkCreateShaderModule(ctx_.device, &mci, nullptr, &pending->module));
-                pending->state = Built::kReady;
+                    VkShaderModuleCreateInfo mci{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+                    mci.codeSize = code.size() * 4;
+                    mci.pCode = code.data();
+                    VK_CHECK(vkCreateShaderModule(ctx_.device, &mci, nullptr, &pending->module));
+                    pending->state = Built::kReady;
                 } catch (const std::exception& error) {
                     std::fprintf(stderr, "ttt2: gpu: asynchronous shader compilation failed: %s\n", error.what());
                     pending->state = Built::kFailed;
