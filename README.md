@@ -40,6 +40,7 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 - **Netplay** - host game streaming and direct IP/VPN joining; room discovery remains disabled until a U Unlocked-owned compatible service is deployed. The current UDP protocol has no app-level authentication or encryption, so use trusted LAN/private-VPN peers only; public port forwarding is not safe yet.
 - **Mod management** - existing archive installation and enable/disable support, with profiles, dependency checks, conflict reporting, and transactional rollback planned.
 - **Performance profiles** - Low Spec, Balanced, and Quality modes are planned, with Intel Iris Xe integrated graphics included in the initial optimisation target.
+- **Application updates** - the Windows launcher checks GitHub releases on demand, supports stable/beta channels, verifies SHA-256 package and per-file hashes, stages updates, backs up replaced launcher files, and rolls back if replacement or relaunch fails. Game files, mods, saves, console files, and settings are not replaced. User-selectable rollback and end-to-end release testing remain outstanding.
 - **Diagnostics** - the launcher reports platform, logical CPU cores, system memory, CPU optimisation path, SDL launcher renderer, game/update validation, active mods, shader-cache count, and log location. Vulkan capability reporting and deeper automated troubleshooting remain planned.
 - **Preserved game behaviour** - graphics and performance settings must not change deterministic game simulation or silently alter gameplay timing.
 
@@ -53,7 +54,7 @@ Controller setup should be straightforward, settings should explain what they ch
 
 ## Current status
 
-The native runtime and Windows build foundation are now part of this repository. The launcher includes Play, Build, game-update management, Online, Netplay, Controls, Graphics, Mods, and Diagnostics workflows. Controls supports physical button and axis capture, player-slot assignment, per-axis calibration, a live input monitor, per-device JSON profile persistence, automatic Cemu profile-folder discovery, and a Cemu XML importer for SDLController profiles. The launcher also provides direct IP/VPN Netplay joining without requiring a room directory. Full application-update delivery, richer mod management, full runtime linking, and on-device testing remain outstanding.
+The native runtime and Windows build foundation are now part of this repository. The launcher includes Play, Build, game-update management, Online, Netplay, Controls, Graphics, Mods, and Diagnostics workflows. Controls supports physical button and axis capture, player-slot assignment, per-axis calibration, a live input monitor, per-device JSON profile persistence, automatic Cemu profile-folder discovery, and a Cemu XML importer for SDLController profiles. The launcher also provides direct IP/VPN Netplay joining without requiring a room directory. Windows launcher update checks and a checksum-verified staged update helper are implemented; the release package must include both the ZIP and its SHA-256 sidecar. End-to-end update testing, user-selectable rollback, richer mod management, full runtime linking, and on-device testing remain outstanding.
 
 The initial target machine is an HP EliteBook 640 G9 provisionally identified as an Intel Core i5 model with Intel Iris Xe graphics and 16 GB RAM. The exact CPU model and Vulkan driver capabilities still need to be confirmed on the target machine. Defaults will be based on runtime detection and measured performance rather than the laptop model name.
 
@@ -132,6 +133,10 @@ Run the project build wrapper from the repository root:
 The build uses the source in `engine\`, the local toolchain in `toolchain\`, and writes build output to ignored working directories. The launcher and game runtime are written to `Play\`; the launcher is named `U Unlocked.exe`.
 
 A first build requires the user's game/update RPX files and the toolchain described above. Do not distribute generated game code or executables built from it. They contain code translated from the user's game files.
+
+### Package the launcher for a release
+
+After building the launcher, run the package script from the repository root with the release version. It creates a launcher-only ZIP and a matching SHA-256 sidecar. Attach both files to the GitHub release, using the corresponding v-prefixed version tag. The update checker expects the asset name U-Unlocked-vVERSION-Windows-Launcher.zip and its .sha256 sidecar. The package does not include the game runtime; each user builds that locally from their own game files.
 
 ## Development and pull requests
 
