@@ -326,6 +326,7 @@ const ShaderModule* Renderer::shader(Stage stage, uint32_t address, uint32_t siz
             pending_modules_[glsl_hash] = pending;
             compile_async([this, pending, glsl = entry->info.glsl, glsl_hash, vertex = stage == Stage::kVertex,
                            program_hash] {
+                try {
                 std::vector<uint32_t> code = load_cached_spirv(glsl_hash);
                 if (code.empty()) {
                     // shaderc compilers are per thread.
@@ -356,6 +357,13 @@ const ShaderModule* Renderer::shader(Stage stage, uint32_t address, uint32_t siz
                 mci.pCode = code.data();
                 VK_CHECK(vkCreateShaderModule(ctx_.device, &mci, nullptr, &pending->module));
                 pending->state = Built::kReady;
+                } catch (const std::exception& error) {
+                    std::fprintf(stderr, "ttt2: gpu: asynchronous shader compilation failed: %s\\n", error.what());
+                    pending->state = Built::kFailed;
+                } catch (...) {
+                    std::fprintf(stderr, "ttt2: gpu: asynchronous shader compilation failed with an unknown exception\\n");
+                    pending->state = Built::kFailed;
+                }
             });
         }
         resolve_module(*entry);
