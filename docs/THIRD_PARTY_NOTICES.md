@@ -14,6 +14,10 @@ The client implementation under `engine/third_party/cemu_nex/` is distributed un
 
 The controller-profile importer uses TinyXML-2, distributed under its zlib-style licence. The vendored source is under `engine/third_party/tinyxml2/`; its full notice is retained in `engine/third_party/tinyxml2/LICENSE.txt`. The imported version is pinned to commit `8224e427b655b83dae5e2298f1e6919523a78737`.
 
+## Image and font decoding
+
+The launcher and in-game UI use the header-only stb libraries for PNG/JPEG image loading and TrueType font rasterisation. The pinned source is fetched into `engine/third_party/stb/` from the stb project. Its public-domain/MIT dual licence and copyright notices are retained in the upstream headers and `LICENSE` file; do not strip them from source or release packages.
+
 ## Other dependencies
 
 Build-time dependencies are declared in `engine/dependencies.lock.json` and acquired by the dependency build scripts. Their respective licence notices must be retained in the dependency/build output and must be reviewed whenever dependency versions change.
