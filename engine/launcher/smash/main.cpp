@@ -488,6 +488,26 @@ bool is_newer_release(const std::string& latest, const std::string& current) {
 
 enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay, kControls, kControlTest, kLibrary, kUpdates, kDiagnostics };
 
+// A preset is deliberately derived from the saved settings: changing any
+// individual option immediately changes the label to Custom.
+int graphics_preset_index(const display::Settings& settings) {
+    if (settings.resolution == display::Resolution::k720 && !settings.interpolation) return 0;
+    if (settings.resolution == display::Resolution::k1080 && settings.interpolation && settings.frame_rate == 0) return 1;
+    if (settings.resolution == display::Resolution::k1440 && settings.interpolation && settings.frame_rate == 0) return 2;
+    if (settings.resolution == display::Resolution::kAuto && settings.interpolation && settings.frame_rate == 0) return 3;
+    return -1;
+}
+
+std::string graphics_preset_name(const display::Settings& settings) {
+    switch (graphics_preset_index(settings)) {
+    case 0: return "Performance";
+    case 1: return "Balanced";
+    case 2: return "Quality";
+    case 3: return "Automatic";
+    default: return "Custom";
+    }
+}
+
 
 struct Item {
     std::string label;
@@ -828,7 +848,7 @@ private:
     enum NetplayItem { kHostSwitch, kNameField, kAddressField, kFirstRoom };
     // The Online page: the console's files, the Pretendo ID and password, signing in and out.
     enum OnlineItem { kConsoleFiles, kUserField, kPasswordField, kSignIn, kSignOut, kOnlineBack };
-    static constexpr int kSettingsBack = 3;
+    static constexpr int kSettingsBack = 4;
     static std::optional<Slot> folder_slot_of(Screen screen, int item) {
         if (screen != Screen::kMain || item < kGameItem || item > kDlcItem) return std::nullopt;
         return Slot(item - kGameItem);
@@ -936,9 +956,10 @@ private:
                                     : settings_.frame_rate == 0                     ? "Automatic"
                                     : settings_.frame_rate == display::kUncapped   ? "Uncapped"
                                                                                    : std::to_string(settings_.frame_rate);
-            list_ = {{"RESOLUTION", res},
-                     {"DISPLAY", settings_.fullscreen ? "Fullscreen" : "Window"},
-                     {"FRAME RATE", fps},
+            list_ = {{"GRAPHICS PRESET", graphics_preset_name(settings_)},
+                     {"RENDER RESOLUTION", res},
+                     {"DISPLAY MODE", settings_.fullscreen ? "Fullscreen" : "Window"},
+                     {"PRESENTATION RATE", fps},
                      {"BACK"}};
             break;
         }
@@ -1203,16 +1224,46 @@ private:
         }
         if (screen_ != Screen::kSettings) return;
         if (selected_ == 0) {
+            // These are starting profiles, not hardware benchmarks. They only
+            // change the render scale and presentation interpolation settings.
+            static constexpr int kPresetCount = 4;
+            const int current = graphics_preset_index(settings_);
+            const int next = current < 0 ? (d > 0 ? 0 : kPresetCount - 1)
+                                         : (current + d + kPresetCount) % kPresetCount;
+            switch (next) {
+            case 0: // Performance: native 720p render target, no extra presentation frames.
+                settings_.resolution = display::Resolution::k720;
+                settings_.interpolation = false;
+                settings_.frame_rate = 0;
+                break;
+            case 1: // Balanced: 1080p render target, automatic presentation pacing.
+                settings_.resolution = display::Resolution::k1080;
+                settings_.interpolation = true;
+                settings_.frame_rate = 0;
+                break;
+            case 2: // Quality: 1440p render target, automatic presentation pacing.
+                settings_.resolution = display::Resolution::k1440;
+                settings_.interpolation = true;
+                settings_.frame_rate = 0;
+                break;
+            default: // Automatic retains the renderer's display-based scale selection.
+                settings_.resolution = display::Resolution::kAuto;
+                settings_.interpolation = true;
+                settings_.frame_rate = 0;
+                break;
+            }
+        } else if (selected_ == 1) {
             static constexpr display::Resolution order[] = {display::Resolution::kAuto, display::Resolution::k1080,
                                                             display::Resolution::k1440, display::Resolution::k2160,
                                                             display::Resolution::k2880, display::Resolution::k720};
             int i = 0;
-            while (order[i] != settings_.resolution && i < 5) ++i;
+            while (i < 6 && order[i] != settings_.resolution) ++i;
+            if (i == 6) i = 0;
             settings_.resolution = order[(i + d + 6) % 6];
-        } else if (selected_ == 1) {
-            settings_.fullscreen = !settings_.fullscreen;
         } else if (selected_ == 2) {
-            // Automatic (120 on 100 Hz displays), 60, 120, uncapped (as many as the GPU renders, no vsync).
+            settings_.fullscreen = !settings_.fullscreen;
+        } else if (selected_ == 3) {
+            // This controls extra presentation frames, not the game's simulation tick.
             static constexpr uint32_t kRates[] = {0, 60, 120, display::kUncapped};
             int current = 0;
             if (!settings_.interpolation) current = 1;
