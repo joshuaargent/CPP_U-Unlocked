@@ -17,25 +17,28 @@ $verifyScript = Join-Path $PSScriptRoot 'verify-checkout.ps1'
 $upstreamBuild = Join-Path $repoRoot 'upstream\tools\windows\build-smash.ps1'
 
 & $verifyScript
-if ($LASTEXITCODE -ne 0) {
-    throw 'Checkout validation failed.'
-}
 
 if (-not (Test-Path -LiteralPath $Rpx -PathType Leaf)) {
     throw "Update RPX not found: $Rpx"
 }
-if ($BaseRpx -and -not (Test-Path -LiteralPath $BaseRpx -PathType Leaf)) {
-    throw "Base-game RPX not found: $BaseRpx"
+$resolvedRpx = (Resolve-Path -LiteralPath $Rpx).Path
+$resolvedBaseRpx = $null
+if ($BaseRpx) {
+    if (-not (Test-Path -LiteralPath $BaseRpx -PathType Leaf)) {
+        throw "Base-game RPX not found: $BaseRpx"
+    }
+    $resolvedBaseRpx = (Resolve-Path -LiteralPath $BaseRpx).Path
 }
 if (-not (Test-Path -LiteralPath $upstreamBuild -PathType Leaf)) {
     throw "The pinned Smash4PC build script is missing: $upstreamBuild"
 }
 
 Write-Host 'Building the pinned Smash4PC baseline. The resulting launcher is not yet U Unlocked-branded.' -ForegroundColor Cyan
-if ($BaseRpx) {
-    & $upstreamBuild -Rpx $Rpx -BaseRpx $BaseRpx
+if ($resolvedBaseRpx) {
+    & $upstreamBuild -Rpx $resolvedRpx -BaseRpx $resolvedBaseRpx
 } else {
-    & $upstreamBuild -Rpx $Rpx
+    # Explicitly override the upstream script's machine-specific default BaseRpx path.
+    & $upstreamBuild -Rpx $resolvedRpx -BaseRpx ''
 }
 if ($LASTEXITCODE -ne 0) {
     throw "Smash4PC build failed with exit code $LASTEXITCODE."

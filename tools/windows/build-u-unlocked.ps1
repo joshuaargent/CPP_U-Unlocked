@@ -59,7 +59,8 @@ $global:LASTEXITCODE = 0
 if ($resolvedBaseRpx) {
     & $upstreamBuild -Rpx $resolvedRpx -BaseRpx $resolvedBaseRpx
 } else {
-    & $upstreamBuild -Rpx $resolvedRpx
+    # Explicitly override the upstream script's machine-specific default BaseRpx path.
+    & $upstreamBuild -Rpx $resolvedRpx -BaseRpx ''
 }
 if ($LASTEXITCODE -ne 0) {
     throw "The upstream build failed with exit code $LASTEXITCODE."
