@@ -109,7 +109,7 @@ if ($cmakeVersion -notmatch '3\.31\.6' -or $ninjaVersion -ne '1.12.1') {
 }
 Write-Host "Build tools ready: $cmakeVersion; Ninja $ninjaVersion; $pythonVersion; llvm-mingw $llvmVersion." -ForegroundColor Green
 
-$env:PATH = @((Split-Path -Parent $python), (Split-Path -Parent $cmake), (Split-Path -Parent $ninja),
+$env:PATH = (@((Split-Path -Parent $python), (Split-Path -Parent $cmake), (Split-Path -Parent $ninja),
     (Join-Path $toolchainRoot 'llvm-mingw\bin'), "$env:SystemRoot\System32")) + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
 & $python (Join-Path $repoRoot 'engine\tools\setup_deps.py') --help | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Python cannot execute the dependency bootstrap script.' }
