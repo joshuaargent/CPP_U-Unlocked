@@ -1,0 +1,199 @@
+name: Windows launcher release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and publish (for example v0.1.0-dev)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    name: Build, verify, and publish Windows launcher
+    runs-on: windows-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve and validate release version
+        id: version
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          $tag = if ($env:EVENT_NAME -eq 'workflow_dispatch') { $env:INPUT_TAG.Trim() } else { $env:REF_NAME }
+          if ($tag -notmatch '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$') {
+            throw "Release tag must be vMAJOR.MINOR.PATCH with an optional prerelease suffix: $tag"
+          }
+          $version = $tag.Substring(1)
+          $main = Get-Content -LiteralPath 'engine/launcher/smash/main.cpp' -Raw
+          $match = [regex]::Match($main, 'kVersion\s*=\s*"([^"]+)"')
+          if (-not $match.Success -or $match.Groups[1].Value -ne $version) {
+            throw "Tag $tag does not match the launcher source version '$($match.Groups[1].Value)'. Update kVersion and create a new tag."
+          }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "U_UNLOCKED_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install launcher runtime dependencies
+        shell: pwsh
+        run: |
+          $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
+          if ([string]::IsNullOrWhiteSpace($vcpkgRoot)) {
+            $vcpkgCommand = Get-Command vcpkg.exe -ErrorAction Stop
+            $vcpkgRoot = Split-Path $vcpkgCommand.Source
+          }
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows zstd:x64-windows
+          if ($LASTEXITCODE -ne 0) { throw 'vcpkg dependency installation failed.' }
+
+      - name: Fetch all pinned third-party sources
+        shell: pwsh
+        run: |
+          python engine/tools/setup_deps.py
+          if ($LASTEXITCODE -ne 0) { throw 'Fetching pinned third-party sources failed.' }
+
+      - name: Generate Windows application icon
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if (-not (Test-Path 'engine/runtime/res/u-unlocked.ico')) {
+            throw 'The Windows application icon was not generated.'
+          }
+
+      - name: Configure launcher release target
+        shell: pwsh
+        run: |
+          cmake -S engine/tests/launcher_release -B build/launcher-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher release configuration failed.' }
+
+      - name: Build and link launcher
+        shell: pwsh
+        run: |
+          cmake --build build/launcher-release --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher release build/link failed.' }
+
+      - name: Build bounded WUA extractor
+        shell: pwsh
+        run: |
+          cmake -S engine/tests/wua_extract_compile -B build/wua-extract-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { throw 'WUA extractor configuration failed.' }
+          cmake --build build/wua-extract-release --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'WUA extractor build failed.' }
+
+      - name: Stage release binaries and runtime DLLs
+        shell: pwsh
+        run: |
+          $launcher = Get-ChildItem -LiteralPath 'build/launcher-release' -Filter 'U Unlocked.exe' -File -Recurse | Select-Object -First 1
+          $extractor = Get-ChildItem -LiteralPath 'build/wua-extract-release' -Filter 'wua_extract_compile.exe' -File -Recurse | Select-Object -First 1
+          if (-not $launcher) { throw 'Linked launcher executable was not produced.' }
+          if (-not $extractor) { throw 'Compiled WUA extractor executable was not produced.' }
+
+          $engineBuild = Join-Path $PWD 'engine/build'
+          $runtimeDlls = Join-Path $PWD 'engine/build-deps/prefix/bin'
+          New-Item -ItemType Directory -Force -Path $engineBuild, $runtimeDlls | Out-Null
+          Copy-Item -LiteralPath $launcher.FullName -Destination (Join-Path $engineBuild 'U Unlocked.exe')
+          Copy-Item -LiteralPath $extractor.FullName -Destination (Join-Path $engineBuild 'wua_extract.exe')
+          $titleLogo = 'engine/runtime/res/title-logo.png'
+          if (-not (Test-Path -LiteralPath $titleLogo -PathType Leaf)) { throw 'Generated U Unlocked title logo is missing.' }
+          Copy-Item -LiteralPath $titleLogo -Destination (Join-Path $engineBuild 'title-logo.png')
+
+          $vcpkgBin = Join-Path $env:VCPKG_ROOT 'installed/x64-windows/bin'
+          $dlls = @(Get-ChildItem -LiteralPath $vcpkgBin -Filter '*.dll' -File)
+          if (-not ($dlls | Where-Object { $_.Name -eq 'SDL3.dll' })) { throw 'SDL3.dll is missing from the runtime dependency output.' }
+          foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $runtimeDlls -Force }
+
+      - name: Create and verify release package
+        shell: pwsh
+        run: |
+          ./engine/tools/windows/package-release.ps1 -Version "$env:U_UNLOCKED_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw 'Release package creation failed.' }
+          $zip = Join-Path $PWD "dist/U-Unlocked-v$env:U_UNLOCKED_VERSION-Windows-Launcher.zip"
+          $checksum = "$zip.sha256"
+          if (-not (Test-Path -LiteralPath $zip -PathType Leaf) -or -not (Test-Path -LiteralPath $checksum -PathType Leaf)) {
+            throw 'The release ZIP or SHA-256 sidecar is missing.'
+          }
+          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\s+')[0]
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($expected -ne $actual) { throw 'The generated release checksum does not match the ZIP.' }
+
+          Add-Type -AssemblyName System.IO.Compression
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            $entries = [Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)
+            foreach ($entry in $archive.Entries) {
+              $name = $entry.FullName.Replace([char]92, [char]47)
+              $parts = $name.Split([char]47)
+              if ([string]::IsNullOrWhiteSpace($name) -or $name.StartsWith('/') -or $name.Contains(':') -or
+                  ($parts -contains '..') -or ($parts -contains '.')) {
+                throw "Unsafe path in release ZIP: $name"
+              }
+              if ($entries.ContainsKey($name)) { throw "Duplicate path in release ZIP: $name" }
+              $entries.Add($name, $entry)
+            }
+            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png', 'update-launcher.ps1')) {
+              if (-not $entries.ContainsKey($required)) { throw "Release ZIP is missing root entry: $required" }
+            }
+
+            $reader = [IO.StreamReader]::new($entries['package-manifest.json'].Open())
+            try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+            if ($manifest.schema_version -ne 1 -or $manifest.version -ne $env:U_UNLOCKED_VERSION) {
+              throw 'Release ZIP manifest schema or version is invalid.'
+            }
+            foreach ($file in $manifest.files) {
+              $name = [string]$file.name
+              if (-not $entries.ContainsKey($name) -or $name.Contains('/') -or $name.Contains([char]92) -or
+                  $file.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+                throw "Invalid or missing manifest entry: $name"
+              }
+              $entryStream = $entries[$name].Open()
+              $sha = [Security.Cryptography.SHA256]::Create()
+              try {
+                $actualFileHash = [BitConverter]::ToString($sha.ComputeHash($entryStream)).Replace('-', '').ToLowerInvariant()
+              } finally {
+                $sha.Dispose()
+                $entryStream.Dispose()
+              }
+              if ($actualFileHash -ne ([string]$file.sha256).ToLowerInvariant()) {
+                throw "Manifest hash mismatch for $name"
+              }
+            }
+          } finally {
+            $archive.Dispose()
+          }
+          "RELEASE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RELEASE_CHECKSUM=$checksum" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Publish GitHub release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ steps.version.outputs.tag }}'
+          $assets = @($env:RELEASE_ZIP, $env:RELEASE_CHECKSUM)
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @assets --clobber
+          } else {
+            $arguments = @('release', 'create', $tag) + $assets + @('--title', "U Unlocked $tag", '--generate-notes')
+            if ($tag.Contains('-')) { $arguments += '--prerelease' }
+            & gh @arguments
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub release publication failed.' }

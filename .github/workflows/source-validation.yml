@@ -1,0 +1,205 @@
+name: U Unlocked Source Validation
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Keep only the newest validation run for a branch/PR; obsolete commits do
+# not need to occupy Windows runners while newer commits are waiting.
+concurrency:
+  group: source-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  controller-profile-tests:
+    name: Build and test controller profiles
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install SDL3
+        shell: pwsh
+        run: |
+          $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
+          if ([string]::IsNullOrWhiteSpace($vcpkgRoot)) {
+            $vcpkgCommand = Get-Command vcpkg.exe -ErrorAction Stop
+            $vcpkgRoot = Split-Path $vcpkgCommand.Source
+          }
+          $env:VCPKG_ROOT = $vcpkgRoot
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows zstd:x64-windows
+
+      - name: Configure controller test target
+        shell: pwsh
+        run: cmake -S engine/tests/controller_profile_unit -B build/controller-profile-tests -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Build controller tests
+        run: cmake --build build/controller-profile-tests --config Release
+
+      - name: Run controller tests
+        run: ctest --test-dir build/controller-profile-tests -C Release --output-on-failure
+
+      - name: Fetch pinned ZArchive source
+        shell: pwsh
+        run: |
+          python engine/tools/setup_deps.py ZArchive
+          if ($LASTEXITCODE -ne 0) { throw 'Fetching pinned ZArchive failed.' }
+
+      - name: Configure Windows WUA extractor compile check
+        shell: pwsh
+        run: cmake -S engine/tests/wua_extract_compile -B build/wua-extract-compile -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Compile Windows WUA extractor
+        run: cmake --build build/wua-extract-compile --config Release
+
+      - name: Fetch pinned stb headers
+        shell: pwsh
+        run: |
+          python engine/tools/setup_deps.py stb
+          if ($LASTEXITCODE -ne 0) { throw 'Fetching pinned stb headers failed.' }
+          if (-not (Test-Path 'engine/third_party/stb/stb_image.h')) { throw 'stb_image.h is missing.' }
+          if (-not (Test-Path 'engine/third_party/stb/stb_truetype.h')) { throw 'stb_truetype.h is missing.' }
+          if (-not (Test-Path 'engine/third_party/stb/LICENSE')) { throw 'The stb licence notice is missing.' }
+
+      - name: Configure launcher compile check
+        shell: pwsh
+        run: cmake -S engine/tests/launcher_compile -B build/launcher-compile -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Compile complete launcher source
+        run: cmake --build build/launcher-compile --config Release
+
+      - name: Generate release launcher icon
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if (-not (Test-Path 'engine/runtime/res/u-unlocked.ico')) {
+            throw 'The release launcher icon was not generated.'
+          }
+          $logoPath = 'engine/runtime/res/title-logo.png'
+          if (-not (Test-Path -LiteralPath $logoPath -PathType Leaf)) {
+            throw 'The project-owned in-game title logo was not generated.'
+          }
+          Add-Type -AssemblyName System.Drawing
+          $logo = [System.Drawing.Bitmap]::new($logoPath)
+          try {
+            if ($logo.Width -ne 1600 -or $logo.Height -ne 500) {
+              throw "Unexpected title-logo dimensions: $($logo.Width)x$($logo.Height)"
+            }
+            if ($logo.GetPixel(0, 0).A -ne 0 -or $logo.GetPixel(250, 76).A -eq 0) {
+              throw 'The title logo must have transparent padding and visible artwork.'
+            }
+          }
+          finally {
+            $logo.Dispose()
+          }
+
+      - name: Configure linked launcher release target
+        shell: pwsh
+        run: |
+          cmake -S engine/tests/launcher_release -B build/launcher-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher release configuration failed.' }
+
+      - name: Build and link redistributable launcher
+        shell: pwsh
+        run: |
+          cmake --build build/launcher-release --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'The redistributable launcher failed to compile or link.' }
+
+  validate:
+    name: Validate source tree and project scripts
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify in-repository native source
+        shell: pwsh
+        run: ./tools/windows/verify-checkout.ps1 -SkipToolchainCheck
+
+      - name: Validate four game target configurations
+        shell: pwsh
+        run: |
+          cmake -S engine/tests/cmake_game_targets -B build/cmake-game-targets
+          if ($LASTEXITCODE -ne 0) { throw 'The four game target CMake configuration test failed.' }
+
+      - name: Generate the application resource icon
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if (-not (Test-Path 'engine/runtime/res/u-unlocked.ico')) {
+            throw 'The U Unlocked icon was not generated.'
+          }
+          $logoPath = 'engine/runtime/res/title-logo.png'
+          if (-not (Test-Path -LiteralPath $logoPath -PathType Leaf)) {
+            throw 'The U Unlocked in-game title logo was not generated.'
+          }
+          Add-Type -AssemblyName System.Drawing
+          $logo = [System.Drawing.Bitmap]::new($logoPath)
+          try {
+            if ($logo.Width -ne 1600 -or $logo.Height -ne 500) {
+              throw "Unexpected title-logo dimensions: $($logo.Width)x$($logo.Height)"
+            }
+            if ($logo.GetPixel(0, 0).A -ne 0 -or $logo.GetPixel(250, 76).A -eq 0) {
+              throw 'The title logo must have transparent padding and visible artwork.'
+            }
+          }
+          finally {
+            $logo.Dispose()
+          }
+
+      - name: Parse project PowerShell scripts
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path '.').Path
+          $scriptRoots = @((Join-Path $root 'tools'), (Join-Path $root 'engine/tools'))
+          $files = @($scriptRoots | ForEach-Object { Get-ChildItem -Path $_ -Filter '*.ps1' -Recurse -File })
+          foreach ($file in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $file.FullName,
+              [ref]$tokens,
+              [ref]$parseErrors
+            ) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | ForEach-Object { Write-Error "$($file.FullName): $($_.Message)" }
+              throw "PowerShell syntax validation failed: $($file.FullName)"
+            }
+          }
+
+      - name: Ensure protected game data is not tracked
+        shell: pwsh
+        run: |
+          $tracked = @(git ls-files)
+          $forbidden = @($tracked | Where-Object {
+            $_ -match '(^|/)(0005000010144F00|0005000E10144F00|0005000C10144F00|UserData|saves|console|keys|generated)(/|$)' -or
+            $_ -match '\.wua$|(^|/)cross_f\.rpx$'
+          })
+          if ($forbidden.Count -gt 0) {
+            $forbidden | ForEach-Object { Write-Error "Protected game data is tracked: $_" }
+            throw 'Protected game data must never be committed.'
+          }
+
+      - name: Verify required licence notices
+        shell: pwsh
+        run: |
+          $required = @(
+            'LICENSES/RECOMPILATION-MIT-LICENSE.txt',
+            'engine/third_party/cemu_nex/LICENSE.txt',
+            'engine/third_party/tinyxml2/LICENSE.txt'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required licence notice is missing: $path"
+            }
+          }
