@@ -20,10 +20,11 @@
 
 ## Controller configuration
 
-- [ ] Implement versioned profile storage and atomic writes.
-- [ ] Implement physical device discovery and per-player assignment.
-- [ ] Implement press-to-bind buttons and axes, including cancellation and timeout.
-- [ ] Implement stick/trigger calibration, dead zones, saturation, and inversion.
+- [x] Implement versioned per-device profile storage and atomic JSON writes.
+- [x] Discover connected controllers and select a physical device to configure.
+- [x] Implement press-to-bind buttons and axes, including Escape cancellation and a 10-second timeout.
+- [x] Implement configurable stick dead zones and trigger thresholds.
+- [ ] Implement explicit per-player assignment, full calibration, saturation, and axis inversion.
 - [ ] Implement a live controller test screen.
 - [ ] Implement Cemu XML import with explicit mapping translation and preview.
 - [ ] Add tests for reconnects, ambiguous device identities, and multi-controller setups.

@@ -429,6 +429,10 @@ public:
 
     void update(float dt) {
         time_ += dt;
+        if (capture_binding_ && time_ - capture_started_ >= 10.0f) {
+            capture_binding_ = false;
+            controls_status_ = "Binding timed out. Select Bind again to retry.";
+        }
         // The stick moves the selection, repeating while held.
         const auto repeat = [&](float value, float& held, auto&& action) {
             if (std::fabs(value) < 0.5f) {
@@ -763,7 +767,8 @@ private:
         SDL_free(ids);
         if (SDL_Gamepad* pad = selected_control_gamepad()) {
             control_profile_ = controller_profiles::for_device(pad);
-            controls_status_ = "Editing the profile for " + std::string(SDL_GetGamepadName(pad));
+            const char* name = SDL_GetGamepadName(pad);
+            controls_status_ = "Editing the profile for " + std::string(name ? name : "Controller");
         } else {
             control_profile_ = controller_profiles::default_profile();
             controls_status_ = "Connect a controller to configure it.";
@@ -786,7 +791,8 @@ private:
         SDL_free(ids);
         if (SDL_Gamepad* pad = selected_control_gamepad()) {
             control_profile_ = controller_profiles::for_device(pad);
-            controls_status_ = "Editing the profile for " + std::string(SDL_GetGamepadName(pad));
+            const char* name = SDL_GetGamepadName(pad);
+            controls_status_ = "Editing the profile for " + std::string(name ? name : "Controller");
         }
     }
 
@@ -890,14 +896,16 @@ private:
                 if (selected_control_gamepad()) {
                     capture_axis_ = false;
                     capture_binding_ = true;
-                    controls_status_ = "Press the physical button on the selected controller. Escape cancels.";
+                    capture_started_ = time_;
+                    controls_status_ = "Press the physical button on the selected controller within 10 seconds. Escape cancels.";
                 } else controls_status_ = "Connect a controller before binding inputs.";
                 break;
             case 4:
                 if (selected_control_gamepad()) {
                     capture_axis_ = true;
                     capture_binding_ = true;
-                    controls_status_ = "Move the desired stick or trigger axis. Escape cancels.";
+                    capture_started_ = time_;
+                    controls_status_ = "Move the desired stick or trigger axis within 10 seconds. Escape cancels.";
                 } else controls_status_ = "Connect a controller before binding inputs.";
                 break;
             case 7: {
@@ -1748,6 +1756,7 @@ private:
     SDL_JoystickID control_device_ = 0;
     size_t control_button_action_ = 0, control_axis_action_ = 0;
     bool capture_binding_ = false, capture_axis_ = false;
+    float capture_started_ = 0.0f;
     std::string controls_status_;
     std::vector<Item> list_;
     int selected_ = 0;

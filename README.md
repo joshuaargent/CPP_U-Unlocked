@@ -4,7 +4,7 @@
 
 ### Super Smash Bros. for Wii U, rebuilt for PC.
 
-A native Windows experience for Super Smash Bros. for Wii U, with a polished launcher, complete controller configuration, practical graphics settings, and a proper mod-management experience.
+A native Windows experience for Super Smash Bros. for Wii U, with a polished launcher, controller remapping, practical graphics settings, and a mod-management workflow.
 
 [![GitHub](https://img.shields.io/badge/GitHub-joshuaargent-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/joshuaargent)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
