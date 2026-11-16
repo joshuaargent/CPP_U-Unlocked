@@ -72,6 +72,26 @@ jobs:
       - name: Compile complete launcher source
         run: cmake --build build/launcher-compile --config Release
 
+      - name: Generate release launcher icon
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if (-not (Test-Path 'engine/runtime/res/u-unlocked.ico')) {
+            throw 'The release launcher icon was not generated.'
+          }
+
+      - name: Configure linked launcher release target
+        shell: pwsh
+        run: |
+          cmake -S engine/tests/launcher_release -B build/launcher-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_BUILD_TYPE=Release
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher release configuration failed.' }
+
+      - name: Build and link redistributable launcher
+        shell: pwsh
+        run: |
+          cmake --build build/launcher-release --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw 'The redistributable launcher failed to compile or link.' }
+
   validate:
     name: Validate source tree and project scripts
     runs-on: windows-latest
