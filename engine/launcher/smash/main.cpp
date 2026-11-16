@@ -1829,7 +1829,16 @@ private:
 
         std::error_code ec;
         const fs::path library = dir_ / "library";
-        fs::create_directories(library, ec);
+        const bool library_exists = fs::exists(library, ec);
+        if (ec || (library_exists && (is_reparse_point(library) || !fs::is_directory(library, ec)))) {
+            const std::string reason = ec ? ec.message() : "the library path is not a normal directory";
+            std::error_code cleanup_error;
+            fs::remove_all(result.stage, cleanup_error);
+            wua_stage_path_.clear();
+            wua_status_ = "Cannot use the game library directory: " + reason;
+            return;
+        }
+        if (!library_exists) fs::create_directory(library, ec);
         if (ec) {
             const std::string reason = ec.message();
             std::error_code cleanup_error;
@@ -1838,7 +1847,16 @@ private:
             wua_status_ = "Cannot create the game library directory: " + reason;
             return;
         }
-        const fs::path destination = library / ("wua-" + result.stage.filename().string().substr(11));
+        const std::string stage_name = result.stage.filename().string();
+        constexpr std::string_view kStagePrefix = ".wua-stage-";
+        if (!stage_name.starts_with(kStagePrefix)) {
+            std::error_code cleanup_error;
+            fs::remove_all(result.stage, cleanup_error);
+            wua_stage_path_.clear();
+            wua_status_ = "The WUA staging directory has an invalid name.";
+            return;
+        }
+        const fs::path destination = library / ("wua-" + stage_name.substr(kStagePrefix.size()));
         const bool destination_exists = fs::exists(destination, ec);
         if (ec || destination_exists) {
             const std::string reason = ec ? ec.message() : "destination already exists";
