@@ -46,6 +46,16 @@ $trackedFiles = @(git -C $repoRoot ls-files)
 if ($LASTEXITCODE -ne 0) {
     throw 'Unable to enumerate tracked files for the legacy-reference check.'
 }
+$legacyPaths = @($trackedFiles | Where-Object {
+    $_.IndexOf($legacyName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+})
+if ($legacyPaths.Count -gt 0) {
+    $legacyPaths | ForEach-Object {
+        Write-Host "Forbidden legacy branding in tracked path: $_" -ForegroundColor Red
+    }
+    throw 'The retired upstream project name must not appear in tracked file paths.'
+}
+
 $legacyMatches = @(
     foreach ($relativePath in $trackedFiles) {
         $fullPath = Join-Path $repoRoot ($relativePath -replace '/', [System.IO.Path]::DirectorySeparatorChar)
