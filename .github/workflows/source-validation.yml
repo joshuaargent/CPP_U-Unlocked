@@ -31,7 +31,7 @@ jobs:
           }
           $env:VCPKG_ROOT = $vcpkgRoot
           "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows zstd:x64-windows
 
       - name: Configure controller test target
         shell: pwsh
@@ -42,6 +42,19 @@ jobs:
 
       - name: Run controller tests
         run: ctest --test-dir build/controller-profile-tests -C Release --output-on-failure
+
+      - name: Fetch pinned ZArchive source
+        shell: pwsh
+        run: |
+          python engine/tools/setup_deps.py ZArchive
+          if ($LASTEXITCODE -ne 0) { throw 'Fetching pinned ZArchive failed.' }
+
+      - name: Configure Windows WUA extractor compile check
+        shell: pwsh
+        run: cmake -S engine/tests/wua_extract_compile -B build/wua-extract-compile -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Compile Windows WUA extractor
+        run: cmake --build build/wua-extract-compile --config Release
 
       - name: Fetch pinned stb headers
         shell: pwsh
