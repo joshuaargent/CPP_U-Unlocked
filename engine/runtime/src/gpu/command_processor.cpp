@@ -45,6 +45,10 @@ struct Submission {
 std::mutex g_queue_mutex;
 std::condition_variable g_queue_cv;
 std::deque<Submission> g_queue;
+// Keep command-buffer addresses alive only in a small bounded FIFO. At the
+// limit, the submitting guest thread applies back-pressure; submissions are
+// never dropped or reordered.
+constexpr size_t kMaxQueuedSubmissions = 256;
 uint64_t g_submitted = 0; // under g_queue_mutex
 uint64_t g_retired = 0;   // under the kernel lock
 
@@ -193,10 +197,15 @@ struct Retirement {
 std::mutex g_retire_mutex;
 std::condition_variable g_retire_cv;
 std::deque<Retirement> g_retire_queue;
+// A slow GPU must not let timeline-retirement metadata grow without bound.
+// The command processor waits for space rather than dropping guest writebacks.
+constexpr size_t kMaxQueuedRetirements = 256;
 
 void retire_later(const Retirement& r) {
-    std::lock_guard lock(g_retire_mutex);
+    std::unique_lock lock(g_retire_mutex);
+    g_retire_cv.wait(lock, [] { return g_retire_queue.size() < kMaxQueuedRetirements; });
     g_retire_queue.push_back(r);
+    lock.unlock();
     g_retire_cv.notify_one();
 }
 
@@ -211,6 +220,7 @@ void retirement_main() {
             r = g_retire_queue.front();
             g_retire_queue.pop_front();
         }
+        g_retire_cv.notify_all();
         g_backend->wait_for(r.done);
         g_backend->retired(r.done);
         switch (r.kind) {
@@ -596,6 +606,7 @@ void command_processor_main() {
             s = g_queue.front();
             g_queue.pop_front();
         }
+        g_queue_cv.notify_all();
         {
             std::vector<std::pair<uint32_t, uint32_t>> written;
             {
@@ -629,9 +640,11 @@ void start() {
 }
 
 uint64_t submit(uint32_t buffer, uint32_t words) {
-    std::lock_guard lock(g_queue_mutex);
+    std::unique_lock lock(g_queue_mutex);
+    g_queue_cv.wait(lock, [] { return g_queue.size() < kMaxQueuedSubmissions; });
     const uint64_t timestamp = ++g_submitted;
     g_queue.push_back({buffer, words, timestamp});
+    lock.unlock();
     g_queue_cv.notify_one();
     return timestamp;
 }
