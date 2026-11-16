@@ -15,6 +15,9 @@ $download=$null
 $stage=$null
 $archive=$null
 
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
 function Write-Log([string]$Message) {
     Add-Content -LiteralPath $log -Value ('[{0:u}] {1}' -f [DateTime]::UtcNow,$Message) -Encoding UTF8
 }
@@ -126,8 +129,6 @@ try {
     $actual=(Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant()
     if($actual -ne $expected){throw 'Downloaded package failed SHA-256 verification.'}
 
-    Add-Type -AssemblyName System.IO.Compression
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive=[IO.Compression.ZipFile]::OpenRead($download)
     if($archive.Entries.Count -gt 4096){throw 'Update archive contains too many entries.'}
 
