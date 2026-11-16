@@ -62,6 +62,7 @@
 - [x] Bound guest-side video reassembly to 8 MiB, validate fragment counts/indices/lengths and consistent frame metadata, and reject malformed stereo int16 audio packet framing before decode/playback.
 - [ ] Add authenticated guest pairing, cryptographic replay protection, per-peer abuse controls, and host approval before enabling public internet connectivity.
 - [ ] Add secure public-internet connectivity only after the authentication and transport security work is complete.
+- [ ] Deliver both supported online paths: direct IPv4/hostname over LAN or user-managed VPN, and Nintendo Network/Pretendo through the integrated NEX services; expose their distinct setup, status, error and diagnostics flows in the launcher.
 - [ ] Add an optional U Unlocked-owned room directory and NAT traversal service, with no third-party room-service dependency.
 
 ## Project branding
@@ -78,7 +79,8 @@
 - [ ] Add a fuller graphics settings hierarchy with explicit VSync, frame pacing, and advanced options.
 - [ ] Implement hardware-aware preset recommendations using detected GPU capabilities and measured performance.
 - [ ] Surface Vulkan capability and driver details in the launcher's Diagnostics page; runtime startup logging is implemented, but launcher-side reporting remains outstanding.
-- [ ] Benchmark the HP EliteBook 640 G9 and tune defaults from measured results.
+- [ ] Benchmark the Intel Iris Xe target and a discrete GPU, and tune defaults from measured results.
+- [ ] Validate both the AVX2/FMA x86-64-v3 build and the x86-64-v2 compatibility build on real hardware; select the correct executable automatically and verify equivalent gameplay behaviour.
 - [ ] Verify graphics options do not alter deterministic game simulation; presentation interpolation must remain a render-only operation and must not advance gameplay state.
 - [x] Add opt-in measurements for previous-frame GPU retirement waits and presentation-image pool waits; see [GPU frame pacing and simulation decoupling](GPU_FRAME_PACING.md).
 - [x] Replace the GPU command-submission and timeline-retirement deques with fixed 256-entry circular buffers and producer back-pressure; preserve all submissions and guest-visible writebacks. This bounds backlog memory but does not yet decouple simulation from GPU completion.
