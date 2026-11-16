@@ -153,8 +153,17 @@ std::vector<Entry> inventory(ZArchiveReader& reader, bool analysis_only) {
     return files;
 }
 
+fs::path extended_path(const fs::path& path) {
+    const std::wstring native = fs::absolute(path).lexically_normal().native();
+    if (native.rfind(L"\\\\?\\", 0) == 0) return fs::path(native);
+    if (native.rfind(L"\\\\", 0) == 0)
+        return fs::path(L"\\\\?\\UNC\\" + native.substr(2));
+    return fs::path(L"\\\\?\\" + native);
+}
+
 void reject_reparse(const fs::path& path, bool allow_missing) {
-    const DWORD attributes = GetFileAttributesW(path.c_str());
+    const fs::path extended = extended_path(path);
+    const DWORD attributes = GetFileAttributesW(extended.c_str());
     if (attributes == INVALID_FILE_ATTRIBUTES) {
         const DWORD error = GetLastError();
         if (allow_missing && (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)) return;
@@ -162,6 +171,20 @@ void reject_reparse(const fs::path& path, bool allow_missing) {
     }
     if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
         throw std::runtime_error("Refusing to follow a Windows reparse point: " + path.string());
+}
+
+void ensure_directory(const fs::path& path) {
+    const fs::path extended = extended_path(path);
+    if (!CreateDirectoryW(extended.c_str(), nullptr)) {
+        const DWORD error = GetLastError();
+        if (error != ERROR_ALREADY_EXISTS)
+            throw std::runtime_error("Cannot create directory " + path.string() +
+                                     " (Windows error " + std::to_string(error) + ")");
+    }
+    reject_reparse(path, false);
+    const DWORD attributes = GetFileAttributesW(extended.c_str());
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+        throw std::runtime_error("Archive path is not a directory: " + path.string());
 }
 
 void ensure_safe_root(const fs::path& requested) {
@@ -173,24 +196,12 @@ void ensure_safe_root(const fs::path& requested) {
     fs::path current = absolute.root_path();
     for (const auto& component : absolute.relative_path()) {
         current /= component;
-        reject_reparse(current, true);
+        ensure_directory(current);
     }
-    fs::create_directories(absolute, ec);
-    if (ec) throw std::runtime_error("Cannot create output directory: " + ec.message());
     reject_reparse(absolute, false);
-    const DWORD attributes = GetFileAttributesW(absolute.c_str());
+    const DWORD attributes = GetFileAttributesW(extended_path(absolute).c_str());
     if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
         throw std::runtime_error("Output path is not a directory");
-}
-
-void ensure_directory(const fs::path& path) {
-    std::error_code ec;
-    if (!fs::create_directory(path, ec) && ec != std::errc::file_exists)
-        throw std::runtime_error("Cannot create directory " + path.string() + ": " + ec.message());
-    reject_reparse(path, false);
-    const DWORD attributes = GetFileAttributesW(path.c_str());
-    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
-        throw std::runtime_error("Archive path is not a directory: " + path.string());
 }
 
 void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& root) {
@@ -205,7 +216,7 @@ void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& ro
     if (destination.native().size() > kMaximumPathCharacters)
         throw std::runtime_error("Archive path exceeds the Windows path-length limit: " + entry.path);
 
-    HANDLE output = CreateFileW(destination.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+    const fs::path extended_destination = extended_path(destination);\n    HANDLE output = CreateFileW(extended_destination.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
                                 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
     if (output == INVALID_HANDLE_VALUE)
         win_error("Cannot create output file without overwriting an existing file: " + entry.path);
@@ -214,7 +225,7 @@ void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& ro
     if (!GetFileInformationByHandleEx(output, FileAttributeTagInfo, &tag, sizeof(tag)) ||
         (tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
         CloseHandle(output);
-        DeleteFileW(destination.c_str());
+        DeleteFileW(extended_destination.c_str());
         throw std::runtime_error("Output file unexpectedly resolved to a reparse point: " + entry.path);
     }
 
@@ -243,7 +254,7 @@ void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& ro
         output = INVALID_HANDLE_VALUE;
     } catch (...) {
         if (output != INVALID_HANDLE_VALUE) CloseHandle(output);
-        DeleteFileW(destination.c_str());
+        DeleteFileW(extended_destination.c_str());
         throw;
     }
 }
