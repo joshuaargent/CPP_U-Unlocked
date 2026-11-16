@@ -1831,23 +1831,30 @@ private:
         const fs::path library = dir_ / "library";
         fs::create_directories(library, ec);
         if (ec) {
-            fs::remove_all(result.stage, ec);
+            const std::string reason = ec.message();
+            std::error_code cleanup_error;
+            fs::remove_all(result.stage, cleanup_error);
             wua_stage_path_.clear();
-            wua_status_ = "Cannot create the game library directory: " + ec.message();
+            wua_status_ = "Cannot create the game library directory: " + reason;
             return;
         }
         const fs::path destination = library / ("wua-" + result.stage.filename().string().substr(11));
-        if (fs::exists(destination, ec)) {
-            fs::remove_all(result.stage, ec);
+        const bool destination_exists = fs::exists(destination, ec);
+        if (ec || destination_exists) {
+            const std::string reason = ec ? ec.message() : "destination already exists";
+            std::error_code cleanup_error;
+            fs::remove_all(result.stage, cleanup_error);
             wua_stage_path_.clear();
-            wua_status_ = "An import with this identifier already exists. Retry the import.";
+            wua_status_ = "Cannot activate this import: " + reason;
             return;
         }
         fs::rename(result.stage, destination, ec);
         if (ec) {
-            fs::remove_all(result.stage, ec);
+            const std::string reason = ec.message();
+            std::error_code cleanup_error;
+            fs::remove_all(result.stage, cleanup_error);
             wua_stage_path_.clear();
-            wua_status_ = "Could not activate the extracted game library: " + ec.message();
+            wua_status_ = "Could not activate the extracted game library: " + reason;
             return;
         }
 
