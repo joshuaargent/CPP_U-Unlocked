@@ -220,10 +220,8 @@ os::ProPadState pro_pad(SDL_Gamepad* pad) {
     return s;
 }
 
-// Which host pad is which controller once the title takes Pro Controllers: slot 0 is the GamePad
-// (with the keyboard), slots 1-7 Pro Controllers, as a Wii U has one GamePad and up to seven
-// others. A pad keeps its slot while plugged in; a new one takes the lowest free slot. Before
-// that (and in titles without them) every pad drives the GamePad.
+// Player 1 is the keyboard-driven Wii U GamePad. The seven physical controller slots
+// correspond only to Pro Controller players 2-8; a physical pad never drives player 1.
 std::array<SDL_JoystickID, 1 + os::pro::kChannels> g_pad_slots{};
 
 // A netplay guest's slot (host/netplay.h): no host pad takes it.
