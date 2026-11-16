@@ -237,7 +237,7 @@ std::string frame_rate_name(uint32_t frame_rate) {
 fs::path file_path() {
     if (!g_file.empty()) return g_file;
     const char* config = std::getenv("XDG_CONFIG_HOME");
-    return (config && *config == '/' ? fs::path(config) : home() / ".config") / "ttt2" / "display.ini";
+    return (config && *config == '/' ? fs::path(config) : home() / ".config") / "u-unlocked" / "display.ini";
 }
 
 Loaded load(const fs::path& file) {
@@ -288,15 +288,15 @@ Active resolve(const Settings& settings, const char* fullscreen, const char* sca
     Active active{settings.fullscreen, scale_of(settings.resolution), settings.interpolation ? settings.frame_rate : 60u};
     if (set(fullscreen)) {
         active.fullscreen = std::string_view(fullscreen) == "1";
-        log.push_back(std::string("display: TTT2_FULLSCREEN=") + fullscreen + ": " +
+        log.push_back(std::string("display: U_UNLOCKED_FULLSCREEN=") + fullscreen + ": " +
                       (active.fullscreen ? "fullscreen" : "windowed"));
     }
     if (set(scale)) {
         if (const std::optional<Resolution> resolution = resolution_of_scale(scale)) {
             active.scale = scale_of(*resolution);
-            log.push_back(std::string("display: TTT2_SCALE=") + scale + ": " + std::string(name_of(*resolution)));
+            log.push_back(std::string("display: U_UNLOCKED_SCALE=") + scale + ": " + std::string(name_of(*resolution)));
         } else {
-            log.push_back(std::string("display: TTT2_SCALE=") + scale + " is not 1, 1.5, 2, 3 or 4, ignored");
+            log.push_back(std::string("display: U_UNLOCKED_SCALE=") + scale + " is not 1, 1.5, 2, 3 or 4, ignored");
         }
     }
     if (set(fps)) {
@@ -305,12 +305,12 @@ Active resolve(const Settings& settings, const char* fullscreen, const char* sca
         const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
         if (same(text, "uncapped")) {
             active.fps = kUncapped;
-            log.push_back(std::string("display: TTT2_FPS=") + fps);
+            log.push_back(std::string("display: U_UNLOCKED_FPS=") + fps);
         } else if (error == std::errc{} && end == text.data() + text.size() && value > 0) {
             active.fps = value;
-            log.push_back(std::string("display: TTT2_FPS=") + fps);
+            log.push_back(std::string("display: U_UNLOCKED_FPS=") + fps);
         } else {
-            log.push_back(std::string("display: TTT2_FPS=") + fps + " is not a frame rate, ignored");
+            log.push_back(std::string("display: U_UNLOCKED_FPS=") + fps + " is not a frame rate, ignored");
         }
     }
     return active;

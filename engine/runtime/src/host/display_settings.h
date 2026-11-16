@@ -1,6 +1,6 @@
 #pragma once
 
-// The player's display settings: $XDG_CONFIG_HOME/ttt2/display.ini, which
+// The player's display settings: $XDG_CONFIG_HOME/u-unlocked/display.ini, which
 // the launcher's Settings write and the game reads when it starts (the
 // render size and the frame rate are fixed for a run). Lines are
 // `name = value`, `#` starts a comment (at the start of a line or after a
@@ -17,7 +17,7 @@
 //                                as many as the GPU renders, without vsync;
 //                                auto
 //
-// The environment's TTT2_FULLSCREEN, TTT2_SCALE and TTT2_FPS still win.
+// The environment's U_UNLOCKED_FULLSCREEN, U_UNLOCKED_SCALE and U_UNLOCKED_FPS still win.
 // No SDL here: the launcher builds this file too, so that what it writes
 // is what the game reads.
 
@@ -55,7 +55,7 @@ float scale_of(Resolution resolution);
 std::string_view name_of(Resolution resolution);
 // A value of the file (letters in either case), nullopt for none.
 std::optional<Resolution> resolution_named(std::string_view name);
-// TTT2_SCALE's value: 1, 1.5, 2, 3 or 4 ("2.0" too); nullopt otherwise.
+// U_UNLOCKED_SCALE's value: 1, 1.5, 2, 3 or 4 ("2.0" too); nullopt otherwise.
 std::optional<Resolution> resolution_of_scale(std::string_view text);
 
 // Automatic: enough to cover a display that many pixels high (2 on 1080p
@@ -94,7 +94,7 @@ Parsed parse(std::string_view text);
 // values, under a header saying what the file is.
 std::string format(const Settings& settings);
 
-// $XDG_CONFIG_HOME/ttt2/display.ini (only an absolute XDG_CONFIG_HOME
+// $XDG_CONFIG_HOME/u-unlocked/display.ini (only an absolute XDG_CONFIG_HOME
 // counts, else ~/.config), as keyboard.ini.
 std::filesystem::path file_path();
 // Another game's file instead (U Unlocked: display.ini beside the
@@ -119,8 +119,8 @@ struct Active {
 };
 
 // `settings` with the environment's values (nullptr or empty: not set):
-// TTT2_FULLSCREEN=1 fullscreen (another value windowed), TTT2_SCALE=1, 1.5,
-// 2, 3 or 4, TTT2_FPS a frame rate (60, 120, 180, 240). Values that are
+// U_UNLOCKED_FULLSCREEN=1 fullscreen (another value windowed), U_UNLOCKED_SCALE=1, 1.5,
+// 2, 3 or 4, U_UNLOCKED_FPS a frame rate (60, 120, 180, 240). Values that are
 // not used get a line in `log`.
 Active resolve(const Settings& settings, const char* fullscreen, const char* scale, const char* fps,
                std::vector<std::string>& log);

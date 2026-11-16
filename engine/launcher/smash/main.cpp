@@ -3,12 +3,11 @@
 // It finds the game and its update, writes display.ini (what the game reads
 // when it starts) and runs smash.exe beside it.
 //
-// Files beside the executable: smash.exe, title-logo.png, launcher-background
-// .jpg/.png (optional), launcher.ini (game_folder = the folder holding the
-// game and update folders), display.ini, cache\, mods\, fonts\launcher.ttf
-// (optional, else Bahnschrift / Segoe UI / DejaVu Sans).
+// Files beside the executable: smash.exe, launcher.ini, display.ini, mods\,
+// cache\, and fonts\launcher.ttf (optional, else Bahnschrift / Segoe UI / DejaVu Sans).
 
 #include "host/cpu_level.h"
+#include "host/controller_profiles.h"
 #include "host/display_settings.h"
 #include "host/rooms.h"
 #include "os/act_server.h"
@@ -305,7 +304,7 @@ Image load_image(SDL_Renderer* renderer, const fs::path& path) {
 
 // ------------------------------------------------------------------ the launcher
 
-enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay };
+enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay, kControls };
 
 
 struct Item {
@@ -331,9 +330,6 @@ public:
         refresh();
         font_.open({dir_ / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/segoeui.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf"});
-        logo_ = load_image(r_, dir_ / "title-logo.png");
-        background_ = load_image(r_, dir_ / "launcher-background.jpg");
-        if (!background_.texture) background_ = load_image(r_, dir_ / "launcher-background.png");
     }
 
     bool running() const { return !quit_; }
@@ -342,6 +338,27 @@ public:
 
     void event(SDL_Event& e) {
         SDL_ConvertEventToRenderCoordinates(r_, &e);
+        if (capture_binding_) {
+            if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
+                capture_binding_ = false;
+                controls_status_ = "Binding cancelled.";
+                return;
+            }
+            if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && e.gbutton.which == control_device_ && !capture_axis_) {
+                control_profile_.buttons[control_button_action_] = static_cast<int16_t>(e.gbutton.button);
+                capture_binding_ = false;
+                controls_status_ = "Button binding captured. Save the profile to keep it.";
+                return;
+            }
+            if (e.type == SDL_EVENT_GAMEPAD_AXIS_MOTION && e.gaxis.which == control_device_ &&
+                capture_axis_ && std::abs(e.gaxis.value) > 16000) {
+                control_profile_.axes[control_axis_action_] = static_cast<int8_t>(e.gaxis.axis);
+                capture_binding_ = false;
+                controls_status_ = "Axis binding captured. Save the profile to keep it.";
+                return;
+            }
+            return;
+        }
         if (editing_ >= 0 && text_event(e)) return;
         switch (e.type) {
         case SDL_EVENT_QUIT:
@@ -386,7 +403,9 @@ public:
             if (e.button.button != SDL_BUTTON_LEFT) break;
             if (int i = item_at(e.button.x, e.button.y); i >= 0) {
                 select(i);
-                if (!items()[i].value.empty() && !folder_slot(i) && screen_ != Screen::kOnline) {
+                const bool control_action = screen_ == Screen::kControls &&
+                    (i == 2 || i == 4 || i == 7 || i == 8 || i == 9);
+                if (!control_action && !items()[i].value.empty() && !folder_slot(i) && screen_ != Screen::kOnline) {
                     change(e.button.x < layout_.right_chevron - layout_.h * 0.06f ? -1 : 1);
                 } else {
                     activate();
@@ -486,6 +505,7 @@ public:
 
     void open_screen(const std::string& name) {
         if (name == "settings") go(Screen::kSettings);
+        if (name == "controls") { load_control_profile(); go(Screen::kControls); }
         if (name == "online") go(Screen::kOnline);
         if (name == "netplay") go(Screen::kNetplay);
         if (name == "mods") go(Screen::kMods);
@@ -505,7 +525,7 @@ public:
             draw_wiiu_online();
             if (save) {
                 if (SDL_Surface* shot = SDL_RenderReadPixels(r_, nullptr)) {
-                    SDL_SaveBMP(shot, std::getenv("SMASH_LAUNCHER_SHOT"));
+                    SDL_SaveBMP(shot, std::getenv("U_UNLOCKED_LAUNCHER_SHOT"));
                     SDL_DestroySurface(shot);
                 }
             }
@@ -565,7 +585,7 @@ public:
         font_.draw(r_, W * 0.94f - font_.width(r_, version, vpx), H * 0.905f, version, vpx, kWhite);
         if (save) {
             if (SDL_Surface* s = SDL_RenderReadPixels(r_, nullptr)) {
-                SDL_SaveBMP(s, std::getenv("SMASH_LAUNCHER_SHOT"));
+                SDL_SaveBMP(s, std::getenv("U_UNLOCKED_LAUNCHER_SHOT"));
                 SDL_DestroySurface(s);
             }
         }
@@ -574,7 +594,7 @@ public:
 
 private:
     // The main menu: Play, the game / update / DLC folders, Settings, Mods, Quit.
-    enum MainItem { kPlay, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kSettingsItem, kModsItem, kQuitItem };
+    enum MainItem { kPlay, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kQuitItem };
     // The Netplay page (host/netplay.h: the host's game streamed to its guests): hosting, a name, joining.
     // Then the open rooms (or a line saying there are none), then Back.
     enum NetplayItem { kHostSwitch, kNameField, kFirstRoom };
@@ -624,6 +644,7 @@ private:
                      {"DLC", folder_value(kDlc)},
                      {"ONLINE", online_value()},
                      {"NETPLAY", netplay_host_ ? "Hosting" : ""},
+                     {"CONTROLS"},
                      {"SETTINGS"},
                      {"MODS", "", static_cast<int>(std::count_if(mods_.begin(), mods_.end(), [](const Mod& m) { return m.on; }))},
                      {"QUIT"}};
@@ -681,6 +702,30 @@ private:
             list_.push_back({"BACK"});
             break;
         }
+        case Screen::kControls: {
+            const char* device = "No controller connected";
+            if (SDL_Gamepad* pad = selected_control_gamepad()) {
+                if (const char* name = SDL_GetGamepadName(pad)) device = name;
+            }
+            const int button = control_profile_.buttons[control_button_action_];
+            const int axis = control_profile_.axes[control_axis_action_];
+            const char* button_name = button >= 0 ? SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(button)) : "Unbound";
+            const char* axis_name = axis >= 0 ? SDL_GetGamepadStringForAxis(static_cast<SDL_GamepadAxis>(axis)) : "Unbound";
+            char dead_zone[16]{}, threshold[16]{};
+            std::snprintf(dead_zone, sizeof(dead_zone), "%.2f", control_profile_.dead_zones[0]);
+            std::snprintf(threshold, sizeof(threshold), "%.2f", control_profile_.trigger_threshold);
+            list_ = {{"CONTROLLER", device},
+                     {"BUTTON", control_button_names()[control_button_action_]},
+                     {"BIND BUTTON", capture_binding_ && !capture_axis_ ? "Waiting..." : (button_name ? button_name : "Unbound")},
+                     {"STICK AXIS", control_axis_names()[control_axis_action_]},
+                     {"BIND AXIS", capture_binding_ && capture_axis_ ? "Waiting..." : (axis_name ? axis_name : "Unbound")},
+                     {"STICK DEAD ZONE", dead_zone},
+                     {"TRIGGER THRESHOLD", threshold},
+                     {"SAVE PROFILE", "Save"},
+                     {"RESET PROFILE", "Defaults"},
+                     {"BACK"}};
+            break;
+        }
         case Screen::kMods:
             // Each mod with its switch, then the folder and Back.
             for (const Mod& m : mods_) list_.push_back({m.name, m.on ? "On" : "Off"});
@@ -690,6 +735,59 @@ private:
             break;
         }
         return list_;
+    }
+
+    static const std::array<const char*, controller_profiles::kButtonCount>& control_button_names() {
+        static const std::array<const char*, controller_profiles::kButtonCount> names = {
+            "A", "B", "X", "Y", "D-PAD UP", "D-PAD DOWN", "D-PAD LEFT", "D-PAD RIGHT",
+            "L", "R", "ZL", "ZR", "PLUS", "MINUS", "HOME", "LEFT STICK CLICK", "RIGHT STICK CLICK"};
+        return names;
+    }
+    static const std::array<const char*, controller_profiles::kAxisCount>& control_axis_names() {
+        static const std::array<const char*, controller_profiles::kAxisCount> names = {
+            "LEFT STICK X", "LEFT STICK Y", "RIGHT STICK X", "RIGHT STICK Y", "LEFT TRIGGER", "RIGHT TRIGGER"};
+        return names;
+    }
+    SDL_Gamepad* selected_control_gamepad() {
+        if (control_device_ == 0) return nullptr;
+        SDL_Gamepad* pad = SDL_GetGamepadFromID(control_device_);
+        return pad ? pad : SDL_OpenGamepad(control_device_);
+    }
+    void load_control_profile() {
+        int count = 0;
+        SDL_JoystickID* ids = SDL_GetGamepads(&count);
+        control_device_ = count > 0 ? ids[0] : 0;
+        for (int i = 0; i < count; ++i) {
+            if (!SDL_GetGamepadFromID(ids[i])) SDL_OpenGamepad(ids[i]);
+        }
+        SDL_free(ids);
+        if (SDL_Gamepad* pad = selected_control_gamepad()) {
+            control_profile_ = controller_profiles::for_device(pad);
+            controls_status_ = "Editing the profile for " + std::string(SDL_GetGamepadName(pad));
+        } else {
+            control_profile_ = controller_profiles::default_profile();
+            controls_status_ = "Connect a controller to configure it.";
+        }
+    }
+    void select_control_device(int direction) {
+        int count = 0;
+        SDL_JoystickID* ids = SDL_GetGamepads(&count);
+        if (count <= 0) {
+            control_device_ = 0;
+            SDL_free(ids);
+            controls_status_ = "No controller is connected.";
+            return;
+        }
+        int current = 0;
+        for (int i = 0; i < count; ++i) if (ids[i] == control_device_) current = i;
+        current = (current + direction + count) % count;
+        control_device_ = ids[current];
+        if (!SDL_GetGamepadFromID(control_device_)) SDL_OpenGamepad(control_device_);
+        SDL_free(ids);
+        if (SDL_Gamepad* pad = selected_control_gamepad()) {
+            control_profile_ = controller_profiles::for_device(pad);
+            controls_status_ = "Editing the profile for " + std::string(SDL_GetGamepadName(pad));
+        }
     }
 
     void select(int i) {
@@ -720,6 +818,18 @@ private:
             asked_[*slot] = true;
             save_launcher_ini();
             refresh();
+            return;
+        }
+        if (screen_ == Screen::kControls) {
+            if (selected_ == 0) select_control_device(d);
+            else if (selected_ == 1) control_button_action_ = (control_button_action_ + d + controller_profiles::kButtonCount) % controller_profiles::kButtonCount;
+            else if (selected_ == 3) control_axis_action_ = (control_axis_action_ + d + controller_profiles::kAxisCount) % controller_profiles::kAxisCount;
+            else if (selected_ == 5) {
+                const float next = std::clamp(control_profile_.dead_zones[0] + d * 0.05f, 0.0f, 0.9f);
+                for (size_t i = 0; i < 4; ++i) control_profile_.dead_zones[i] = next;
+            } else if (selected_ == 6) {
+                control_profile_.trigger_threshold = std::clamp(control_profile_.trigger_threshold + d * 0.05f, 0.05f, 0.95f);
+            }
             return;
         }
         if (screen_ == Screen::kNetplay && selected_ == kHostSwitch) {
@@ -765,6 +875,7 @@ private:
             if (const auto slot = folder_slot(selected_)) choose_folder(*slot);
             if (selected_ == kOnlineItem) go(Screen::kOnline);
             if (selected_ == kNetplayItem) go(Screen::kNetplay);
+            if (selected_ == kControlsItem) { load_control_profile(); go(Screen::kControls); }
             if (selected_ == kSettingsItem) go(Screen::kSettings);
             if (selected_ == kModsItem) go(Screen::kMods);
             if (selected_ == kQuitItem) quit_ = true;
@@ -772,6 +883,39 @@ private:
         case Screen::kSettings:
             if (selected_ == kSettingsBack) back();
             else change(1);
+            break;
+        case Screen::kControls:
+            switch (selected_) {
+            case 2:
+                if (selected_control_gamepad()) {
+                    capture_axis_ = false;
+                    capture_binding_ = true;
+                    controls_status_ = "Press the physical button on the selected controller. Escape cancels.";
+                } else controls_status_ = "Connect a controller before binding inputs.";
+                break;
+            case 4:
+                if (selected_control_gamepad()) {
+                    capture_axis_ = true;
+                    capture_binding_ = true;
+                    controls_status_ = "Move the desired stick or trigger axis. Escape cancels.";
+                } else controls_status_ = "Connect a controller before binding inputs.";
+                break;
+            case 7: {
+                std::string error;
+                if (SDL_Gamepad* pad = selected_control_gamepad()) {
+                    if (controller_profiles::save_for_device(pad, control_profile_, &error)) controls_status_ = "Controller profile saved.";
+                    else controls_status_ = "Could not save profile: " + error;
+                } else controls_status_ = "Connect a controller before saving its profile.";
+                break;
+            }
+            case 8:
+                control_profile_ = controller_profiles::default_profile();
+                if (SDL_Gamepad* pad = selected_control_gamepad()) control_profile_.device_guid = controller_profiles::device_info(pad).guid;
+                controls_status_ = "Default bindings restored. Save to keep them.";
+                break;
+            case 9: back(); break;
+            default: change(1); break;
+            }
             break;
         case Screen::kNetplay:
             switch (selected_) {
@@ -1086,6 +1230,18 @@ private:
     void draw_status() {
         if (screen_ == Screen::kOnline) {
             draw_online_status();
+            return;
+        }
+        if (screen_ == Screen::kControls) {
+            const float H = layout_.h, x = layout_.text_x, y = H * 0.86f, px = H * 0.032f;
+            const std::string line = controls_status_.empty()
+                ? "Select a control, bind a physical input, then save the profile."
+                : controls_status_;
+            font_.draw(r_, x, y, fit(line, px * 0.85f, layout_.w * 0.65f), px * 0.85f,
+                       capture_binding_ ? kGold : kDim);
+            font_.draw(r_, x, y + H * 0.045f,
+                       "Profiles are stored per controller in the U Unlocked configuration folder.",
+                       px * 0.75f, kDim);
             return;
         }
         if (screen_ != Screen::kMain && screen_ != Screen::kMods && screen_ != Screen::kNetplay) return;
@@ -1588,6 +1744,11 @@ private:
     display::Settings settings_;
     int shaders_ = 0;
     Screen screen_ = Screen::kMain;
+    controller_profiles::Profile control_profile_ = controller_profiles::default_profile();
+    SDL_JoystickID control_device_ = 0;
+    size_t control_button_action_ = 0, control_axis_action_ = 0;
+    bool capture_binding_ = false, capture_axis_ = false;
+    std::string controls_status_;
     std::vector<Item> list_;
     int selected_ = 0;
     float selection_y_ = 0, fade_ = 0, time_ = 0;
@@ -1639,9 +1800,9 @@ int main(int argc, char** argv) {
     SDL_SetWindowMinimumSize(window, 960, 540);
     {
         Launcher launcher(window, renderer);
-        // SMASH_LAUNCHER_SHOT=<file.bmp>: saves the frame shown after 1.5 s and quits
+        // U_UNLOCKED_LAUNCHER_SHOT=<file.bmp>: saves the frame shown after 1.5 s and quits
         // (SMASH_LAUNCHER_SCREEN=settings, mods or online: that screen).
-        const char* shot = std::getenv("SMASH_LAUNCHER_SHOT");
+        const char* shot = std::getenv("U_UNLOCKED_LAUNCHER_SHOT");
         if (const char* s = std::getenv("SMASH_LAUNCHER_SCREEN")) launcher.open_screen(s);
         if (argc > 1) launcher.install(argv[1]); // a mod's archive or folder dropped on the launcher's icon
         const uint64_t started = SDL_GetTicksNS();

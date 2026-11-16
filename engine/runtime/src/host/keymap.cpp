@@ -134,7 +134,7 @@ Parsed parse(std::string_view text, const Resolver& resolve) {
 
 fs::path file_path() {
     const char* config = std::getenv("XDG_CONFIG_HOME");
-    return (config && *config == '/' ? fs::path(config) : home() / ".config") / "ttt2" / "keyboard.ini";
+    return (config && *config == '/' ? fs::path(config) : home() / ".config") / "u-unlocked" / "keyboard.ini";
 }
 
 Loaded load(const fs::path& file, const Resolver& resolve) {

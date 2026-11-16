@@ -25,7 +25,7 @@ void set_window_icon(const std::vector<uint8_t>& rgba, uint32_t width, uint32_t 
 
 // The kind of controller the player uses: the last one pressed (gamepads
 // by their maker's button names; the keyboard counts as kOther).
-// TTT2_CONTROLLER=playstation, nintendo or xbox sets it for good.
+// U_UNLOCKED_CONTROLLER=playstation, nintendo or xbox sets it for good.
 enum class Controller { kOther, kPlayStation, kNintendo };
 Controller active_controller();
 // Called on the event loop's thread when the kind changes.

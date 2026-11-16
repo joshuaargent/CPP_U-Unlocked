@@ -1,7 +1,7 @@
 #pragma once
 
 // The keyboard's keys for the Wii U GamePad: the defaults, and the player's
-// own from $XDG_CONFIG_HOME/ttt2/keyboard.ini, which the launcher's Settings
+// own from $XDG_CONFIG_HOME/u-unlocked/keyboard.ini, which the launcher's Settings
 // write. Lines are `id = key`, `#` starts a comment (at the start of a line
 // or after a space); a key is an SDL scancode (the USB HID usage of the key
 // at that place on the keyboard) or SDL's name for one. No SDL here: the
@@ -90,7 +90,7 @@ struct Parsed {
 // is left out. Two inputs on one key are fine: that key presses both.
 Parsed parse(std::string_view text, const Resolver& resolve);
 
-// $XDG_CONFIG_HOME/ttt2/keyboard.ini (only an absolute XDG_CONFIG_HOME
+// $XDG_CONFIG_HOME/u-unlocked/keyboard.ini (only an absolute XDG_CONFIG_HOME
 // counts, else ~/.config), as the install's config file.
 std::filesystem::path file_path();
 

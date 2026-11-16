@@ -68,6 +68,7 @@ add_library(cafe_runtime OBJECT
     src/host/rooms.cpp
     src/host/display_settings.cpp
     src/host/keymap.cpp
+    src/host/controller_profiles.cpp
     src/host/window.cpp
     src/gx2/cbpool.cpp
     src/gx2/display.cpp
@@ -107,18 +108,6 @@ add_custom_command(OUTPUT ${CAFE_SHADER_OUT}/scale_comp.h
     VERBATIM)
 target_sources(cafe_runtime PRIVATE ${CAFE_SHADER_OUT}/scale_comp.h)
 target_include_directories(cafe_runtime PRIVATE ${CAFE_SHADER_OUT})
-
-# Tekken Tag Tournament 2's own changes to the game (title/): guest functions
-# replaced by address and mid-function hooks, so only the ttt2 target links them.
-# install.cpp is its Linux desktop install.
-add_library(cafe_ttt2 OBJECT
-    src/install.cpp
-    src/title/practice.cpp
-    src/title/presentation.cpp
-    src/title/roster.cpp)
-target_link_libraries(cafe_ttt2 PUBLIC cafe_runtime)
-target_include_directories(cafe_ttt2 PRIVATE src)
-target_compile_options(cafe_ttt2 PRIVATE -Wall -Wextra -Wpedantic -Wno-missing-field-initializers)
 
 # The title's file formats and the pictures and texts made from them
 # (title/): no runtime, so tests use them on synthetic data.

@@ -3,6 +3,7 @@
 #include "cafe/input.h"
 #include "cafe/runtime.h"
 #include "host/display_settings.h"
+#include "host/controller_profiles.h"
 #include "host/keymap.h"
 #include "host/netplay.h"
 #include "gpu/gpu.h"
@@ -82,32 +83,34 @@ void reload_keymap() {
     if (!g_keymap_file) return;
     const std::optional<keymap::Loaded> loaded = g_keymap_file->reload();
     if (!loaded) return;
-    for (const std::string& line : loaded->log) std::fprintf(stderr, "ttt2: %s\n", line.c_str());
+    for (const std::string& line : loaded->log) std::fprintf(stderr, "u-unlocked: %s\n", line.c_str());
     g_keymap = loaded->keys;
 }
 
-// Gamepads by button position: the Wii U's A is on the right, B at the bottom. The same
-// buttons as the GamePad's and as a Pro Controller's.
+// Logical Wii U actions. Their physical SDL bindings come from the selected
+// per-device profile, never from assumptions about a controller's layout.
 struct PadButton {
-    SDL_GamepadButton button;
+    controller_profiles::ButtonAction action;
     uint32_t vpad, pro;
 };
 constexpr PadButton kPadButtons[] = {
-    {SDL_GAMEPAD_BUTTON_EAST, os::vpad::kA, os::pro::kA},
-    {SDL_GAMEPAD_BUTTON_SOUTH, os::vpad::kB, os::pro::kB},
-    {SDL_GAMEPAD_BUTTON_NORTH, os::vpad::kX, os::pro::kX},
-    {SDL_GAMEPAD_BUTTON_WEST, os::vpad::kY, os::pro::kY},
-    {SDL_GAMEPAD_BUTTON_DPAD_UP, os::vpad::kUp, os::pro::kUp},
-    {SDL_GAMEPAD_BUTTON_DPAD_DOWN, os::vpad::kDown, os::pro::kDown},
-    {SDL_GAMEPAD_BUTTON_DPAD_LEFT, os::vpad::kLeft, os::pro::kLeft},
-    {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, os::vpad::kRight, os::pro::kRight},
-    {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, os::vpad::kL, os::pro::kL},
-    {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, os::vpad::kR, os::pro::kR},
-    {SDL_GAMEPAD_BUTTON_START, os::vpad::kPlus, os::pro::kPlus},
-    {SDL_GAMEPAD_BUTTON_BACK, os::vpad::kMinus, os::pro::kMinus},
-    {SDL_GAMEPAD_BUTTON_GUIDE, os::vpad::kHome, os::pro::kHome},
-    {SDL_GAMEPAD_BUTTON_LEFT_STICK, os::vpad::kStickL, os::pro::kStickL},
-    {SDL_GAMEPAD_BUTTON_RIGHT_STICK, os::vpad::kStickR, os::pro::kStickR},
+    {controller_profiles::ButtonAction::kA, os::vpad::kA, os::pro::kA},
+    {controller_profiles::ButtonAction::kB, os::vpad::kB, os::pro::kB},
+    {controller_profiles::ButtonAction::kX, os::vpad::kX, os::pro::kX},
+    {controller_profiles::ButtonAction::kY, os::vpad::kY, os::pro::kY},
+    {controller_profiles::ButtonAction::kDpadUp, os::vpad::kUp, os::pro::kUp},
+    {controller_profiles::ButtonAction::kDpadDown, os::vpad::kDown, os::pro::kDown},
+    {controller_profiles::ButtonAction::kDpadLeft, os::vpad::kLeft, os::pro::kLeft},
+    {controller_profiles::ButtonAction::kDpadRight, os::vpad::kRight, os::pro::kRight},
+    {controller_profiles::ButtonAction::kL, os::vpad::kL, os::pro::kL},
+    {controller_profiles::ButtonAction::kR, os::vpad::kR, os::pro::kR},
+    {controller_profiles::ButtonAction::kZL, os::vpad::kZL, os::pro::kZL},
+    {controller_profiles::ButtonAction::kZR, os::vpad::kZR, os::pro::kZR},
+    {controller_profiles::ButtonAction::kPlus, os::vpad::kPlus, os::pro::kPlus},
+    {controller_profiles::ButtonAction::kMinus, os::vpad::kMinus, os::pro::kMinus},
+    {controller_profiles::ButtonAction::kHome, os::vpad::kHome, os::pro::kHome},
+    {controller_profiles::ButtonAction::kLeftStick, os::vpad::kStickL, os::pro::kStickL},
+    {controller_profiles::ButtonAction::kRightStick, os::vpad::kStickR, os::pro::kStickR},
 };
 
 // ------------------------------------------------------------ controller kind
@@ -168,7 +171,7 @@ void set_controller(Controller kind) {
 void note_controller(const SDL_Event& event) {
     switch (event.type) {
     case SDL_EVENT_GAMEPAD_ADDED:
-        std::fprintf(stderr, "ttt2: input: pad connected: %s\n", SDL_GetGamepadNameForID(event.gdevice.which));
+        std::fprintf(stderr, "u-unlocked: input: pad connected: %s\n", SDL_GetGamepadNameForID(event.gdevice.which));
         if (!g_controller_used) set_controller(kind_of(event.gdevice.which));
         break;
     case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
@@ -190,9 +193,9 @@ void note_controller(const SDL_Event& event) {
     }
 }
 
-float axis(SDL_Gamepad* pad, SDL_GamepadAxis a) {
-    const float v = SDL_GetGamepadAxis(pad, a) / 32767.0f;
-    return std::fabs(v) < 0.15f ? 0.0f : std::clamp(v, -1.0f, 1.0f);
+float axis(SDL_Gamepad* pad, const controller_profiles::Profile& profile,
+           controller_profiles::AxisAction action) {
+    return controller_profiles::axis_value(pad, profile, action);
 }
 
 OverlayHooks g_overlay;
@@ -200,15 +203,20 @@ std::atomic<bool> g_quit_requested{false};
 
 os::ProPadState pro_pad(SDL_Gamepad* pad) {
     os::ProPadState s{true};
+    const controller_profiles::Profile& profile = controller_profiles::for_device(pad);
     for (const PadButton& b : kPadButtons) {
-        if (SDL_GetGamepadButton(pad, b.button)) s.buttons |= b.pro;
+        if (controller_profiles::button_pressed(pad, profile, b.action)) s.buttons |= b.pro;
     }
-    if (axis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 0.5f) s.buttons |= os::pro::kZL;
-    if (axis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 0.5f) s.buttons |= os::pro::kZR;
-    s.left_x = axis(pad, SDL_GAMEPAD_AXIS_LEFTX);
-    s.left_y = -axis(pad, SDL_GAMEPAD_AXIS_LEFTY);
-    s.right_x = axis(pad, SDL_GAMEPAD_AXIS_RIGHTX);
-    s.right_y = -axis(pad, SDL_GAMEPAD_AXIS_RIGHTY);
+    if (axis(pad, profile, controller_profiles::AxisAction::kLeftTrigger) >= profile.trigger_threshold) {
+        s.buttons |= os::pro::kZL;
+    }
+    if (axis(pad, profile, controller_profiles::AxisAction::kRightTrigger) >= profile.trigger_threshold) {
+        s.buttons |= os::pro::kZR;
+    }
+    s.left_x = axis(pad, profile, controller_profiles::AxisAction::kLeftX);
+    s.left_y = -axis(pad, profile, controller_profiles::AxisAction::kLeftY);
+    s.right_x = axis(pad, profile, controller_profiles::AxisAction::kRightX);
+    s.right_y = -axis(pad, profile, controller_profiles::AxisAction::kRightY);
     return s;
 }
 
@@ -255,10 +263,10 @@ void assign_pad_slots(const SDL_JoystickID* ids, int count) {
     }
 }
 
-// SMASH_VIRTUAL_PADS=N[@S] (1-8): N stand-in gamepads that press A for a tenth of a second every two
+// U_UNLOCKED_VIRTUAL_PADS=N[@S] (1-8): N stand-in gamepads that press A for a tenth of a second every two
 // seconds, one after another, from S seconds after start-up, to try several players without the pads.
 void update_virtual_pads() {
-    static const char* env = std::getenv("SMASH_VIRTUAL_PADS");
+    static const char* env = std::getenv("U_UNLOCKED_VIRTUAL_PADS");
     static const uint64_t from_ms = env && std::strchr(env, '@') ? std::atoi(std::strchr(env, '@') + 1) * 1000ull : 0;
     static std::vector<SDL_Joystick*> pads = [] {
         std::vector<SDL_Joystick*> made;
@@ -272,7 +280,7 @@ void update_virtual_pads() {
             desc.name = "Virtual pad";
             if (SDL_Joystick* pad = SDL_OpenJoystick(SDL_AttachVirtualJoystick(&desc))) made.push_back(pad);
         }
-        if (n) std::fprintf(stderr, "ttt2: input: %zu virtual pads\n", made.size());
+        if (n) std::fprintf(stderr, "u-unlocked: input: %zu virtual pads\n", made.size());
         return made;
     }();
     const uint64_t ms = SDL_GetTicks();
@@ -316,15 +324,20 @@ void update_input() {
                 continue;
             }
         }
+        const controller_profiles::Profile& profile = controller_profiles::for_device(pad);
         for (const PadButton& b : kPadButtons) {
-            if (SDL_GetGamepadButton(pad, b.button)) state.buttons |= b.vpad;
+            if (controller_profiles::button_pressed(pad, profile, b.action)) state.buttons |= b.vpad;
         }
-        if (axis(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) > 0.5f) state.buttons |= os::vpad::kZL;
-        if (axis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > 0.5f) state.buttons |= os::vpad::kZR;
-        state.left_x = std::clamp(state.left_x + axis(pad, SDL_GAMEPAD_AXIS_LEFTX), -1.0f, 1.0f);
-        state.left_y = std::clamp(state.left_y - axis(pad, SDL_GAMEPAD_AXIS_LEFTY), -1.0f, 1.0f);
-        state.right_x = std::clamp(state.right_x + axis(pad, SDL_GAMEPAD_AXIS_RIGHTX), -1.0f, 1.0f);
-        state.right_y = std::clamp(state.right_y - axis(pad, SDL_GAMEPAD_AXIS_RIGHTY), -1.0f, 1.0f);
+        if (axis(pad, profile, controller_profiles::AxisAction::kLeftTrigger) >= profile.trigger_threshold) {
+            state.buttons |= os::vpad::kZL;
+        }
+        if (axis(pad, profile, controller_profiles::AxisAction::kRightTrigger) >= profile.trigger_threshold) {
+            state.buttons |= os::vpad::kZR;
+        }
+        state.left_x = std::clamp(state.left_x + axis(pad, profile, controller_profiles::AxisAction::kLeftX), -1.0f, 1.0f);
+        state.left_y = std::clamp(state.left_y - axis(pad, profile, controller_profiles::AxisAction::kLeftY), -1.0f, 1.0f);
+        state.right_x = std::clamp(state.right_x + axis(pad, profile, controller_profiles::AxisAction::kRightX), -1.0f, 1.0f);
+        state.right_y = std::clamp(state.right_y - axis(pad, profile, controller_profiles::AxisAction::kRightY), -1.0f, 1.0f);
     }
     SDL_free(ids);
     for (int c = 0; pros && c < os::pro::kChannels; ++c) netplay::remote_pad(c, channels[c]);
@@ -344,13 +357,13 @@ void update_size() {
 os::ProPadState pad_as_pro(SDL_Gamepad* pad) { return pro_pad(pad); }
 
 bool open_window(const char* title) {
-    // The identifier is the Wayland app id: ttt2.desktop's (ttt2 --install).
-    SDL_SetAppMetadata(title, nullptr, "ttt2");
+    // The identifier is the Wayland app id: u-unlocked.desktop's (u-unlocked --install).
+    SDL_SetAppMetadata(title, nullptr, "u-unlocked");
     // The window takes the executable's icon resource 1 when it has one.
     SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "1");
     SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "1");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
-        std::fprintf(stderr, "ttt2: no window: %s\n", SDL_GetError());
+        std::fprintf(stderr, "u-unlocked: no window: %s\n", SDL_GetError());
         return false;
     }
     // The player's display settings (display.ini, which the launcher's
@@ -358,9 +371,9 @@ bool open_window(const char* title) {
     // the renderer takes the scale and the frame rate when it starts.
     const display::Loaded loaded = display::load(display::file_path());
     std::vector<std::string> log = loaded.log;
-    display::set_active(display::resolve(loaded.settings, std::getenv("TTT2_FULLSCREEN"), std::getenv("TTT2_SCALE"),
-                                         std::getenv("TTT2_FPS"), log));
-    for (const std::string& line : log) std::fprintf(stderr, "ttt2: %s\n", line.c_str());
+    display::set_active(display::resolve(loaded.settings, std::getenv("U_UNLOCKED_FULLSCREEN"), std::getenv("U_UNLOCKED_SCALE"),
+                                         std::getenv("U_UNLOCKED_FPS"), log));
+    for (const std::string& line : log) std::fprintf(stderr, "u-unlocked: %s\n", line.c_str());
     const display::Active& active = display::active();
     // The window starts at the render size when that fits on the desktop
     // with room to spare, else at the largest multiple of 640x360 that does
@@ -377,12 +390,12 @@ bool open_window(const char* title) {
                                 SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
                                     (active.fullscreen ? SDL_WINDOW_FULLSCREEN : 0));
     if (g_window == nullptr) {
-        std::fprintf(stderr, "ttt2: no window: %s\n", SDL_GetError());
+        std::fprintf(stderr, "u-unlocked: no window: %s\n", SDL_GetError());
         return false;
     }
     update_size();
     update_window_refresh();
-    std::fprintf(stderr, "ttt2: window: %ux%u pixels, %s\n", g_width.load(), g_height.load(),
+    std::fprintf(stderr, "u-unlocked: window: %ux%u pixels, %s\n", g_width.load(), g_height.load(),
                  active.fullscreen ? "fullscreen" : "windowed");
     g_keymap_file.emplace(keymap::file_path(), [](const std::string& name) {
         return static_cast<uint16_t>(SDL_GetScancodeFromName(name.c_str()));

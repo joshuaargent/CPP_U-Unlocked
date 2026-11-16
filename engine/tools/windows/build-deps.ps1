@@ -1,20 +1,20 @@
-# Builds the runtime's third-party libraries (upstream\third_party, fetched by setup_deps.py) and installs them into
-# upstream\build-deps\prefix, where the main build finds them. Only needs re-running when a pin changes.
+# Builds the runtime's third-party libraries (engine\third_party, fetched by setup_deps.py) and installs them into
+# engine\build-deps\prefix, where the main build finds them. Only needs re-running when a pin changes.
 $ErrorActionPreference = 'Stop'
 # Run from the repository's tools\windows: the repository's parent holds toolchain\ (llvm-mingw, Ninja, CMake)
 # and receives generated\, Play\ and dist\.
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 $toolchain = Join-Path $root 'toolchain'
-$upstream = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$third = Join-Path $upstream 'third_party'
-$work = Join-Path $upstream 'build-deps'
+$engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$third = Join-Path $engineRoot 'third_party'
+$work = Join-Path $engineRoot 'build-deps'
 $prefix = Join-Path $work 'prefix'
 $python = (Get-Command python).Source
 $git = Split-Path -Parent (Get-Command git).Source
 $env:PATH = @((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $toolchain 'Ninja'), (Join-Path $toolchain 'CMake\bin'),
     (Split-Path -Parent $python), $git, "$env:SystemRoot\System32") -join ';'
 
-& $python (Join-Path $upstream 'tools\setup_deps.py')
+& $python (Join-Path $engineRoot 'tools\setup_deps.py')
 if ($LASTEXITCODE) { throw 'setup_deps.py failed' }
 
 function Build-Dep($name, $source, [string[]]$options) {

@@ -1,46 +1,87 @@
-# Packages Smash 4 PC for release: dist\Smash4PC-v<version>-Windows.zip, holding the launcher, both game programs,
-# the DLLs, the launcher's pictures, the README and the third-party licenses. Nothing personal from Play\ goes in:
-# not online\ (the console's files and account), save\, mods\, cache\, the .ini settings or the logs.
-# Build first (tools\windows\build-smash.ps1); this takes the programs from the build folders.
+# Packages the redistributable U Unlocked launcher only.
+# Game runtime binaries and generated code are deliberately excluded: each user builds those locally
+# from their own game files. User saves, console files, keys, mods, caches, and settings are never packaged.
+[CmdletBinding()]
+param(
+    [string]$Version
+)
+
 $ErrorActionPreference = 'Stop'
-# Run from the repository's tools\windows: the repository's parent holds toolchain\ (llvm-mingw, Ninja, CMake)
-# and receives generated\, Play\ and dist\.
-$root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-$upstream = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$version = (Select-String -Path (Join-Path $upstream 'launcher\smash\main.cpp') -Pattern 'kVersion = "([^"]+)"').Matches[0].Groups[1].Value
-$name = "Smash4PC-v$version-Windows"
-$dist = Join-Path $root 'dist'
-$stage = Join-Path $dist $name
-Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force $stage | Out-Null
-
-Copy-Item (Join-Path $upstream 'build\Smash 4 PC.exe'), (Join-Path $upstream 'build\smash.exe') $stage
-Copy-Item (Join-Path $upstream 'build-base\smash.exe') (Join-Path $stage 'smash-base.exe')
-Copy-Item (Join-Path $upstream 'build-compat\smash-compat.exe') $stage
-Copy-Item (Join-Path $upstream 'build-deps\prefix\bin\*.dll') $stage
-Copy-Item (Join-Path $upstream 'assets\smash\logo.png') (Join-Path $stage 'title-logo.png')
-Copy-Item (Join-Path $upstream 'assets\smash\launcher-background.jpg') $stage
-Copy-Item (Join-Path $upstream 'assets\smash\README.txt') $stage
-Copy-Item (Join-Path $upstream 'LICENSE') (Join-Path $stage 'LICENSE.txt')
-New-Item -ItemType Directory -Force (Join-Path $stage 'mods') | Out-Null
-
-# Third-party licenses, and the MPL-covered Cemu code's source (MPL 2.0 asks for it with the program).
-$licenses = Join-Path $stage 'licenses'
-New-Item -ItemType Directory -Force $licenses | Out-Null
-$third = Join-Path $upstream 'third_party'
-@{ 'SDL3.txt' = 'SDL\LICENSE.txt'; 'Vulkan-Headers.md' = 'Vulkan-Headers\LICENSE.md'; 'shaderc.txt' = 'shaderc\LICENSE';
-   'glslang.txt' = 'glslang\LICENSE.txt'; 'SPIRV-Tools.txt' = 'spirv-tools\LICENSE'; 'SPIRV-Headers.txt' = 'spirv-headers\LICENSE';
-   'zlib.txt' = 'zlib\LICENSE'; 'zstd.txt' = 'zstd\LICENSE'; 'ZArchive.txt' = 'ZArchive\LICENSE'; 'addrlib.txt' = 'addrlib\LICENSE';
-   'Cemu-NEX-MPL-2.0.txt' = 'cemu_nex\LICENSE.txt' }.GetEnumerator() | ForEach-Object {
-    Copy-Item (Join-Path $third $_.Value) (Join-Path $licenses $_.Key)
+$repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+$engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$launcher = Join-Path $engineRoot 'build\U Unlocked.exe'
+$prefix = Join-Path $engineRoot 'build-deps\prefix'
+if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+    throw "Launcher build not found: $launcher. Build U Unlocked first."
 }
-Set-Content -Encoding utf8 (Join-Path $licenses 'stb.txt') 'stb_image and stb_truetype (Sean Barrett): public domain or MIT, at your choice (see the headers).'
-Copy-Item -Recurse (Join-Path $third 'cemu_nex') (Join-Path $licenses 'cemu_nex-source')
 
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $main = Get-Content -LiteralPath (Join-Path $engineRoot 'launcher\smash\main.cpp') -Raw
+    $match = [regex]::Match($main, 'kVersion\s*=\s*"([^"]+)"')
+    if (-not $match.Success) { throw 'Unable to read the launcher version.' }
+    $Version = $match.Groups[1].Value
+}
+
+$name = "U-Unlocked-v$Version-Windows-Launcher"
+$dist = Join-Path $repoRoot 'dist'
+$stage = Join-Path $dist $name
 $zip = Join-Path $dist "$name.zip"
-Remove-Item -Force $zip -ErrorAction SilentlyContinue
-# Not Compress-Archive or ZipFile: on PowerShell 5.1 they write backslashes, which Linux unzips as one flat folder of long names (#7).
-& (Join-Path $env:SystemRoot 'System32\tar.exe') -a -cf $zip -C $dist $name # (one top folder, as unzipped)
-if ($LASTEXITCODE) { throw 'tar failed' }
-Remove-Item -Recurse -Force $stage
-"$zip ($([math]::Round((Get-Item $zip).Length / 1MB)) MB)"
+New-Item -ItemType Directory -Force -Path $dist | Out-Null
+Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $stage | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $stage 'licenses') | Out-Null
+
+Copy-Item -LiteralPath $launcher -Destination $stage
+$dllDirectory = Join-Path $prefix 'bin'
+if (-not (Test-Path -LiteralPath $dllDirectory -PathType Container)) {
+    throw "Launcher dependency directory is missing: $dllDirectory"
+}
+$dlls = @(Get-ChildItem -LiteralPath $dllDirectory -Filter '*.dll' -File)
+if ($dlls.Count -eq 0) { throw 'No runtime DLLs were found beside the build dependencies.' }
+foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $stage }
+
+Copy-Item -LiteralPath (Join-Path $repoRoot 'README.md') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\THIRD_PARTY_NOTICES.md') -Destination $stage
+Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSES\RECOMPILATION-MIT-LICENSE.txt') -Destination (Join-Path $stage 'licenses')
+
+$thirdParty = Join-Path $engineRoot 'third_party'
+$licenseMap = @{
+    'SDL3.txt' = 'SDL\LICENSE.txt'
+    'Vulkan-Headers.txt' = 'Vulkan-Headers\LICENSE.md'
+    'shaderc.txt' = 'shaderc\LICENSE'
+    'glslang.txt' = 'glslang\LICENSE.txt'
+    'SPIRV-Tools.txt' = 'spirv-tools\LICENSE'
+    'SPIRV-Headers.txt' = 'spirv-headers\LICENSE'
+    'zlib.txt' = 'zlib\LICENSE'
+    'zstd.txt' = 'zstd\LICENSE'
+    'ZArchive.txt' = 'ZArchive\LICENSE'
+    'addrlib.txt' = 'addrlib\LICENSE'
+    'Cemu-NEX-MPL-2.0.txt' = 'cemu_nex\LICENSE.txt'
+}
+foreach ($entry in $licenseMap.GetEnumerator()) {
+    $source = Join-Path $thirdParty $entry.Value
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+        throw "A required third-party licence is missing: $source"
+    }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $stage "licenses\$($entry.Key)")
+}
+Copy-Item -Recurse -LiteralPath (Join-Path $thirdParty 'cemu_nex') -Destination (Join-Path $stage 'licenses\cemu_nex-source')
+@'
+stb_image and stb_truetype (Sean Barrett): public domain or MIT, at your choice; see the headers in the source repository.
+'@ | Set-Content -LiteralPath (Join-Path $stage 'licenses\stb.txt') -Encoding utf8
+
+@'
+This package contains the U Unlocked launcher only.
+
+The game runtime is built locally for each user from their own legally obtained game files.
+No Nintendo game data, console keys, saves, generated recompiled code, or game executable is included.
+Clone the U Unlocked source repository and follow the README build instructions to build your local runtime.
+'@ | Set-Content -LiteralPath (Join-Path $stage 'RUNTIME-BUILD-REQUIRED.txt') -Encoding utf8
+
+$tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+if (-not (Test-Path -LiteralPath $tar -PathType Leaf)) { throw "tar.exe was not found: $tar" }
+& $tar -a -cf $zip -C $dist $name
+if ($LASTEXITCODE -ne 0) { throw "Launcher archive creation failed with exit code $LASTEXITCODE." }
+Remove-Item -LiteralPath $stage -Recurse -Force
+Write-Host "Launcher package created: $zip" -ForegroundColor Green
