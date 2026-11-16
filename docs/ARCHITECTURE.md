@@ -1,113 +1,113 @@
-# U Unlocked — Architecture and Engineering Plan
+# U Unlocked architecture
 
 ## Product direction
 
-U Unlocked is a Windows-first native PC platform for Super Smash Bros. for Wii U. The project reuses the existing Smash4PC static-recompilation and Wii U runtime rather than attempting a second implementation of the game engine.
+U Unlocked is a Windows-first native PC platform for Super Smash Bros. for Wii U. The repository owns the application, launcher, build orchestration, runtime integration, settings, profiles, and mod-management experience.
 
-The Windows application should take product-design inspiration from Melee Unlocked: a polished dark interface, clear navigation, integrated settings, controller configuration, mod management, diagnostics and practical performance presets. Melee Unlocked is a design reference only. Its GPL-licensed source is not a code dependency.
+The existing native game runtime and static recompilation implementation are contained in `engine/`. Keep the game runtime and the PC application as distinct layers so launcher features can evolve without destabilising deterministic game behaviour.
 
-## Source foundation and provenance
+## Technology
 
-The Smash4PC repository is included as the `upstream` Git submodule:
+- C++20 for the native runtime, launcher, and platform integration.
+- CMake and Ninja for reproducible builds.
+- SDL3 for windowing, physical input discovery, and controller events.
+- Vulkan 1.3 for graphics.
+- PowerShell and Python for Windows build orchestration and asset tooling.
+- Versioned JSON for project-owned profiles and manifests; preserve existing INI settings where compatibility requires them.
 
-- Repository: https://github.com/josiahg2502-glitch/Smash4PC
-- Pinned upstream commit: `f145e7fc14d0be2caf712cc4080f9deb3e7ab6aa`
-- Upstream release represented by that commit: `v0.1.2`
-- Upstream project license: MIT; third-party dependencies retain their own licenses.
+## Repository layout
 
-The pin makes builds reproducible and avoids silently taking upstream changes. Update it only in a reviewed PR after inspecting the upstream diff, licenses, build scripts and compatibility implications.
+- `engine/` - native runtime, recompilation tools, platform code, and required third-party components.
+- `tools/windows/` - project-owned Windows build, verification, and packaging scripts.
+- `docs/` - architecture, hardware, controller compatibility, and release documentation.
+- `LICENSES/` - required notices for incorporated source components.
+- `Play/`, `build/`, `generated/`, and `dist/` - ignored local build output only.
 
-Do not make untracked edits inside the submodule as the permanent home for U Unlocked changes. Keep new implementation in this repository. Where upstream source must be changed, maintain a reviewed patch or a deliberate upstream fork/commit and make its application deterministic. Never commit generated game code or user game files.
+## Application areas
 
-## Technical foundation
+### Home and Play
 
-- Primary language: C++20.
-- Build system: CMake and Ninja, using the upstream Windows build scripts initially.
-- Runtime: retain Smash4PC static recompilation, Vulkan renderer, SDL3 input layer and Wii U compatibility/runtime.
-- Launcher: retain SDL3 initially; do not replace the rendering/UI framework until profiling and a focused prototype justify it.
-- Supporting tools: Python and PowerShell for build, packaging, asset processing and validation; versioned JSON for new portable profiles.
-- Platform: Windows 10/11 x64.
+- Detect game, update, and optional DLC folders.
+- Validate required files before launch and explain missing or incompatible files.
+- Show the selected game build, active mod profile, and controller assignments.
+- Launch with a clear progress state and useful failure diagnostics.
 
-## UX principles
+### Controls
 
-1. Match the quality bar of Melee Unlocked: deliberate spacing, typography, alignment, consistent component states, keyboard/controller navigation, DPI-aware layouts, useful empty/error states and no placeholder artwork in releases.
-2. Rebrand every user-facing surface as U Unlocked. Keep compatibility identifiers and internal paths stable when changing them could break installs, saves, mods or online functionality.
-3. Keep the launcher responsive and lightweight. Avoid expensive blur, continuously animated backgrounds, large uncompressed images, unnecessary polling and blocking work on the UI thread.
-4. Use shared design tokens for spacing, typography, colour, focus/hover/pressed/disabled states and reusable controls.
-5. Provide keyboard navigation, readable contrast, scalable UI, clear focus indicators and actionable error messages.
+- Discover physical devices through SDL3.
+- Assign devices to player slots and select the emulated Wii U controller type.
+- Bind buttons and axes by selecting an action and pressing or moving the physical input.
+- Calibrate sticks and triggers; support inversion, dead zones, saturation, and trigger thresholds.
+- Save versioned per-player profiles with stable device hints.
+- Provide a live input tester and keyboard/controller navigation.
+- Import external controller profiles only through a validated parser and explicit mapping translation.
 
-## Feature architecture
+### Graphics and performance
 
-### Launcher and first-run setup
+- Expose window mode, resolution, VSync, frame pacing, scaling, and renderer capability details.
+- Provide Low Spec, Balanced, and Quality presets.
+- Detect CPU instruction-set support, memory, GPU vendor/device, Vulkan capabilities, display resolution, and refresh rate.
+- Keep the game simulation deterministic. Graphics presets must not alter gameplay timing, physics, or simulation steps.
+- Bound background shader compilation and avoid per-frame allocations.
 
-- Home / Play: game, update and DLC folder detection; validation; launch configuration; recent launch status.
-- First-run flow: explain required game folders, validate title IDs and versions, and keep all user data outside the repository.
-- Controls: controller discovery, per-player device assignment, button remapping, stick/trigger calibration, dead zones, profiles, reset and live input tester.
-- Graphics: window/fullscreen, resolution, frame pacing/cap, VSync and renderer options exposed only when supported.
-- Mods: install, enable/disable, profiles, manifests, dependency/conflict reporting and safe rollback.
-- Settings: paths, audio, language, diagnostics and update preferences.
+### Mods
 
-### Input and Cemu profile compatibility
+- Install supported archives and folders without overwriting unrelated user files.
+- Track manifests, version, author, dependencies, conflicts, and file ownership.
+- Provide named mod profiles and reversible enable/disable operations.
+- Back up affected files and support rollback.
+- Keep user-created mod data separate from application binaries and game dumps.
 
-Build on SDL3's existing device abstraction. Keep physical-device discovery separate from logical Wii U controller mapping.
+### Settings and diagnostics
 
-Persist versioned profiles with stable device GUID/name hints and per-port assignments. Never silently change a user's mappings after an update. Provide defaults for Xbox, PlayStation, Nintendo and generic SDL controllers, while allowing complete remapping.
+- Store settings in a versioned user configuration directory.
+- Migrate old settings safely and retain a backup before migration.
+- Report detected hardware, renderer, driver, game paths, active profile, and recent logs.
+- Provide copyable diagnostic reports with personal paths and identifiers redacted by default.
 
-The intended interaction is Cemu-like: select a physical device, select the emulated Wii U controller, activate a control, press the physical input, test it, and save the profile. Cemu profile import is not assumed to work. The profile XML structure and the distinction between Cemu's numeric mapping IDs and SDL3 identifiers are documented in [Controller compatibility](CONTROLLER_COMPATIBILITY.md). Implement a validated importer with a preview and no destructive overwrite.
+## Controller data model
 
-### Mod management
+A controller profile contains:
 
-Preserve existing Smash4PC content/graphic-pack support. Add a versioned manifest, per-profile enabled state, file ownership/conflict detection, dependency checks and transactional install/uninstall. Do not overwrite user data silently. Back up affected files and provide rollback.
+- Schema version and profile name.
+- Emulated device type: Wii U GamePad or Wii U Pro Controller.
+- Physical device hints: SDL GUID, vendor/product IDs, display name, and optional serial.
+- Button-to-logical-action bindings.
+- Axis bindings, inversion, dead zone, saturation, and trigger threshold.
+- Player assignment and optional per-game overrides.
 
-Keep the U Unlocked game modpack independently versioned from the launcher/runtime. Mods remain user-supplied unless redistribution permissions are explicit.
+The runtime mapping layer translates physical SDL events into the existing logical Wii U input state. Keep physical-device discovery, profile storage, mapping evaluation, and game input state separate.
 
-## Initial hardware target: HP EliteBook 640 G9
+Profile writes must be atomic. Validate all enum values and numeric ranges, retain a last-known-good backup, and fall back to safe defaults with a visible diagnostic if a profile is malformed.
 
-The initial target is provisionally an Intel Core i5 model with Intel Iris Xe graphics and 16 GB RAM. The exact CPU model, memory configuration, display and driver version have not yet been confirmed. Do not hard-code assumptions from the laptop model name.
+## Cemu profile import
 
-At runtime, detect CPU instruction-set support, available memory, GPU vendor/device, Vulkan API and feature support, display resolution and refresh rate. Iris Xe uses system memory; avoid assumptions about dedicated VRAM.
+Cemu profiles use XML and API-specific identifiers. Cemu numeric mapping values are not SDL enum values. The importer must parse XML safely, translate only mapping identifiers with tested mappings, request device selection when identity matching is ambiguous, preview every binding, and save a new U Unlocked profile without modifying the source file.
 
-Provide:
-- An automatic recommended preset based on detected capabilities.
-- Low Spec, Balanced and Quality profiles.
-- A Low Spec profile that reduces render resolution/scale, expensive post-processing, texture filtering and other GPU costs without changing deterministic game simulation or gameplay timing.
-- A safe fallback for unsupported Vulkan features and clear diagnostics for driver problems.
-- Shader/pipeline cache reuse, bounded background compilation, no unnecessary per-frame allocations and profiling before speculative optimisation.
-- Frame pacing that keeps game simulation timing separate from display presentation.
+See [controller compatibility](CONTROLLER_COMPATIBILITY.md) for the XML structure and import rules.
 
-The upstream build already has an x86-64-v2 compatibility executable for CPUs without AVX2/FMA. Preserve that fallback and verify CPU dispatch rather than assuming every i5 model supports the faster binary.
+## Hardware target
 
-Do not set final graphics defaults until a benchmark has been run on the actual laptop. Record CPU/GPU, driver, display mode, resolution, preset, average frame time, 1% lows, memory use and shader-cache state.
+The first target is an HP EliteBook 640 G9 provisionally configured with an Intel Core i5, Intel Iris Xe graphics, and 16 GB RAM. The exact CPU SKU and graphics driver must be confirmed on-device.
+
+Detect hardware at runtime rather than relying on a model name. Benchmark actual performance before selecting defaults. Keep an x86-64-v2 compatibility build available where required, and choose the faster instruction-set variant only after checking CPU support.
 
 ## Licensing and data boundaries
 
-- Preserve the upstream Smash4PC MIT license and every third-party license/notice.
-- Melee Unlocked is GPL-3.0-or-later; its code must not be copied into this project without an explicit licensing decision.
-- Do not commit Nintendo game data, generated recompiled game code, console files, keys, user saves or proprietary assets.
-- Keep build output, local toolchains, caches and user data out of Git.
+Retain all required third-party copyright notices and licence files in `LICENSES/` or beside the corresponding component. Do not copy code from GPL-licensed design references.
+
+Never commit Nintendo game dumps, console keys, user saves, proprietary game assets, or generated game code. Build output and user data remain ignored and local.
 
 ## Quality gates
 
-Every implementation PR must:
-1. Build affected targets in Release and Debug where supported.
-2. Run unit tests and relevant integration/launcher tests.
-3. Run formatting/static analysis available in the repository.
-4. Verify settings migration and backward compatibility.
-5. Test keyboard-only navigation and controller navigation for UI changes.
-6. Test on the HP EliteBook and record the benchmark data listed above.
-7. Include screenshots for UI changes at standard and high-DPI scaling.
-8. Include a reviewed diff and concise test report. Do not mark unbuilt code as verified.
+Before merging a feature:
 
-## Delivery sequence
-
-1. Pin and document the Smash4PC source; establish a reproducible local checkout and baseline build.
-2. Audit the full source tree, licenses, launcher, input handling, settings and packaging scripts.
-3. Establish project-owned build orchestration and CI that validates actual Windows targets.
-4. Replace upstream branding and implement the U Unlocked launcher design system.
-5. Implement Cemu-style controller configuration, profile persistence, testing and validated import.
-6. Improve graphics/settings UX and add measured Low Spec, Balanced and Quality presets.
-7. Expand the mod manager with profiles, manifests, conflict checks and rollback.
-8. Package the launcher, runtime and required redistributables without bundling copyrighted game data.
-9. Run regression, security, performance and release audits.
-
-This document records the architecture and delivery requirements. It is not a claim that the planned features have already shipped.
+1. Build Debug and Release configurations on Windows.
+2. Run unit tests and static analysis for changed native code.
+3. Test settings migration and backward compatibility.
+4. Test keyboard-only and controller-only navigation.
+5. Test controller binding, cancellation, timeout, reconnect, and multi-player assignment.
+6. Test mod install, conflict reporting, rollback, and interrupted operations.
+7. Record performance on the target laptop, including average frame time, 1% lows, memory use, and shader-cache behaviour.
+8. Inspect standard and high-DPI layouts.
+9. Record exactly which tests ran and which require hardware or user game data.

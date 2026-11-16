@@ -1,4 +1,4 @@
-# Generates a small original U Unlocked application icon in the isolated build source.
+# Generates the original U Unlocked application icon in the native resource directory.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]

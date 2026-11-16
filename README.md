@@ -4,7 +4,7 @@
 
 ### Super Smash Bros. for Wii U, rebuilt for PC.
 
-A native Windows experience for Super Smash Bros. for Wii U, built on the Smash4PC static-recompilation project and developed around a cleaner launcher, complete controller configuration, practical graphics settings, and a proper mod-management experience.
+A native Windows experience for Super Smash Bros. for Wii U, with a polished launcher, complete controller configuration, practical graphics settings, and a proper mod-management experience.
 
 [![GitHub](https://img.shields.io/badge/GitHub-joshuaargent-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/joshuaargent)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
@@ -23,82 +23,74 @@ A native Windows experience for Super Smash Bros. for Wii U, built on the Smash4
 
 ## About this project
 
-U Unlocked is a Windows-first PC project for Super Smash Bros. for Wii U. It uses the existing Smash4PC static recompilation and Wii U runtime as its technical foundation rather than starting another game port from scratch.
+U Unlocked is a Windows-first PC project for Super Smash Bros. for Wii U. It brings the native game runtime, launcher, controller setup, graphics configuration, and mod workflow together as one coherent application.
 
-The aim is to keep the underlying game compatibility and performance work that already exists, then build a more complete PC experience around it. The launcher, settings and mod workflow take design inspiration from Melee Unlocked: clear navigation, a consistent dark interface, useful configuration screens and controls that feel like part of one finished application.
+The goal is to make the complete experience feel intentional: configure controllers before the first match, choose sensible graphics settings for the hardware in use, manage mods without manually moving files, and get clear diagnostics when something goes wrong.
 
-U Unlocked is an independent project. Melee Unlocked is a design reference only; its GPL-licensed source is not copied into this repository.
+The launcher takes design inspiration from Melee Unlocked. That inspiration is limited to product design and interaction patterns; its source code is not included in this repository.
 
 ## What you'll find here
 
-- **Native PC runtime** - the Smash4PC static-recompilation runtime, Vulkan renderer and SDL3 platform layer, retained as a pinned upstream dependency.
-- **Game installation** - support for the game, update and optional DLC folders dumped from a user's own Wii U.
-- **Controller configuration** - planned per-player device assignment, press-to-bind remapping, calibration, dead zones, controller layouts and portable profiles. The [Cemu compatibility specification](docs/CONTROLLER_COMPATIBILITY.md) records the XML profile format and safe import constraints.
-- **Graphics settings** - planned resolution, display mode, VSync, frame pacing and hardware-aware quality presets.
-- **Mod management** - existing Smash4PC content mods and Cemu graphic-pack support, with a broader U Unlocked profile and conflict-management experience planned.
-- **Performance profiles** - a Low Spec mode and measured Balanced and Quality presets, with the Intel Iris Xe integrated-graphics configuration included in the initial optimisation target.
-- **Diagnostics** - planned hardware detection, Vulkan capability reporting, shader-cache information and actionable troubleshooting.
-- **Preserved game behaviour** - performance settings must not change deterministic game simulation or silently alter gameplay timing.
+- **Native PC runtime** - C++20, Vulkan rendering, SDL3 input, and a native Windows game runtime.
+- **Game installation** - validation of the game, update, and optional DLC folders supplied by the user.
+- **Controller configuration** - per-player device assignment, press-to-bind remapping, calibration, dead zones, controller layouts, and portable profiles.
+- **Cemu profile import** - a validated importer with explicit mapping translation and a preview before saving.
+- **Graphics settings** - resolution, display mode, VSync, frame pacing, scaling, and hardware-aware quality presets.
+- **Mod management** - install, enable, disable, profile, and inspect mods with dependency and conflict reporting.
+- **Performance profiles** - Low Spec, Balanced, and Quality modes, with Intel Iris Xe integrated graphics included in the initial optimisation target.
+- **Diagnostics** - hardware detection, Vulkan capability reporting, shader-cache information, logs, and actionable troubleshooting.
+- **Preserved game behaviour** - graphics and performance settings must not change deterministic game simulation or silently alter gameplay timing.
 
 Features described as planned are not represented as already implemented. See the [implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md) and [architecture](docs/ARCHITECTURE.md) for the delivery sequence and engineering requirements.
 
 ## Why U Unlocked?
 
-The goal is not simply to make the game launch on a PC. The goal is to make the whole experience feel intentional.
+The objective is not simply to make the game launch on a PC.
 
-That means controller setup should be straightforward before the first match, settings should explain what they do, mods should be manageable without manually moving files around, and the application should select sensible defaults for the hardware actually detected. Existing saves, game files, mod formats and online compatibility should be preserved wherever possible.
+Controller setup should be straightforward, settings should explain what they change, mods should be easy to manage, and performance defaults should be based on the hardware actually detected. Existing saves, game files, mod formats, and online compatibility should be preserved wherever possible.
 
 ## Current status
 
-The repository is being established around a pinned copy of Smash4PC. The upstream runtime and launcher are the starting point; the U Unlocked launcher redesign, controller-profile system, expanded mod manager and hardware-tuned presets are being implemented in stages.
+The native runtime and Windows build foundation are now part of this repository. The project is moving into the launcher, controller, settings, and mod-management implementation.
 
-The initial target machine is an HP EliteBook 640 G9 provisionally identified as an Intel Core i5 model with Intel Iris Xe graphics and 16 GB RAM. The exact CPU model and Vulkan driver capabilities still need to be confirmed on the target machine. Defaults will be based on runtime detection rather than the laptop model name.
+The initial target machine is an HP EliteBook 640 G9 provisionally identified as an Intel Core i5 model with Intel Iris Xe graphics and 16 GB RAM. The exact CPU model and Vulkan driver capabilities still need to be confirmed on the target machine. Defaults will be based on runtime detection and measured performance rather than the laptop model name.
 
-No Nintendo game data, keys, console files, user saves or generated recompiled game code are included in this repository.
+No Nintendo game data, keys, console files, user saves, or generated recompiled game code are included in this repository.
 
 ## Built with
 
 | Area | Technology |
 | --- | --- |
-| Language | C++ |
+| Language | C++20 |
 | Build system | CMake and Ninja |
 | Platform | Windows 10/11 x64 |
 | Windowing and input | SDL3 |
-| Graphics | Vulkan |
-| Game foundation | Smash4PC static recompilation and Wii U runtime |
+| Graphics | Vulkan 1.3 |
+| Configuration | Versioned JSON and INI |
 | Build automation | PowerShell and Python |
-| Configuration | Versioned JSON / INI, according to the owning subsystem |
 | Source control | Git and GitHub pull requests |
 
-## Install and run
-
-U Unlocked does not currently publish a finished installer. The first development builds are produced from source.
+## Run locally
 
 ### Requirements
 
 - 64-bit Windows 10 or Windows 11.
-- Python 3 and Git.
-- Approximately 16 GB RAM for the upstream build process; more memory and free disk space are beneficial.
+- Git and Python 3.
+- Approximately 16 GB RAM for a full native build; more memory and free disk space provide additional headroom.
 - A Vulkan 1.3-capable graphics driver.
-- The Smash4PC Windows toolchain: llvm-mingw, Ninja and CMake.
+- The Windows toolchain: llvm-mingw, Ninja, and CMake.
 - Your own legally obtained Super Smash Bros. for Wii U game dump.
 
 ### Get the source
 
-Clone the repository and initialise its pinned Smash4PC submodule:
+Clone the repository normally. The native runtime is included directly in the `engine\` directory.
 
 ```powershell
-git clone --recurse-submodules https://github.com/joshuaargent/CPP_U-Unlocked.git
+git clone https://github.com/joshuaargent/CPP_U-Unlocked.git
 cd CPP_U-Unlocked
 ```
 
-If the repository was cloned without submodules:
-
-```powershell
-git submodule update --init --recursive
-```
-
-Place the `toolchain\` directory beside the `upstream\` directory:
+Place the `toolchain\` directory beside `engine\`:
 
 ```text
 CPP_U-Unlocked\
@@ -106,14 +98,18 @@ CPP_U-Unlocked\
     llvm-mingw\
     Ninja\
     CMake\
-  upstream\                 # pinned Smash4PC source
+  engine\
+    CMakeLists.txt
+    runtime\
+    recomp\
+    third_party\
   docs\
   tools\
 ```
 
 ### Game files
 
-The upstream runtime expects the user's own extracted Wii U game folders:
+The runtime expects the user's own extracted Wii U game folders:
 
 | Folder | Title ID | Required |
 | --- | --- | --- |
@@ -121,42 +117,38 @@ The upstream runtime expects the user's own extracted Wii U game folders:
 | Update | `0005000E10144F00` | Recommended |
 | DLC | `0005000C10144F00` | Optional |
 
-The folders should be dumped from the user's own console using an appropriate dumping tool. Keep game data, console files and keys out of Git, issue attachments and release packages.
+Keep game data, console files, keys, and saves out of Git, issue attachments, and release packages.
 
 ### Build U Unlocked
 
-Run the project-owned build wrapper from the repository root:
+Run the project build wrapper from the repository root:
 
 ```powershell
 .\tools\windows\build-u-unlocked.ps1 -Rpx '<update>\code\cross_f.rpx' -BaseRpx '<game>\code\cross_f.rpx'
 ```
 
-The wrapper verifies the pinned upstream checkout, copies it to an isolated `upstream-build\` working directory, applies the reviewed U Unlocked branding overlay, and invokes the upstream build. The original `upstream\` submodule is not modified. The launcher and game runtime are written to `Play\`; the launcher is named `U Unlocked.exe`.
+The build uses the source in `engine\`, the local toolchain in `toolchain\`, and writes build output to ignored working directories. The launcher and game runtime are written to `Play\`; the launcher is named `U Unlocked.exe`.
 
-This is the first branded build milestone. The launcher still uses the upstream menu layout; the redesigned interface, controller remapping, expanded settings and full mod-management workflow are not yet complete. The build requires the user's game/update RPX files and the toolchain described above.
-
-Do not upload or distribute the generated game code or executables built from it. They contain code translated from the user's game files. No release packager is provided until the U Unlocked package contents and legal-data exclusions have been independently verified.
+A first build requires the user's game/update RPX files and the toolchain described above. Do not distribute generated game code or executables built from it. They contain code translated from the user's game files.
 
 ## Development and pull requests
 
 Changes are developed on focused feature branches and submitted as pull requests against `main`.
 
 - Keep changes scoped to one coherent feature or fix.
-- Preserve existing upstream behaviour unless a change is deliberate, documented and tested.
+- Preserve game compatibility and user data unless a change is deliberate, documented, and tested.
 - Run the relevant build and tests before requesting review.
 - Address automated review findings and CI failures before merging.
 - Use **Squash and merge** after review and validation.
 - Keep release publication separate from ordinary commits. Releases should be created from reviewed, merged version tags.
 
-Build validation and release workflows will be added as the project gains its own reproducible build entry point. A workflow must not claim to validate the application until it actually builds the relevant targets.
-
 ## Licensing and third-party code
 
-U Unlocked retains the upstream Smash4PC source as a pinned Git submodule. Its source identifies the project as MIT-licensed; its license and all third-party notices remain with that source.
+The repository includes MIT-licensed runtime and recompilation components. The required copyright and permission notice is retained in `LICENSES/RECOMPILATION-MIT-LICENSE.txt`. Third-party components retain their own licence files and notices; see [third-party notices](docs/THIRD_PARTY_NOTICES.md).
 
-Melee Unlocked is used as a product-design reference, not a source dependency. Its GPL-licensed implementation is not copied here.
+Melee Unlocked is used as a product-design reference only. Its GPL-licensed implementation is not copied into this repository.
 
-Super Smash Bros. for Wii U and all associated game assets remain the property of their respective rights holders. This project is not affiliated with or endorsed by Nintendo, Bandai Namco or Sora Ltd. Users must provide their own game files. Do not commit game dumps, keys, console files, saves, proprietary assets or generated recompiled game code.
+Super Smash Bros. for Wii U and all associated game assets remain the property of their respective rights holders. This project is not affiliated with or endorsed by Nintendo, Bandai Namco, or Sora Ltd. Users must provide their own game files. Do not commit game dumps, keys, console files, saves, proprietary assets, or generated recompiled game code.
 
 ---
 

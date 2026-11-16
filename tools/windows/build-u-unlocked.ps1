@@ -1,6 +1,4 @@
-# Builds U Unlocked from an isolated copy of the pinned Smash4PC source.
-# The upstream submodule remains untouched. This milestone applies branding only;
-# the redesigned launcher, custom controller mapping and expanded settings are still in development.
+# Builds the native U Unlocked runtime and launcher from the in-repository engine source.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -14,10 +12,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$upstreamPath = Join-Path $repoRoot 'upstream'
-$buildSource = Join-Path $repoRoot 'upstream-build'
+$enginePath = Join-Path $repoRoot 'engine'
 $verifyScript = Join-Path $PSScriptRoot 'verify-checkout.ps1'
-$brandingScript = Join-Path $PSScriptRoot 'apply-u-unlocked-branding.ps1'
+$iconScript = Join-Path $PSScriptRoot 'new-u-unlocked-icon.ps1'
+$engineBuild = Join-Path $enginePath 'tools\windows\build-smash.ps1'
 
 & $verifyScript
 
@@ -33,55 +31,32 @@ if ($BaseRpx) {
     $resolvedBaseRpx = (Resolve-Path -LiteralPath $BaseRpx).Path
 }
 
-# Keep the submodule clean: build from a disposable mirror and retain only its build caches.
-New-Item -ItemType Directory -Force -Path $buildSource | Out-Null
-$robocopy = Join-Path $env:SystemRoot 'System32\robocopy.exe'
-if (-not (Test-Path -LiteralPath $robocopy -PathType Leaf)) {
-    throw "Robocopy was not found: $robocopy"
+# The resource compiler requires the icon to exist before CMake configures the Windows target.
+& $iconScript -SourceRoot $enginePath
+if ($LASTEXITCODE -ne 0) {
+    throw "Icon generation failed with exit code $LASTEXITCODE."
 }
 
-& $robocopy $upstreamPath $buildSource /MIR /R:2 /W:2 /XD '.git' 'build' 'build-deps' /XF '.git' /NFL /NDL /NJH /NJS /NP
-$copyExitCode = $LASTEXITCODE
-if ($copyExitCode -ge 8) {
-    throw "Unable to prepare the isolated source copy. Robocopy returned $copyExitCode."
-}
-$global:LASTEXITCODE = 0
-
-& $brandingScript -SourceRoot $buildSource
-
-$upstreamBuild = Join-Path $buildSource 'tools\windows\build-smash.ps1'
-if (-not (Test-Path -LiteralPath $upstreamBuild -PathType Leaf)) {
-    throw "The pinned upstream build script is missing: $upstreamBuild"
+if (-not (Test-Path -LiteralPath $engineBuild -PathType Leaf)) {
+    throw "The native build entry point is missing: $engineBuild"
 }
 
-Write-Host 'Building the game runtime and U Unlocked-branded launcher from the isolated source copy.' -ForegroundColor Cyan
-$global:LASTEXITCODE = 0
+Write-Host 'Building U Unlocked from its in-repository native source.' -ForegroundColor Cyan
 if ($resolvedBaseRpx) {
-    & $upstreamBuild -Rpx $resolvedRpx -BaseRpx $resolvedBaseRpx
+    & $engineBuild -Rpx $resolvedRpx -BaseRpx $resolvedBaseRpx
 } else {
-    # Explicitly override the upstream script's machine-specific default BaseRpx path.
-    & $upstreamBuild -Rpx $resolvedRpx -BaseRpx ''
+    & $engineBuild -Rpx $resolvedRpx -BaseRpx ''
 }
 if ($LASTEXITCODE -ne 0) {
-    throw "The upstream build failed with exit code $LASTEXITCODE."
+    throw "U Unlocked build failed with exit code $LASTEXITCODE."
 }
 
 $playDirectory = Join-Path $repoRoot 'Play'
-$launcher = Join-Path $playDirectory 'U Unlocked.exe'
-$game = Join-Path $playDirectory 'smash.exe'
-if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
-    throw "The build completed without producing the expected launcher: $launcher"
-}
-if (-not (Test-Path -LiteralPath $game -PathType Leaf)) {
-    throw "The build completed without producing the expected game runtime: $game"
+$expected = @('U Unlocked.exe', 'smash.exe')
+$missing = @($expected | Where-Object { -not (Test-Path -LiteralPath (Join-Path $playDirectory $_) -PathType Leaf) })
+if ($missing.Count -gt 0) {
+    $missing | ForEach-Object { Write-Host "Missing output: $_" -ForegroundColor Red }
+    throw 'The build completed without producing all required U Unlocked outputs.'
 }
 
-foreach ($staleAsset in @('title-logo.png', 'launcher-background.jpg')) {
-    $assetPath = Join-Path $playDirectory $staleAsset
-    if (Test-Path -LiteralPath $assetPath -PathType Leaf) {
-        Remove-Item -LiteralPath $assetPath -Force
-    }
-}
-
-Write-Host "U Unlocked branding build completed: $launcher" -ForegroundColor Green
-Write-Host 'The launcher still uses the upstream menu layout. Do not describe this build as feature-complete or publish it as a finished release.' -ForegroundColor Yellow
+Write-Host "U Unlocked build completed: $(Join-Path $playDirectory 'U Unlocked.exe')" -ForegroundColor Green

@@ -1,22 +1,19 @@
-# Local toolchains and build output
+# Toolchains and local build output
 /toolchain/
 /generated/
 /Play/
 /dist/
 /build/
 /build-*/
-/upstream-build/
 /.cache/
+/engine/build/
+/engine/build-*/
+/engine/build-deps/
+/engine/generated/
+/engine/Play/
+/engine/dist/
 
-# Upstream build output (the upstream source itself is a submodule)
-/upstream/build/
-/upstream/build-*/
-/upstream/build-deps/
-/upstream/generated/
-/upstream/Play/
-/upstream/dist/
-
-# User game data, console data and generated recompiled code
+# User game data, console data, and generated recompiled code
 /0005000010144F00/
 /0005000E10144F00/
 /0005000C10144F00/

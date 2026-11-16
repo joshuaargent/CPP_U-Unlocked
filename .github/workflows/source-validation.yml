@@ -15,32 +15,22 @@ permissions:
 
 jobs:
   validate:
-    name: Validate source and branding overlay
+    name: Validate source tree and project scripts
     runs-on: windows-latest
     steps:
-      - name: Check out repository and pinned upstream source
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Verify pinned source checkout
+      - name: Verify in-repository native source
         shell: pwsh
         run: ./tools/windows/verify-checkout.ps1 -SkipToolchainCheck
 
-      - name: Apply branding overlay to a clean source copy
+      - name: Generate the application resource icon
         shell: pwsh
         run: |
-          $source = Join-Path $env:RUNNER_TEMP 'u-unlocked-upstream-check'
-          New-Item -ItemType Directory -Force -Path $source | Out-Null
-          $robocopy = Join-Path $env:SystemRoot 'System32\robocopy.exe'
-          & $robocopy (Join-Path $PWD 'upstream') $source /E /R:2 /W:2 /XD '.git' /XF '.git' /NFL /NDL /NJH /NJS /NP
-          if ($LASTEXITCODE -ge 8) {
-            throw "Unable to copy upstream source for overlay validation: $LASTEXITCODE"
-          }
-          ./tools/windows/apply-u-unlocked-branding.ps1 -SourceRoot $source
-          $icon = Join-Path $source 'runtime\res\u-unlocked.ico'
-          if (-not (Test-Path -LiteralPath $icon -PathType Leaf)) {
-            throw 'Branding overlay did not generate the U Unlocked icon.'
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if (-not (Test-Path 'engine/runtime/res/u-unlocked.ico')) {
+            throw 'The U Unlocked icon was not generated.'
           }
 
       - name: Parse project PowerShell scripts
@@ -73,4 +63,17 @@ jobs:
           if ($forbidden.Count -gt 0) {
             $forbidden | ForEach-Object { Write-Error "Protected game data is tracked: $_" }
             throw 'Protected game data must never be committed.'
+          }
+
+      - name: Verify required licence notices
+        shell: pwsh
+        run: |
+          $required = @(
+            'LICENSES/RECOMPILATION-MIT-LICENSE.txt',
+            'engine/third_party/cemu_nex/LICENSE.txt'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required licence notice is missing: $path"
+            }
           }

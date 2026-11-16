@@ -1,4 +1,4 @@
-# Validates the U Unlocked checkout and its pinned upstream source.
+# Validates the U Unlocked source tree and local Windows toolchain.
 [CmdletBinding()]
 param(
     [switch]$SkipToolchainCheck
@@ -6,40 +6,34 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$upstreamPath = Join-Path $repoRoot 'upstream'
-$expectedCommit = 'f145e7fc14d0be2caf712cc4080f9deb3e7ab6aa'
+$enginePath = Join-Path $repoRoot 'engine'
 
-if (-not (Test-Path (Join-Path $upstreamPath '.git'))) {
-    throw "The Smash4PC submodule is missing. Run: git submodule update --init --recursive"
-}
-
-$actualCommit = (& git -C $upstreamPath rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0) {
-    throw 'Unable to read the Smash4PC submodule commit. Check that Git is installed and the submodule is initialised.'
-}
-if ($actualCommit -ne $expectedCommit) {
-    throw "Unexpected Smash4PC revision. Expected $expectedCommit but found $actualCommit. Review upstream updates before building."
-}
-
-$dirty = @(& git -C $upstreamPath status --porcelain --untracked-files=no)
-if ($LASTEXITCODE -ne 0) {
-    throw 'Unable to inspect the Smash4PC submodule working tree.'
-}
-if ($dirty.Count -gt 0) {
-    throw "The Smash4PC submodule has local modifications. Keep project changes outside the submodule or record an intentional upstream patch."
+$requiredSource = @(
+    (Join-Path $enginePath 'CMakeLists.txt'),
+    (Join-Path $enginePath 'runtime\src\smash_main.cpp'),
+    (Join-Path $enginePath 'runtime\src\host\window.cpp'),
+    (Join-Path $enginePath 'recomp\src\recompile_main.cpp'),
+    (Join-Path $enginePath 'tools\windows\build-smash.ps1'),
+    (Join-Path $enginePath 'third_party\cemu_nex\LICENSE.txt'),
+    (Join-Path $repoRoot 'LICENSES\RECOMPILATION-MIT-LICENSE.txt')
+)
+$missingSource = @($requiredSource | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+if ($missingSource.Count -gt 0) {
+    $missingSource | ForEach-Object { Write-Host "Missing source: $_" -ForegroundColor Red }
+    throw 'The U Unlocked source tree is incomplete.'
 }
 
 if (-not $SkipToolchainCheck) {
-    $required = @(
+    $requiredToolchain = @(
         (Join-Path $repoRoot 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'),
         (Join-Path $repoRoot 'toolchain\Ninja\ninja.exe'),
         (Join-Path $repoRoot 'toolchain\CMake\bin\cmake.exe')
     )
-    $missing = @($required | Where-Object { -not (Test-Path $_) })
-    if ($missing.Count -gt 0) {
-        $missing | ForEach-Object { Write-Host "Missing: $_" -ForegroundColor Yellow }
-        throw 'The upstream Windows toolchain is incomplete. See the README build requirements.'
+    $missingToolchain = @($requiredToolchain | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
+    if ($missingToolchain.Count -gt 0) {
+        $missingToolchain | ForEach-Object { Write-Host "Missing tool: $_" -ForegroundColor Yellow }
+        throw 'The Windows toolchain is incomplete. See the README build requirements.'
     }
 }
 
-Write-Host "U Unlocked checkout verified. Smash4PC is pinned at $actualCommit." -ForegroundColor Green
+Write-Host 'U Unlocked source tree verified.' -ForegroundColor Green
