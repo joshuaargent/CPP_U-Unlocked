@@ -18,6 +18,8 @@
 #include "cafe/guest.h"
 #include "cafe/runtime.h"
 
+#include <algorithm>
+#include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
