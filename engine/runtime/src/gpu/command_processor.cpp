@@ -43,7 +43,8 @@ struct Submission {
 };
 
 std::mutex g_queue_mutex;
-std::condition_variable g_queue_cv;
+std::condition_variable g_queue_not_empty_cv;
+std::condition_variable g_queue_not_full_cv;
 std::deque<Submission> g_queue;
 // Keep command-buffer addresses alive only in a small bounded FIFO. At the
 // limit, the submitting guest thread applies back-pressure; submissions are
@@ -195,7 +196,8 @@ struct Retirement {
     uint64_t data;
 };
 std::mutex g_retire_mutex;
-std::condition_variable g_retire_cv;
+std::condition_variable g_retire_not_empty_cv;
+std::condition_variable g_retire_not_full_cv;
 std::deque<Retirement> g_retire_queue;
 // A slow GPU must not let timeline-retirement metadata grow without bound.
 // The command processor waits for space rather than dropping guest writebacks.
@@ -206,7 +208,7 @@ void retire_later(const Retirement& r) {
     if (g_retire_queue.size() >= kMaxQueuedRetirements) {
         static const bool trace_pressure = std::getenv("TTT2_TRACE_PACING") != nullptr;
         const auto started = std::chrono::steady_clock::now();
-        g_retire_cv.wait(lock, [] { return g_retire_queue.size() < kMaxQueuedRetirements; });
+        g_retire_not_full_cv.wait(lock, [] { return g_retire_queue.size() < kMaxQueuedRetirements; });
         if (trace_pressure) {
             const double waited_ms = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
@@ -216,7 +218,7 @@ void retire_later(const Retirement& r) {
     }
     g_retire_queue.push_back(r);
     lock.unlock();
-    g_retire_cv.notify_one();
+    g_retire_not_empty_cv.notify_one();
 }
 
 void retire(uint64_t timestamp);
@@ -226,11 +228,11 @@ void retirement_main() {
         Retirement r;
         {
             std::unique_lock lock(g_retire_mutex);
-            g_retire_cv.wait(lock, [] { return !g_retire_queue.empty(); });
+            g_retire_not_empty_cv.wait(lock, [] { return !g_retire_queue.empty(); });
             r = g_retire_queue.front();
             g_retire_queue.pop_front();
         }
-        g_retire_cv.notify_all();
+        g_retire_not_full_cv.notify_one();
         g_backend->wait_for(r.done);
         g_backend->retired(r.done);
         switch (r.kind) {
@@ -612,11 +614,11 @@ void command_processor_main() {
                 g_backend->idle();
                 lock.lock();
             }
-            g_queue_cv.wait(lock, [] { return !g_queue.empty(); });
+            g_queue_not_empty_cv.wait(lock, [] { return !g_queue.empty(); });
             s = g_queue.front();
             g_queue.pop_front();
         }
-        g_queue_cv.notify_all();
+        g_queue_not_full_cv.notify_one();
         {
             std::vector<std::pair<uint32_t, uint32_t>> written;
             {
@@ -654,7 +656,7 @@ uint64_t submit(uint32_t buffer, uint32_t words) {
     if (g_queue.size() >= kMaxQueuedSubmissions) {
         static const bool trace_pressure = std::getenv("TTT2_TRACE_PACING") != nullptr;
         const auto started = std::chrono::steady_clock::now();
-        g_queue_cv.wait(lock, [] { return g_queue.size() < kMaxQueuedSubmissions; });
+        g_queue_not_full_cv.wait(lock, [] { return g_queue.size() < kMaxQueuedSubmissions; });
         if (trace_pressure) {
             const double waited_ms = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
@@ -665,7 +667,7 @@ uint64_t submit(uint32_t buffer, uint32_t words) {
     const uint64_t timestamp = ++g_submitted;
     g_queue.push_back({buffer, words, timestamp});
     lock.unlock();
-    g_queue_cv.notify_one();
+    g_queue_not_empty_cv.notify_one();
     return timestamp;
 }
 
