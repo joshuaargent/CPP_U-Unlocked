@@ -1,8 +1,9 @@
 #pragma once
 
 // The game window: SDL3 on the process's main thread, which owns the event
-// loop; keyboard (keys from keyboard.ini, host/keymap.h) and gamepads feed
-// the Wii U GamePad state. The renderer presents into it from the GPU
+// loop; the keyboard (keys from keyboard.ini, host/keymap.h) owns Wii U GamePad
+// player 1, while physical gamepads feed the separate Pro Controller slots.
+// The renderer presents into it from the GPU
 // thread through a Vulkan surface. Whether it starts fullscreen, its size
 // and the renderer's scale and frame rate come from display.ini
 // (host/display_settings.h), read when it opens.
