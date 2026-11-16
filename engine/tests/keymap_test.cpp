@@ -243,11 +243,11 @@ void test_path(const fs::path& scratch) {
     const std::string home = old_home ? old_home : "";
     setenv("HOME", (scratch / "home").c_str(), 1);
     setenv("XDG_CONFIG_HOME", (scratch / "config").c_str(), 1);
-    check(keymap::file_path() == scratch / "config/ttt2/keyboard.ini", "XDG_CONFIG_HOME");
+    check(keymap::file_path() == scratch / "config/u-unlocked/keyboard.ini", "XDG_CONFIG_HOME");
     setenv("XDG_CONFIG_HOME", "relative/config", 1);
-    check(keymap::file_path() == scratch / "home/.config/ttt2/keyboard.ini", "a relative XDG_CONFIG_HOME is ignored");
+    check(keymap::file_path() == scratch / "home/.config/u-unlocked/keyboard.ini", "a relative XDG_CONFIG_HOME is ignored");
     unsetenv("XDG_CONFIG_HOME");
-    check(keymap::file_path() == scratch / "home/.config/ttt2/keyboard.ini", "no XDG_CONFIG_HOME");
+    check(keymap::file_path() == scratch / "home/.config/u-unlocked/keyboard.ini", "no XDG_CONFIG_HOME");
     setenv("HOME", home.c_str(), 1);
 }
 
