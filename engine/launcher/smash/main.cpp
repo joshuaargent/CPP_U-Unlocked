@@ -313,14 +313,7 @@ void copy_mod_folder_safely(const fs::path& source, const fs::path& destination)
     if (ec) throw std::runtime_error("Cannot finish inspecting the mod folder: " + ec.message());
 }
 
-// What installing a mod (an archive or a folder) did: the mod's name, or why it failed.
-struct Installed {
-    bool ok = false;
-    std::string message;
-};
-
-// Installs the mod in `source` (an archive or a folder) as mods\<its name>\. A mod is anything with the game's
-// content\ layout somewhere inside (find_content_root), the formats find_mods reads.
+// Installs an extracted mod folder as mods/<its name>.
 Installed install_mod(const fs::path& source, const fs::path& mods) {
     std::error_code ec;
     const auto source_status = fs::symlink_status(source, ec);
@@ -352,7 +345,7 @@ Installed install_mod(const fs::path& source, const fs::path& mods) {
     if (find_content_root(staging, 5).empty()) {
         return fail(source.filename().string() + " isn't a Smash mod: there's no content folder in it.");
     }
-    // The archive's single top folder, if that's all it holds, becomes the mod's folder.
+    // A single top-level folder becomes the installed mod's folder.
     fs::path top = staging;
     std::vector<fs::path> entries;
     for (const auto& e : fs::directory_iterator(staging, ec)) entries.push_back(e.path());
@@ -1368,7 +1361,7 @@ private:
             if (selected_ < n) {
                 change(1);
             } else if (selected_ == n) {
-                choose_mod_archive();
+                choose_mod_folder();
             } else if (selected_ == n + 1) {
                 std::error_code ec;
                 fs::create_directories(dir_ / "mods", ec);
@@ -2656,7 +2649,7 @@ int main(int argc, char** argv) {
         // (SMASH_LAUNCHER_SCREEN=settings, mods or online: that screen).
         const char* shot = std::getenv("U_UNLOCKED_LAUNCHER_SHOT");
         if (const char* s = std::getenv("SMASH_LAUNCHER_SCREEN")) launcher.open_screen(s);
-        if (argc > 1) launcher.install(argv[1]); // a mod's archive or folder dropped on the launcher's icon
+        if (argc > 1) launcher.install(argv[1]); // a mod folder dropped on the launcher's icon
         const uint64_t started = SDL_GetTicksNS();
         uint64_t last = started;
         while (launcher.running()) {
