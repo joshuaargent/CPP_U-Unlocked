@@ -36,6 +36,16 @@ D3D12 is the only alternative worth evaluating seriously for this Windows-first 
 
 Do not start a D3D12 backend until Vulkan profiling on the target laptop and at least one discrete GPU shows a repeatable driver-specific limitation that D3D12 can address. A second backend increases maintenance and correctness risk and may perform no better on Intel Iris Xe.
 
+### Direct3D 11
+
+D3D11 is worth including in a future benchmark; it should not be dismissed as inherently slower than D3D12. Its mature driver model can perform very well on specific Intel, AMD, or NVIDIA drivers, and the runtime handles some resource hazard and lifetime work that a D3D12/Vulkan application must manage explicitly. That can make a carefully implemented D3D11 backend competitive for this emulator's actual workload, even though it offers less explicit control and generally less scalable command recording.
+
+There is no universal API winner. D3D11 can be faster for a particular driver/workload; D3D12 and Vulkan can reduce CPU submission overhead and expose more predictable multi-threaded scheduling when the application uses their explicit models correctly. Microsoft documents the trade-off: D3D12 moves synchronization, memory residency, and resource lifetime responsibilities to the application, rather than guaranteeing that every D3D12 program will outperform D3D11. See [Microsoft's D3D11-to-D3D12 differences](https://learn.microsoft.com/en-us/windows/win32/direct3d12/important-changes-from-directx-11-to-direct3d-12).
+
+A D3D11 port is not a small API swap. Our current Vulkan path imports guest memory and uses buffer device addresses. D3D11 has no equivalent device-address/external-host-memory path, so it would need a deliberate guest-memory mirroring or upload strategy, a separate shader compiler/translation path, resource tracking, and full GX2 correctness coverage. Its more implicit resource model does not remove the emulator's need to preserve guest-visible GPU writes and deterministic frame ordering.
+
+**Decision:** keep Vulkan as the production backend. Add D3D11 to the benchmark shortlist alongside D3D12, but do not start either port until repeatable Vulkan measurements identify a concrete limitation. If D3D11 wins on Iris Xe with equivalent correctness and lower frame-time variance, it is a valid Windows-only fallback candidate. Do not select it based on API age or assumptions.
+
 ### OpenGL
 
 Do not prioritise OpenGL. It is a less suitable fit for this renderer's explicit synchronization, device-address, external host-memory, and resource-lifetime requirements. It would not simplify the hard guest-memory correctness problem.
@@ -53,7 +63,7 @@ Reference: [SDL3 GPU API](https://wiki.libsdl.org/SDL3/CategoryGPU).
 3. Profile CPU submission time, shader compilation, pipeline creation, upload-ring waits, command-slot waits, GPU execution time, and presentation waits separately.
 4. Replace unsafe frame-completion coupling only after submission-owned snapshots, write-generation tracking, deferred resource retirement, and bounded render-work scheduling exist.
 5. Tune render scale and presets from GPU timestamps and repeatable benchmark scenes, not device-name guesses.
-6. Compare Vulkan 1.3 and optional 1.4 paths only where the driver advertises the needed feature. Evaluate D3D12 only after a measured Vulkan limitation justifies the engineering cost.
+6. Compare Vulkan 1.3 and optional 1.4 paths only where the driver advertises the needed feature. Benchmark D3D11 and D3D12 against Vulkan only after repeatable baselines exist; evaluate implementation only if an alternative shows a repeatable win with equivalent correctness.
 
 ## Hardware policy
 
