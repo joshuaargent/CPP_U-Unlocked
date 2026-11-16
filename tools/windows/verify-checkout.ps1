@@ -59,7 +59,7 @@ if ($gitCommand -and (Test-Path -LiteralPath (Join-Path $repoRoot '.git'))) {
         $parts = $relative.Split('/')
         ($parts -notcontains '.git') -and
         -not ($excludedRoots | Where-Object { $relative.StartsWith($_ + '/', [System.StringComparison]::OrdinalIgnoreCase) })
-    } | ForEach-Object { [System.IO.Path]::GetRelativePath($repoRoot, $_.FullName).Replace('\', '/') })
+    } | ForEach-Object { $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/') })
 }
 $legacyPaths = @($trackedFiles | Where-Object {
     $_.IndexOf($legacyName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
