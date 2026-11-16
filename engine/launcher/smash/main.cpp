@@ -2148,14 +2148,16 @@ private:
 
         const float margin = W * 0.052f;
         const float header_y = H * 0.055f;
+        float brand_width = H * 0.26f;
         if (logo_.texture) {
             const float logo_h = H * 0.105f;
             const float logo_w = logo_h * logo_.width / logo_.height;
             paint_.image(logo_, {margin, header_y - logo_h * 0.78f, logo_w, logo_h});
+            brand_width = logo_w;
         } else {
             font_.draw(r_, margin, header_y, "U UNLOCKED", H * 0.052f, mix_alpha(white, 1.0f));
         }
-        font_.draw(r_, margin + H * 0.30f, header_y - H * 0.004f,
+        font_.draw(r_, margin + brand_width + H * 0.035f, header_y - H * 0.004f,
                    "SUPER SMASH BROS. FOR WII U  /  PC", H * 0.018f, mix_alpha(muted, 0.95f));
         const std::string version = std::string("BUILD ") + kVersion;
         font_.draw(r_, W - margin - font_.width(r_, version, H * 0.018f),
