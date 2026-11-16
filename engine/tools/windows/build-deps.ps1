@@ -10,9 +10,8 @@ $third = Join-Path $engineRoot 'third_party'
 $work = Join-Path $engineRoot 'build-deps'
 $prefix = Join-Path $work 'prefix'
 $python = (Get-Command python).Source
-$git = Split-Path -Parent (Get-Command git).Source
 $env:PATH = @((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $toolchain 'Ninja'), (Join-Path $toolchain 'CMake\bin'),
-    (Split-Path -Parent $python), $git, "$env:SystemRoot\System32") -join ';'
+    (Split-Path -Parent $python), "$env:SystemRoot\System32") -join ';'
 
 & $python (Join-Path $engineRoot 'tools\setup_deps.py')
 if ($LASTEXITCODE) { throw 'setup_deps.py failed' }
