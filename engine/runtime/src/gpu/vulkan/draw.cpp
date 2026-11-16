@@ -580,7 +580,7 @@ const Pipeline* Renderer::pipeline(const Registers& regs, const ShaderModule* vs
 }
 
 VkPipeline Renderer::build_pipeline(const PipelineKey& k, VkShaderModule vs, VkShaderModule ps,
-                                    VkPipelineLayout layout) {
+                                    VkPipelineLayout layout, VkPipelineCache worker_cache) {
     const uint32_t color_count = k.color_count;
     const VkFormat* colors = k.colors;
     const VkFormat depth = k.depth;
@@ -664,7 +664,15 @@ VkPipeline Renderer::build_pipeline(const PipelineKey& k, VkShaderModule vs, VkS
     gci.pDynamicState = &dyn;
     gci.layout = layout;
     VkPipeline pipeline = VK_NULL_HANDLE;
-    const VkResult r = vkCreateGraphicsPipelines(ctx_.device, pipeline_cache_, 1, &gci, nullptr, &pipeline);
+    VkResult r = VK_SUCCESS;
+    if (worker_cache != VK_NULL_HANDLE) {
+        // Each startup worker owns this cache, so pipeline creation can proceed concurrently.
+        r = vkCreateGraphicsPipelines(ctx_.device, worker_cache, 1, &gci, nullptr, &pipeline);
+    } else {
+        // Async scene compilation shares the persistent cache; serialize host access as required by Vulkan.
+        std::lock_guard lock(pipeline_cache_mutex_);
+        r = vkCreateGraphicsPipelines(ctx_.device, pipeline_cache_, 1, &gci, nullptr, &pipeline);
+    }
     if (r != VK_SUCCESS) {
         std::fprintf(stderr, "ttt2: gpu: pipeline creation failed (%d)\n", static_cast<int>(r));
         return VK_NULL_HANDLE;
@@ -699,16 +707,32 @@ void Renderer::precompile() {
     }
     if (jobs.empty()) return;
     std::fprintf(stderr, "ttt2: gpu: precompiling %zu pipelines (%zu shaders)\n", jobs.size(), modules_.size());
+    // Bound driver/compiler parallelism. Creating one worker per logical CPU can
+    // exhaust memory and starve the game on high-core-count and integrated-GPU systems.
+    const unsigned hardware_threads = std::thread::hardware_concurrency();
+    const unsigned preferred_workers = hardware_threads == 0 ? 2u : std::clamp(hardware_threads / 2u, 1u, 4u);
+    const unsigned worker_count = static_cast<unsigned>(std::min<size_t>(jobs.size(), preferred_workers));
+    std::vector<VkPipelineCache> worker_caches(worker_count, VK_NULL_HANDLE);
+    VkPipelineCacheCreateInfo cache_info{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    for (VkPipelineCache& cache : worker_caches) VK_CHECK(vkCreatePipelineCache(ctx_.device, &cache_info, nullptr, &cache));
+
     std::atomic<size_t> next{0};
     std::vector<std::thread> threads;
-    for (unsigned t = 0; t < std::max(1u, std::thread::hardware_concurrency()); ++t) {
-        threads.emplace_back([&] {
+    threads.reserve(worker_count);
+    for (unsigned t = 0; t < worker_count; ++t) {
+        threads.emplace_back([&, t] {
             for (size_t i; (i = next.fetch_add(1)) < jobs.size();) {
-                jobs[i].pipeline = build_pipeline(jobs[i].key, jobs[i].vs, jobs[i].ps, jobs[i].layout);
+                jobs[i].pipeline = build_pipeline(jobs[i].key, jobs[i].vs, jobs[i].ps, jobs[i].layout, worker_caches[t]);
             }
         });
     }
     for (auto& thread : threads) thread.join();
+    // Merge worker-local cache data on this thread; this also preserves the
+    // persistent cache without concurrent access to its Vulkan handle.
+    for (VkPipelineCache cache : worker_caches) {
+        VK_CHECK(vkMergePipelineCaches(ctx_.device, pipeline_cache_, 1, &cache));
+        vkDestroyPipelineCache(ctx_.device, cache, nullptr);
+    }
     for (const Job& j : jobs) {
         Pipeline& p = *pipelines_[fnv(&j.key, sizeof(j.key))];
         p.pipeline = j.pipeline;
