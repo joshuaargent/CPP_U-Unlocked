@@ -64,6 +64,14 @@ The existing native game runtime and static recompilation implementation are con
 - Keep the game simulation deterministic. Graphics presets must not alter gameplay timing, physics, or simulation steps.
 - Bound background shader compilation and avoid per-frame allocations.
 
+### WUA extraction
+
+- Build the WUA extraction utility on Windows and POSIX using the pinned ZArchive reader.
+- Inventory the archive before writing files. Reject invalid UTF-8 names, traversal components, Windows-reserved names, duplicate/case-colliding paths, excessive depth, more than 100,000 entries, or more than 64 GiB of expanded file data.
+- Create output files exclusively; never overwrite an existing file. On Windows, reject reparse points and create new files with `CREATE_NEW` and `FILE_FLAG_OPEN_REPARSE_POINT`. On POSIX, traverse directories with `openat` and `O_NOFOLLOW`.
+- Extract into a fresh, private staging directory. A failed extraction can leave partial files in that staging directory; the caller must discard the staging directory and must not activate it.
+- The utility is not yet connected to the launcher Build page. Do not present WUA import as an end-to-end feature until staging cleanup, activation/rollback, and real WUA testing are complete.
+
 ### Mods
 
 - Install extracted mod folders only until a bounded archive reader is integrated. Folder installation rejects symbolic links, Windows reparse points, special files, and trees above 20,000 entries / 4 GiB; it copies into a staging directory before activation. Do not invoke a system archive utility on untrusted mod files.
