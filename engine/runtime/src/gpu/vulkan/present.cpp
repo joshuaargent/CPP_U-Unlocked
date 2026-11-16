@@ -250,7 +250,7 @@ uint32_t Renderer::take_present_image() {
         if (trace_pacing) {
             const double wait_ms =
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - wait_started).count();
-            std::fprintf(stderr, "ttt2: GPU pacing: reused queued presentation image after %.2f ms (queue %zu, free %zu)\\n",
+            std::fprintf(stderr, "ttt2: GPU pacing: reused queued presentation image after %.2f ms (queue %zu, free %zu)\n",
                          wait_ms, queued_before, free_before);
         }
         return i;
@@ -260,7 +260,7 @@ uint32_t Renderer::take_present_image() {
         const double wait_ms =
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - wait_started).count();
         if (wait_ms >= 1.0) {
-            std::fprintf(stderr, "ttt2: GPU pacing: waited %.2f ms for presentation image (queue %zu, free %zu)\\n",
+            std::fprintf(stderr, "ttt2: GPU pacing: waited %.2f ms for presentation image (queue %zu, free %zu)\n",
                          wait_ms, queued_before, free_before);
         }
     }
