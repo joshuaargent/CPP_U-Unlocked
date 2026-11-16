@@ -98,6 +98,7 @@ std::vector<Entry> inventory(ZArchiveReader& reader, bool analysis_only) {
     std::unordered_set<std::wstring> paths;
     std::vector<Entry> files;
     uint64_t total = 0;
+    size_t visited_entries = 0;
 
     while (!pending.empty()) {
         Directory directory = std::move(pending.back());
@@ -108,6 +109,8 @@ std::vector<Entry> inventory(ZArchiveReader& reader, bool analysis_only) {
         const uint32_t count = reader.GetDirEntryCount(directory.node);
         for (uint32_t i = 0; i < count; ++i) {
             ZArchiveReader::DirEntry item{};
+            if (++visited_entries > kMaximumEntries)
+                throw std::runtime_error("Archive exceeds the 100,000-entry safety limit");
             if (!reader.GetDirEntry(directory.node, i, item) || item.isFile == item.isDirectory)
                 throw std::runtime_error("Archive contains an invalid directory entry");
             validate_component(item.name);
@@ -153,7 +156,8 @@ std::vector<Entry> inventory(ZArchiveReader& reader, bool analysis_only) {
 void reject_reparse(const fs::path& path, bool allow_missing) {
     const DWORD attributes = GetFileAttributesW(path.c_str());
     if (attributes == INVALID_FILE_ATTRIBUTES) {
-        if (allow_missing && GetLastError() == ERROR_FILE_NOT_FOUND) return;
+        const DWORD error = GetLastError();
+        if (allow_missing && (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)) return;
         win_error("Cannot inspect path " + path.string());
     }
     if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
