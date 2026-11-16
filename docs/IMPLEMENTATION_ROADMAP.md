@@ -64,7 +64,8 @@
 ## Project branding
 
 - [x] Generate an original U Unlocked Windows application icon.
-- [x] Generate an original transparent U Unlocked title-screen wordmark during the Windows build and place it beside the game runtime so the runtime replaces the original title-logo regions.
+- [x] Generate an original transparent U Unlocked wordmark during the Windows build; use it in the launcher header and overlay it onto the game's title-logo regions.
+- [x] Include the logo in launcher release packages, per-file SHA-256 manifests, automatic updates, and rollback so branding remains consistent across upgrades.
 - [x] Keep the retired upstream project name out of tracked file contents through the checkout verification script.
 
 ## Graphics and performance
