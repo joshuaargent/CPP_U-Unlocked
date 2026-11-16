@@ -57,3 +57,8 @@ Copy-Item (Join-Path $prefix 'bin\*.dll') $play
 # U Unlocked supplies its own launcher identity; no game title artwork is copied.
 # U Unlocked uses its own launcher background.
 New-Item -ItemType Directory -Force (Join-Path $play 'mods') | Out-Null
+$updater = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))) 'tools\windows\update-launcher.ps1'
+if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
+    throw "The Windows launcher updater is missing: $updater"
+}
+Copy-Item -LiteralPath $updater -Destination $play
