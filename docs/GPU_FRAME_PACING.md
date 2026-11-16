@@ -10,7 +10,7 @@ Enable the measurements with:
 
 ```powershell
 $env:TTT2_TRACE_PACING = "1"
-'.\Play\U Unlocked.exe'
+& ".\Play\U Unlocked.exe"
 ```
 
 The command processor reports the average and maximum time spent waiting for the previous frame's GPU retirement over each 60-frame window. The renderer's command-processor path reports waits for a free presentation image and when it reuses an older queued image. These are separate sources of back-pressure and must be measured independently.
