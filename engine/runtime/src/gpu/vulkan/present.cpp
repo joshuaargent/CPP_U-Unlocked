@@ -239,13 +239,31 @@ uint32_t Renderer::take_present_image() {
     // None free (the display stalled: a hidden window): the oldest image
     // still waiting to be shown, which a newer one supersedes anyway.
     const auto free = [&] { return std::find(present_free_.begin(), present_free_.end(), 1) != present_free_.end(); };
+    static const bool trace_pacing = std::getenv("TTT2_TRACE_PACING") != nullptr;
+    const size_t queued_before = present_queue_.size();
+    const size_t free_before = static_cast<size_t>(std::count(present_free_.begin(), present_free_.end(), 1));
+    const auto wait_started = std::chrono::steady_clock::now();
     if (!present_cv_.wait_for(lock, std::chrono::milliseconds(20), free) && !present_queue_.empty()) {
         const uint32_t i = present_queue_.front().image;
         present_queue_.pop_front();
         stolen_images_.fetch_add(1, std::memory_order_relaxed);
+        if (trace_pacing) {
+            const double wait_ms =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - wait_started).count();
+            std::fprintf(stderr, "ttt2: GPU pacing: reused queued presentation image after %.2f ms (queue %zu, free %zu)\\n",
+                         wait_ms, queued_before, free_before);
+        }
         return i;
     }
     present_cv_.wait(lock, free);
+    if (trace_pacing) {
+        const double wait_ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - wait_started).count();
+        if (wait_ms >= 1.0) {
+            std::fprintf(stderr, "ttt2: GPU pacing: waited %.2f ms for presentation image (queue %zu, free %zu)\\n",
+                         wait_ms, queued_before, free_before);
+        }
+    }
     const uint32_t i = static_cast<uint32_t>(std::find(present_free_.begin(), present_free_.end(), 1) - present_free_.begin());
     present_free_[i] = 0;
     return i;
