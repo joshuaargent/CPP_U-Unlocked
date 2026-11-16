@@ -63,6 +63,14 @@ if (-not (Test-Path -LiteralPath $buildEntry -PathType Leaf)) {
     throw "The source build entry point is missing: $buildEntry. This build kit must be run from a complete U Unlocked source checkout."
 }
 
+$environmentSetup = Join-Path $PSScriptRoot 'setup-build-environment.ps1'
+if (-not (Test-Path -LiteralPath $environmentSetup -PathType Leaf)) {
+    throw "The build environment bootstrap is missing: $environmentSetup"
+}
+Write-Host 'Preparing the pinned Windows build environment...' -ForegroundColor Cyan
+& $environmentSetup
+if ($LASTEXITCODE -ne 0) { throw 'Windows build environment setup failed.' }
+
 $game = Resolve-TitleFolder -Path $GameDirectory -ExpectedTitleId '0005000010144F00' -Label 'Base game'
 $update = Resolve-TitleFolder -Path $UpdateDirectory -ExpectedTitleId '0005000E10144F00' -Label 'Game update'
 
