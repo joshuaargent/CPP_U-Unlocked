@@ -216,7 +216,8 @@ void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& ro
     if (destination.native().size() > kMaximumPathCharacters)
         throw std::runtime_error("Archive path exceeds the Windows path-length limit: " + entry.path);
 
-    const fs::path extended_destination = extended_path(destination);\n    HANDLE output = CreateFileW(extended_destination.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
+    const fs::path extended_destination = extended_path(destination);
+    HANDLE output = CreateFileW(extended_destination.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW,
                                 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
     if (output == INVALID_HANDLE_VALUE)
         win_error("Cannot create output file without overwriting an existing file: " + entry.path);
