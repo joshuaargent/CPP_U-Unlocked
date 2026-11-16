@@ -332,19 +332,6 @@ void update_input() {
         const auto slot = std::find(g_pad_slots.begin() + 1, g_pad_slots.end(), ids[i]) - g_pad_slots.begin();
         if (slot <= 0 || slot >= static_cast<ptrdiff_t>(g_pad_slots.size())) continue; // unassigned or ninth pad
         channels[slot - 1] = pro_pad(pad);
-        for (const PadButton& b : kPadButtons) {
-            if (controller_profiles::button_pressed(pad, profile, b.action)) state.buttons |= b.vpad;
-        }
-        if (axis(pad, profile, controller_profiles::AxisAction::kLeftTrigger) >= profile.trigger_threshold) {
-            state.buttons |= os::vpad::kZL;
-        }
-        if (axis(pad, profile, controller_profiles::AxisAction::kRightTrigger) >= profile.trigger_threshold) {
-            state.buttons |= os::vpad::kZR;
-        }
-        state.left_x = std::clamp(state.left_x + axis(pad, profile, controller_profiles::AxisAction::kLeftX), -1.0f, 1.0f);
-        state.left_y = std::clamp(state.left_y - axis(pad, profile, controller_profiles::AxisAction::kLeftY), -1.0f, 1.0f);
-        state.right_x = std::clamp(state.right_x + axis(pad, profile, controller_profiles::AxisAction::kRightX), -1.0f, 1.0f);
-        state.right_y = std::clamp(state.right_y - axis(pad, profile, controller_profiles::AxisAction::kRightY), -1.0f, 1.0f);
     }
     SDL_free(ids);
     for (int c = 0; pros && c < os::pro::kChannels; ++c) netplay::remote_pad(c, channels[c]);
