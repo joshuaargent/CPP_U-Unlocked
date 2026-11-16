@@ -1635,7 +1635,8 @@ private:
             "powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
             "-File", script.string(),
             "-GameDirectory", paths_[kGame].string(),
-            "-UpdateDirectory", paths_[kUpdate].string()
+            "-UpdateDirectory", paths_[kUpdate].string(),
+            "-LauncherDirectory", dir_.string()
         };
         std::vector<const char*> args;
         args.reserve(words.size() + 1);
