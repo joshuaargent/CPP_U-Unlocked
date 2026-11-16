@@ -63,6 +63,24 @@ function Resolve-TitleFolder {
     }
 }
 
+function Copy-PreservedDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+    if (-not (Test-Path -LiteralPath $Source -PathType Container)) { return }
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
+        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
+        $target = Join-Path $Destination $item.Name
+        if ($item.PSIsContainer) {
+            Copy-PreservedDirectory -Source $item.FullName -Destination $target
+        } else {
+            Copy-Item -LiteralPath $item.FullName -Destination $target -Force
+        }
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildEntry = Join-Path $repoRoot 'tools\windows\build-u-unlocked.ps1'
 $environmentSetup = Join-Path $PSScriptRoot 'setup-build-environment.ps1'
@@ -140,6 +158,27 @@ try {
             if ($file.Name -eq 'U Unlocked.exe') { continue }
             Copy-Item -LiteralPath $file.FullName -Destination $runtimeStage -Force
         }
+
+        # Rebuilding the runtime must never discard saves, online credentials,
+        # user fonts, logs, or display settings from the previous installation.
+        foreach ($name in @('save', 'online', 'fonts', 'logs')) {
+            Copy-PreservedDirectory -Source (Join-Path $runtimeTarget $name) -Destination (Join-Path $runtimeStage $name)
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $runtimeStage 'save') -PathType Container)) {
+            Copy-PreservedDirectory -Source (Join-Path $launcherRoot 'save') -Destination (Join-Path $runtimeStage 'save')
+        }
+        foreach ($name in @('online', 'fonts', 'logs')) {
+            Copy-PreservedDirectory -Source (Join-Path $launcherRoot $name) -Destination (Join-Path $runtimeStage $name)
+        }
+        $previousDisplay = Join-Path $runtimeTarget 'display.ini'
+        if (Test-Path -LiteralPath $previousDisplay -PathType Leaf) {
+            Copy-Item -LiteralPath $previousDisplay -Destination $runtimeStage -Force
+        }
+        $launcherDisplay = Join-Path $launcherRoot 'display.ini'
+        if (Test-Path -LiteralPath $launcherDisplay -PathType Leaf) {
+            Copy-Item -LiteralPath $launcherDisplay -Destination $runtimeStage -Force
+        }
+
         if (Test-Path -LiteralPath $runtimeTarget) {
             Move-Item -LiteralPath $runtimeTarget -Destination $runtimeBackup
         }
