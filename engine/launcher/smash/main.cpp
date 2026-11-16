@@ -1705,11 +1705,11 @@ private:
                 detail = "You need no game files to join. Your pads and keyboard play as one of their Pro Controllers.";
             } else if (netplay_host_) {
                 line = "Hosting: your running game accepts direct IP and VPN connections.";
-                detail = "Share your LAN/VPN address. For direct internet access, forward UDP 52700 or use a private VPN such as Tailscale. Up to 7 guests can join.";
+                detail = "Use a trusted private VPN for now. Do not expose UDP 52700 publicly until authentication and encryption are implemented.";
                 c = kGood;
             } else {
                 line = "Host: your game is streamed to up to 7 friends, who play as players 2-8.";
-                detail = "The host runs the game and streams video/audio; guests send controller inputs. Guests do not need their own game files.";
+                detail = "The host streams video/audio and receives controller inputs. Use a trusted LAN/VPN only: the current protocol has no app-level authentication or encryption.";
             }
             font_.draw(r_, x, y, fit(line, px * 0.85f, layout_.w * 0.62f), px * 0.85f, c);
             if (!detail.empty()) font_.draw(r_, x, y + H * 0.045f, fit(detail, px * 0.8f, layout_.w * 0.62f), px * 0.8f, kDim);
