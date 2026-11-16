@@ -44,6 +44,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numbers>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -1916,7 +1917,7 @@ private:
             const float ox = W * 0.5f, oy = -H * 0.35f, reach = W + H;
             const float turn = time_ * 0.02f;
             for (int i = 0; i < 24; i += 2) {
-                const float a0 = float(M_PI) * (0.08f + i / 24.0f * 0.84f) + turn, a1 = a0 + float(M_PI) * 0.84f / 24;
+                const float a0 = std::numbers::pi_v<float> * (0.08f + i / 24.0f * 0.84f) + turn, a1 = a0 + std::numbers::pi_v<float> * 0.84f / 24;
                 SDL_FPoint p[4] = {{ox, oy}, {ox + std::cos(a0) * reach, oy + std::sin(a0) * reach},
                                    {ox + std::cos(a1) * reach, oy + std::sin(a1) * reach}, {ox, oy}};
                 const Color c[4] = {{1, 1, 1, 0.0f}, {1, 1, 1, 0.22f}, {1, 1, 1, 0.22f}, {1, 1, 1, 0.0f}};
@@ -1927,7 +1928,7 @@ private:
             const Color mark{0.0f, 0.45f, 0.75f, 0.06f};
             const float r0 = er - t / 2, r1 = er + t / 2;
             for (int k = 0; k < 120; ++k) { // the ring, segment by segment, edge to edge
-                const float b0 = k / 120.0f * 2 * float(M_PI), b1 = (k + 1) / 120.0f * 2 * float(M_PI);
+                const float b0 = k / 120.0f * 2 * std::numbers::pi_v<float>, b1 = (k + 1) / 120.0f * 2 * std::numbers::pi_v<float>;
                 SDL_FPoint q[4] = {{ecx + std::cos(b0) * r1, ecy + std::sin(b0) * r1},
                                    {ecx + std::cos(b1) * r1, ecy + std::sin(b1) * r1},
                                    {ecx + std::cos(b1) * r0, ecy + std::sin(b1) * r0},
