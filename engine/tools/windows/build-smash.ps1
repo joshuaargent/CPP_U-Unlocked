@@ -26,7 +26,7 @@ $prefix = Join-Path $engineRoot 'build-deps\prefix'
 $play = Join-Path $root 'Play'
 $updateGenerated = Join-Path $root 'generated\smash'
 $baseGenerated = Join-Path $root 'generated\smash-base'
-$buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^\d+
+$buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^[0-9]+$') { [int]$env:U_UNLOCKED_BUILD_JOBS } else { 2 }
 $stbHeader = Join-Path $engineRoot 'third_party\stb\stb_truetype.h'
 if (-not (Test-Path -LiteralPath $stbHeader -PathType Leaf)) {
     $python = (Get-Command python).Source
