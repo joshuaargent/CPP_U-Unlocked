@@ -1,7 +1,7 @@
 #pragma once
 
-// Netplay's rooms (host/netplay.h) on the room server (server/worker): the launcher's list, and the check-ins
-// through which hosts list their rooms and guests are introduced to them. No game data goes through it.
+// Optional U Unlocked room-directory protocol for listing hosts and introducing guests. The service is opt-in;
+// no third-party room directory is contacted by default.
 
 #include <cstdint>
 #include <string>
@@ -9,10 +9,11 @@
 
 namespace cafe::host::netplay {
 
-// The room server (SMASH_ROOM_SERVER overrides it, e.g. http://127.0.0.1:8787 for `wrangler dev`).
-constexpr const char* kRoomServer = "https://smash4pc-online.josiahg2502.workers.dev";
-// Rooms of other versions are not listed (the stream's protocol may differ).
-constexpr const char* kRoomBuild = "smash4pc-3";
+// Set U_UNLOCKED_ROOM_SERVER to an explicitly deployed, compatible U Unlocked room directory.
+// Empty by default: direct IP / LAN / VPN connections remain available without a hosted service.
+constexpr const char* kRoomServer = "";
+// Rooms of other U Unlocked protocol builds are not listed.
+constexpr const char* kRoomBuild = "u-unlocked-1";
 constexpr int kMaxPlayers = 8;
 
 struct Room {
