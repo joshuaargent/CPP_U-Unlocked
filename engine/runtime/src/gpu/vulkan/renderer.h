@@ -468,7 +468,8 @@ private:
     // Shaders and pipelines of earlier runs, compiled before the title starts.
     void precompile();
     VkShaderModule cached_module(uint64_t glsl_hash, const std::vector<uint32_t>* spirv);
-    VkPipeline build_pipeline(const PipelineKey& k, VkShaderModule vs, VkShaderModule ps, VkPipelineLayout layout);
+    VkPipeline build_pipeline(const PipelineKey& k, VkShaderModule vs, VkShaderModule ps, VkPipelineLayout layout,
+                              VkPipelineCache worker_cache = VK_NULL_HANDLE);
     void capture();
     void save_image(const Image& image, const std::string& path, bool keep_alpha = false);
     int64_t captured_frame_ = -1; // TTT2_CAPTURE: frame number and index of the last capture
