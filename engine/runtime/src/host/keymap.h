@@ -1,8 +1,7 @@
 #pragma once
 
 // The keyboard's keys for the Wii U GamePad: the defaults, and the player's
-// own from $XDG_CONFIG_HOME/u-unlocked/keyboard.ini, which the launcher's Settings
-// write. Lines are `id = key`, `#` starts a comment (at the start of a line
+// own from $XDG_CONFIG_HOME/u-unlocked/keyboard.ini, which can be edited by the player. Lines are `id = key`, `#` starts a comment (at the start of a line
 // or after a space); a key is an SDL scancode (the USB HID usage of the key
 // at that place on the keyboard) or SDL's name for one. No SDL here: the
 // window resolves names (SDL_GetScancodeFromName), tests resolve their own.
