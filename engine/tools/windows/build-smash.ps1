@@ -77,6 +77,10 @@ $baseBuild = Join-Path $engineRoot 'build-base'
 Build-Game $BaseRpx (Join-Path $root 'generated\smash-base') $baseBuild @('smash')
 Copy-Item (Join-Path $baseBuild 'smash.exe') (Join-Path $play 'smash-base.exe')
 
+$baseCompatBuild = Join-Path $engineRoot 'build-base-compat'
+Build-Game $BaseRpx (Join-Path $root 'generated\smash-base') $baseCompatBuild @('smash') @('-DSMASH_COMPAT=ON')
+Copy-Item (Join-Path $baseCompatBuild 'smash-compat.exe') (Join-Path $play 'smash-base-compat.exe')
+
 Copy-Item (Join-Path $prefix 'bin\*.dll') $play
 New-Item -ItemType Directory -Force (Join-Path $play 'mods') | Out-Null
 $updater = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))) 'tools\windows\update-launcher.ps1'
@@ -85,7 +89,7 @@ if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
 }
 Copy-Item -LiteralPath $updater -Destination $play
 
-$requiredOutputs = @('U Unlocked.exe', 'smash.exe', 'smash-compat.exe', 'smash-base.exe', 'wua_extract.exe', 'title-logo.png')
+$requiredOutputs = @('U Unlocked.exe', 'smash.exe', 'smash-compat.exe', 'smash-base.exe', 'smash-base-compat.exe', 'wua_extract.exe', 'title-logo.png')
 $missing = @($requiredOutputs | Where-Object { -not (Test-Path -LiteralPath (Join-Path $play $_) -PathType Leaf) })
 if ($missing.Count -gt 0) {
     throw "Build finished with missing outputs: $($missing -join ', ')"
