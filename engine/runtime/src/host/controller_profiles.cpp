@@ -56,6 +56,7 @@ std::string make_json(const Profile& profile) {
     out += "{\n  \"schema_version\": " + std::to_string(kSchemaVersion);
     out += ",\n  \"name\": \"" + escape_json(profile.name) + "\"";
     out += ",\n  \"device_guid\": \"" + escape_json(profile.device_guid) + "\"";
+    out += ",\n  \"player_slot\": " + std::to_string(profile.player_slot);
     out += ",\n  \"buttons\": [";
     for (size_t i = 0; i < profile.buttons.size(); ++i) {
         if (i) out += ", ";
@@ -154,6 +155,14 @@ bool parse_float(std::string_view text, float& value) {
     value = std::strtof(copy.c_str(), &end);
     return end == copy.c_str() + copy.size() && std::isfinite(value);
 }
+bool parse_integer_field(std::string_view json, std::string_view key, int& value) {
+    const size_t pos = value_start(json, key);
+    if (pos == std::string_view::npos) return false;
+    size_t end = pos;
+    while (end < json.size() && json[end] != ',' && json[end] != '}' &&
+           json[end] != ' ' && json[end] != '\n' && json[end] != '\r' && json[end] != '\t') ++end;
+    return parse_integer(json.substr(pos, end - pos), value);
+}
 bool parse_number_field(std::string_view json, std::string_view key, float& value) {
     const size_t pos = value_start(json, key);
     if (pos == std::string_view::npos) return false;
@@ -183,8 +192,10 @@ bool parse_profile(std::string_view json, Profile& profile, std::string& error) 
     const auto bool_parser = [](std::string_view s, bool& v) { return parse_boolean(s, v); };
     const auto float_parser = [](std::string_view s, float& v) { return parse_float(s, v); };
 
+    int player_slot = -1;
     if (!parse_version(json, parsed.schema_version) || parsed.schema_version != kSchemaVersion ||
         !parse_string(json, "name", parsed.name) || !parse_string(json, "device_guid", parsed.device_guid) ||
+        !parse_integer_field(json, "player_slot", player_slot) || player_slot < -1 || player_slot > 7 ||
         !parse_array(json, "buttons", button_values, int_parser) ||
         !parse_array(json, "axes", axis_values, int_parser) ||
         !parse_array(json, "axis_inverted", parsed.axis_inverted, bool_parser) ||
@@ -195,6 +206,7 @@ bool parse_profile(std::string_view json, Profile& profile, std::string& error) 
     }
 
     if (parsed.name.empty() || parsed.name.size() > 64) { error = "Profile name must contain 1 to 64 characters."; return false; }
+    parsed.player_slot = static_cast<int8_t>(player_slot);
     for (size_t i = 0; i < button_values.size(); ++i) {
         parsed.buttons[i] = bounded_button(button_values[i]);
         if (parsed.buttons[i] == -2) { error = "Profile contains an invalid gamepad button binding."; return false; }
@@ -345,7 +357,8 @@ bool save_to_file(const std::string& guid, const Profile& profile, std::string* 
     Profile validated = profile;
     validated.device_guid = guid;
     if (validated.schema_version != kSchemaVersion || validated.name.empty() || validated.name.size() > 64 ||
-        validated.trigger_threshold < 0.05f || validated.trigger_threshold > 0.95f) {
+        validated.trigger_threshold < 0.05f || validated.trigger_threshold > 0.95f ||
+        validated.player_slot < -1 || validated.player_slot > 7) {
         if (error) *error = "Profile metadata is invalid.";
         return false;
     }

@@ -24,7 +24,8 @@
 - [x] Discover connected controllers and select a physical device to configure.
 - [x] Implement press-to-bind buttons and axes, including Escape cancellation and a 10-second timeout.
 - [x] Implement configurable stick dead zones and trigger thresholds.
-- [ ] Implement explicit per-player assignment, full calibration, saturation, and axis inversion.
+- [x] Implement explicit player-slot assignment (automatic, Wii U GamePad, and Pro Controller slots).
+- [ ] Implement full stick/trigger calibration, saturation, and axis inversion.
 - [ ] Implement a live controller test screen.
 - [ ] Implement Cemu XML import with explicit mapping translation and preview.
 - [ ] Add tests for reconnects, ambiguous device identities, and multi-controller setups.

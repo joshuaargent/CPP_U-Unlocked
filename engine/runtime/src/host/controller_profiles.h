@@ -26,12 +26,13 @@ enum class AxisAction : size_t {
 
 inline constexpr size_t kButtonCount = static_cast<size_t>(ButtonAction::kCount);
 inline constexpr size_t kAxisCount = static_cast<size_t>(AxisAction::kCount);
-inline constexpr uint32_t kSchemaVersion = 1;
+inline constexpr uint32_t kSchemaVersion = 2;
 
 struct Profile {
     uint32_t schema_version = kSchemaVersion;
     std::string name = "Default";
     std::string device_guid;
+    int8_t player_slot = -1; // -1 = automatic; 0 = GamePad; 1..7 = Pro Controller slots.
     std::array<int16_t, kButtonCount> buttons{};
     std::array<int8_t, kAxisCount> axes{};
     std::array<bool, kAxisCount> axis_inverted{};

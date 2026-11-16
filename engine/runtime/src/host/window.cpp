@@ -239,19 +239,50 @@ void assign_pad_slots(const SDL_JoystickID* ids, int count) {
     for (SDL_JoystickID& slot : g_pad_slots) {
         if (slot != 0 && slot != kGuestSlot && std::find(ids, ids + count, slot) == ids + count) slot = 0;
     }
+
+    // Explicit player-slot preferences take precedence over automatic assignment. A slot occupied
+    // by a remote player is never overwritten by a local controller.
+    for (size_t slot_index = 0; slot_index < g_pad_slots.size(); ++slot_index) {
+        SDL_JoystickID& slot = g_pad_slots[slot_index];
+        if (slot == 0 || slot == kGuestSlot) continue;
+        SDL_Gamepad* pad = SDL_GetGamepadFromID(slot);
+        if (pad == nullptr) pad = SDL_OpenGamepad(slot);
+        if (pad && controller_profiles::for_device(pad).player_slot != static_cast<int>(slot_index)) {
+            slot = 0;
+        }
+    }
+
+    for (int i = 0; i < count; ++i) {
+        SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
+        if (pad == nullptr) pad = SDL_OpenGamepad(ids[i]);
+        if (pad == nullptr) continue;
+        const int preferred = controller_profiles::for_device(pad).player_slot;
+        if (preferred < 0 || preferred >= static_cast<int>(g_pad_slots.size())) continue;
+        if (g_pad_slots[static_cast<size_t>(preferred)] == 0) {
+            g_pad_slots[static_cast<size_t>(preferred)] = ids[i];
+        }
+    }
+
     for (int i = 0; i < count; ++i) {
         if (std::find(g_pad_slots.begin(), g_pad_slots.end(), ids[i]) != g_pad_slots.end()) continue;
+        SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
+        if (pad == nullptr) pad = SDL_OpenGamepad(ids[i]);
+        if (pad == nullptr || controller_profiles::for_device(pad).player_slot >= 0) continue;
         const auto free = std::find(g_pad_slots.begin(), g_pad_slots.end(), SDL_JoystickID{0});
         if (free != g_pad_slots.end()) *free = ids[i];
     }
-    // Until the GamePad's pad presses something, the first pad that does becomes the GamePad: a device
-    // that never sends input (a virtual pad driver, a wheel) would otherwise hold it, and screens that
-    // read only the GamePad (the "Joins the Battle!" unlocks) would wait forever.
+
+    // Automatic assignments may promote the first active pad to the GamePad slot. Explicit player
+    // assignments are stable and are never silently moved to another player.
+    SDL_Gamepad* assigned_gamepad = g_pad_slots[0] && g_pad_slots[0] != kGuestSlot
+        ? SDL_GetGamepadFromID(g_pad_slots[0]) : nullptr;
+    if (assigned_gamepad && controller_profiles::for_device(assigned_gamepad).player_slot == 0) return;
     static SDL_JoystickID used = 0;
     if (g_pad_slots[0] != 0 && g_pad_slots[0] == used) return;
-    for (size_t slot = 0; slot < g_pad_slots.size(); ++slot) {
-        SDL_Gamepad* pad = g_pad_slots[slot] && g_pad_slots[slot] != kGuestSlot ? SDL_GetGamepadFromID(g_pad_slots[slot]) : nullptr;
-        if (pad == nullptr) continue;
+    for (size_t slot = 1; slot < g_pad_slots.size(); ++slot) {
+        SDL_Gamepad* pad = g_pad_slots[slot] && g_pad_slots[slot] != kGuestSlot
+            ? SDL_GetGamepadFromID(g_pad_slots[slot]) : nullptr;
+        if (pad == nullptr || controller_profiles::for_device(pad).player_slot >= 0) continue;
         bool pressed = false;
         for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT && !pressed; ++b) {
             pressed = SDL_GetGamepadButton(pad, static_cast<SDL_GamepadButton>(b));

@@ -404,7 +404,7 @@ public:
             if (int i = item_at(e.button.x, e.button.y); i >= 0) {
                 select(i);
                 const bool control_action = screen_ == Screen::kControls &&
-                    (i == 2 || i == 4 || i == 7 || i == 8 || i == 9);
+                    (i == 3 || i == 5 || i == 8 || i == 9 || i == 10);
                 if (!control_action && !items()[i].value.empty() && !folder_slot(i) && screen_ != Screen::kOnline) {
                     change(e.button.x < layout_.right_chevron - layout_.h * 0.06f ? -1 : 1);
                 } else {
@@ -620,7 +620,11 @@ private:
             text_x = std::max(w * 0.085f, h * 0.15f);
             left_chevron = text_x - h * 0.05f;
             right_chevron = text_x + std::min(w * 0.40f, h * 0.78f);
-            if (items > 4) { // the main menu: smaller, closer, above the status
+            if (items > 10) {
+                top = 0.405f;
+                step = 0.39f / float(items - 1);
+                px = 0.031f;
+            } else if (items > 4) { // the main menu: smaller, closer, above the status
                 top = 0.445f;
                 step = 0.33f / float(items - 1);
                 px = 0.040f;
@@ -715,10 +719,13 @@ private:
             const int axis = control_profile_.axes[control_axis_action_];
             const char* button_name = button >= 0 ? SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(button)) : "Unbound";
             const char* axis_name = axis >= 0 ? SDL_GetGamepadStringForAxis(static_cast<SDL_GamepadAxis>(axis)) : "Unbound";
+            const std::string player_slot = control_profile_.player_slot < 0
+                ? "Automatic" : "Player " + std::to_string(static_cast<int>(control_profile_.player_slot) + 1);
             char dead_zone[16]{}, threshold[16]{};
             std::snprintf(dead_zone, sizeof(dead_zone), "%.2f", control_profile_.dead_zones[0]);
             std::snprintf(threshold, sizeof(threshold), "%.2f", control_profile_.trigger_threshold);
             list_ = {{"CONTROLLER", device},
+                     {"PLAYER SLOT", player_slot},
                      {"BUTTON", control_button_names()[control_button_action_]},
                      {"BIND BUTTON", capture_binding_ && !capture_axis_ ? "Waiting..." : (button_name ? button_name : "Unbound")},
                      {"STICK AXIS", control_axis_names()[control_axis_action_]},
@@ -828,12 +835,17 @@ private:
         }
         if (screen_ == Screen::kControls) {
             if (selected_ == 0) select_control_device(d);
-            else if (selected_ == 1) control_button_action_ = (control_button_action_ + d + controller_profiles::kButtonCount) % controller_profiles::kButtonCount;
-            else if (selected_ == 3) control_axis_action_ = (control_axis_action_ + d + controller_profiles::kAxisCount) % controller_profiles::kAxisCount;
-            else if (selected_ == 5) {
+            else if (selected_ == 1) {
+                const int next = (static_cast<int>(control_profile_.player_slot) + 1 + d + 9) % 9;
+                control_profile_.player_slot = static_cast<int8_t>(next - 1);
+            } else if (selected_ == 2) {
+                control_button_action_ = (control_button_action_ + d + controller_profiles::kButtonCount) % controller_profiles::kButtonCount;
+            } else if (selected_ == 4) {
+                control_axis_action_ = (control_axis_action_ + d + controller_profiles::kAxisCount) % controller_profiles::kAxisCount;
+            } else if (selected_ == 6) {
                 const float next = std::clamp(control_profile_.dead_zones[0] + d * 0.05f, 0.0f, 0.9f);
                 for (size_t i = 0; i < 4; ++i) control_profile_.dead_zones[i] = next;
-            } else if (selected_ == 6) {
+            } else if (selected_ == 7) {
                 control_profile_.trigger_threshold = std::clamp(control_profile_.trigger_threshold + d * 0.05f, 0.05f, 0.95f);
             }
             return;
@@ -892,7 +904,7 @@ private:
             break;
         case Screen::kControls:
             switch (selected_) {
-            case 2:
+            case 3:
                 if (selected_control_gamepad()) {
                     capture_axis_ = false;
                     capture_binding_ = true;
@@ -900,7 +912,7 @@ private:
                     controls_status_ = "Press the physical button on the selected controller within 10 seconds. Escape cancels.";
                 } else controls_status_ = "Connect a controller before binding inputs.";
                 break;
-            case 4:
+            case 5:
                 if (selected_control_gamepad()) {
                     capture_axis_ = true;
                     capture_binding_ = true;
@@ -908,7 +920,7 @@ private:
                     controls_status_ = "Move the desired stick or trigger axis within 10 seconds. Escape cancels.";
                 } else controls_status_ = "Connect a controller before binding inputs.";
                 break;
-            case 7: {
+            case 8: {
                 std::string error;
                 if (SDL_Gamepad* pad = selected_control_gamepad()) {
                     if (controller_profiles::save_for_device(pad, control_profile_, &error)) controls_status_ = "Controller profile saved.";
@@ -916,12 +928,12 @@ private:
                 } else controls_status_ = "Connect a controller before saving its profile.";
                 break;
             }
-            case 8:
+            case 9:
                 control_profile_ = controller_profiles::default_profile();
                 if (SDL_Gamepad* pad = selected_control_gamepad()) control_profile_.device_guid = controller_profiles::device_info(pad).guid;
                 controls_status_ = "Default bindings restored. Save to keep them.";
                 break;
-            case 9: back(); break;
+            case 10: back(); break;
             default: change(1); break;
             }
             break;

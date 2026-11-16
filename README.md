@@ -51,7 +51,7 @@ Controller setup should be straightforward, settings should explain what they ch
 
 ## Current status
 
-The native runtime and Windows build foundation are now part of this repository. The launcher has an initial Controls page with physical button and axis capture and per-device JSON profile persistence. This code has not yet been compiled or tested on the target laptop.
+The native runtime and Windows build foundation are now part of this repository. The launcher has an initial Controls page with physical button and axis capture, player-slot assignment, and per-device JSON profile persistence. This code has not yet been compiled or tested on the target laptop.
 
 The initial target machine is an HP EliteBook 640 G9 provisionally identified as an Intel Core i5 model with Intel Iris Xe graphics and 16 GB RAM. The exact CPU model and Vulkan driver capabilities still need to be confirmed on the target machine. Defaults will be based on runtime detection and measured performance rather than the laptop model name.
 
