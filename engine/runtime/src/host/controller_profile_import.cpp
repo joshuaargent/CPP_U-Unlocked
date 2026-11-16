@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <initializer_list>
@@ -34,15 +35,25 @@ bool parse_float(const tinyxml2::XMLElement* parent, const char* child_name, flo
     if (!parent) return false;
     const tinyxml2::XMLElement* child = parent->FirstChildElement(child_name);
     if (!child || !child->GetText()) return false;
+    const char* raw = child->GetText();
     char* end = nullptr;
-    value = std::strtof(child->GetText(), &end);
-    return end != child->GetText() && *end == '\0' && std::isfinite(value);
+    const float parsed = std::strtof(raw, &end);
+    if (end == raw) return false;
+    while (*end && std::isspace(static_cast<unsigned char>(*end))) ++end;
+    if (*end != '\0' || !std::isfinite(parsed)) return false;
+    value = parsed;
+    return true;
 }
 
 std::string element_text(const tinyxml2::XMLElement* parent, const char* child_name) {
     if (!parent) return {};
     const tinyxml2::XMLElement* child = parent->FirstChildElement(child_name);
-    return child && child->GetText() ? child->GetText() : std::string{};
+    if (!child || !child->GetText()) return {};
+    std::string value = child->GetText();
+    const auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
+    const auto first = std::find_if_not(value.begin(), value.end(), is_space);
+    const auto last = std::find_if_not(value.rbegin(), value.rend(), is_space).base();
+    return first < last ? std::string(first, last) : std::string{};
 }
 
 bool equal_guid(std::string_view lhs, std::string_view rhs) {
@@ -374,14 +385,12 @@ bool import_cemu_profile_xml(std::string_view xml,
     apply_dead_zone("rotation", {AxisAction::kRightX, AxisAction::kRightY});
     apply_dead_zone("trigger", {AxisAction::kLeftTrigger, AxisAction::kRightTrigger});
 
-    const char* rumble = selected_controller->FirstChildElement("rumble")
-        ? selected_controller->FirstChildElement("rumble")->GetText() : nullptr;
-    if (rumble && std::strtof(rumble, nullptr) > 0.0f) {
+    float rumble = 0.0f;
+    if (parse_float(selected_controller, "rumble", rumble) && rumble > 0.0f) {
         warning(report, "Cemu rumble strength is not imported; configure vibration separately.");
     }
-    const char* motion = selected_controller->FirstChildElement("motion")
-        ? selected_controller->FirstChildElement("motion")->GetText() : nullptr;
-    if (motion && std::string_view(motion) == "true") {
+    const std::string motion = element_text(selected_controller, "motion");
+    if (motion == "true" || motion == "1") {
         warning(report, "Cemu motion settings are not imported.");
     }
 

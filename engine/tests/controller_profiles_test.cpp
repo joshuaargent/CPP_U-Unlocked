@@ -59,13 +59,17 @@ int main() {
 
     const std::string cemu_xml = R"xml(
 <emulated_controller>
-  <type>Wii U Pro Controller</type>
-  <profile>Xbox Layout</profile>
+  <type>
+    Wii U Pro Controller
+  </type>
+  <profile> Xbox Layout </profile>
   <controller>
     <api>SDLController</api>
     <uuid>0_030000005e0400008e02000000000000</uuid>
     <display_name>Xbox Controller</display_name>
-    <axis><deadzone>0.18</deadzone><range>1.0</range></axis>
+    <axis><deadzone>
+      0.18
+    </deadzone><range>1.0</range></axis>
     <rotation><deadzone>0.22</deadzone><range>1.0</range></rotation>
     <trigger><deadzone>0.05</deadzone><range>1.0</range></trigger>
     <rumble>0.5</rumble>
