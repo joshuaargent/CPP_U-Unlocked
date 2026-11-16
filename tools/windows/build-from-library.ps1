@@ -10,7 +10,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$UpdateDirectory,
 
-    [string]$LogDirectory
+    [string]$LogDirectory,
+
+    [string]$LauncherDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -120,6 +122,37 @@ try {
     })
     if ($missing.Count -gt 0) {
         throw "Build returned without all required files. Missing: $($missing -join ', ')."
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
+        $launcherRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
+        if (-not (Test-Path -LiteralPath $launcherRoot -PathType Container)) {
+            throw "Launcher directory does not exist: $launcherRoot"
+        }
+        $runtimeStage = Join-Path $launcherRoot '.runtime-staging'
+        $runtimeTarget = Join-Path $launcherRoot 'runtime'
+        $runtimeBackup = Join-Path $launcherRoot '.runtime-previous'
+        foreach ($temporaryPath in @($runtimeStage, $runtimeBackup)) {
+            if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Recurse -Force }
+        }
+        New-Item -ItemType Directory -Force -Path $runtimeStage | Out-Null
+        foreach ($file in Get-ChildItem -LiteralPath $playDirectory -File) {
+            if ($file.Name -eq 'U Unlocked.exe') { continue }
+            Copy-Item -LiteralPath $file.FullName -Destination $runtimeStage -Force
+        }
+        if (Test-Path -LiteralPath $runtimeTarget) {
+            Move-Item -LiteralPath $runtimeTarget -Destination $runtimeBackup
+        }
+        try {
+            Move-Item -LiteralPath $runtimeStage -Destination $runtimeTarget
+        } catch {
+            if (Test-Path -LiteralPath $runtimeBackup) {
+                Move-Item -LiteralPath $runtimeBackup -Destination $runtimeTarget
+            }
+            throw
+        }
+        if (Test-Path -LiteralPath $runtimeBackup) { Remove-Item -LiteralPath $runtimeBackup -Recurse -Force }
+        Write-Host "Local game runtime activated: $runtimeTarget" -ForegroundColor Green
     }
 
     Write-Host "Build verified. Launcher: $(Join-Path $playDirectory 'U Unlocked.exe')" -ForegroundColor Green
