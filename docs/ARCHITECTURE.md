@@ -39,7 +39,7 @@ The existing native game runtime and static recompilation implementation are con
 
 - Keep application updates separate from the user's game update dump and generated game runtime.
 - The Windows launcher checks stable releases through the GitHub releases API; the beta channel checks the newest published release, including prereleases.
-- Release packages contain only the launcher executable, its DLL dependencies, the updater helper, documentation, and licence notices. They do not contain game data or user configuration.
+- Release packages contain the launcher executable, its project-owned title-logo.png asset, the bounded WUA extractor, DLL dependencies, updater helper, documentation, and licence notices. They do not contain game data or user configuration.
 - The package includes a versioned manifest with per-file SHA-256 hashes. The release also publishes a SHA-256 sidecar; the updater verifies the archive and every installed binary before changing the installation.
 - Extract only explicitly allow-listed root-level launcher files. Reject traversal paths, duplicate entries, symlinks, excessive archive size, and manifest entries outside the allow-list.
 - Stage files beside the installation, back up replaced launcher files, preserve game files/mods/saves/settings, and restore the previous binaries if replacement or relaunch fails.
