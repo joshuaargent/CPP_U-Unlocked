@@ -164,7 +164,7 @@ try {
     foreach($file in $files) {
         $name=[string]$file.name
         $hash=[string]$file.sha256
-        $allowed=$name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|[A-Za-z0-9_.+-]+[.]dll)
+        $allowed = $name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|[A-Za-z0-9_.+-]+[.]dll)$'
         if(-not $allowed -or $name.Contains('..') -or -not $seen.Add($name) -or $hash -notmatch '^[0-9a-fA-F]{64}$') {
             throw "Invalid file in update manifest: $name"
         }
