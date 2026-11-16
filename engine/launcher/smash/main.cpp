@@ -389,6 +389,14 @@ public:
     bool game_running() const { return process_ != nullptr; }
     bool installing() const { return installing_; }
 
+    ~Launcher() {
+        shutting_down_.store(true, std::memory_order_release);
+        room_watch_enabled_.store(false, std::memory_order_release);
+        if (rooms_thread_.joinable()) rooms_thread_.join();
+        if (install_thread_.joinable()) install_thread_.join();
+        if (sign_in_thread_.joinable()) sign_in_thread_.join();
+    }
+
     void event(SDL_Event& e) {
         SDL_ConvertEventToRenderCoordinates(r_, &e);
         if (capture_binding_) {
@@ -985,6 +993,7 @@ private:
         selected_ = (selected_ + d + n) % n;
     }
     void go(Screen s) {
+        room_watch_enabled_.store(s == Screen::kNetplay, std::memory_order_release);
         if (s == Screen::kNetplay) watch_rooms();
         screen_ = s;
         selected_ = 0;
@@ -1253,19 +1262,36 @@ private:
         installing_ = true;
         mod_ok_ = true;
         mod_status_ = "Installing " + fs::u8path(source).filename().string() + "...";
-        std::thread([this, source, mods = dir_ / "mods"] {
-            Installed result = install_mod(fs::u8path(source), mods);
-            std::lock_guard lock(install_mutex_);
-            install_result_ = std::move(result);
-            install_done_ = true;
-        }).detach();
+        try {
+            install_thread_ = std::thread([this, source, mods = dir_ / "mods"] {
+                Installed result;
+                try {
+                    result = install_mod(fs::u8path(source), mods);
+                } catch (const std::exception& error) {
+                    result = {false, std::string("Mod installation failed: ") + error.what()};
+                } catch (...) {
+                    result = {false, "Mod installation failed because of an unknown error."};
+                }
+                std::lock_guard lock(install_mutex_);
+                install_result_ = std::move(result);
+                install_done_ = true;
+            });
+        } catch (const std::exception& error) {
+            installing_ = false;
+            mod_ok_ = false;
+            mod_status_ = std::string("Could not start mod installation: ") + error.what();
+        }
     }
 
     void finish_install() {
-        Installed r;
         {
             std::lock_guard lock(install_mutex_);
             if (!install_done_) return;
+        }
+        if (install_thread_.joinable()) install_thread_.join();
+        Installed r;
+        {
+            std::lock_guard lock(install_mutex_);
             install_done_ = false;
             r = std::move(install_result_);
         }
@@ -1349,19 +1375,25 @@ private:
     // The room list, asked for every three seconds while the Netplay page shows.
     void watch_rooms() {
         if (rooms_thread_.joinable()) return;
-        rooms_thread_ = std::thread([this] {
-            while (!quit_) {
-                if (screen_ == Screen::kNetplay) {
-                    std::vector<cafe::host::netplay::Room> rooms;
-                    const bool reached = cafe::host::netplay::list_rooms(rooms);
-                    std::lock_guard lock(rooms_mutex_);
-                    rooms_reached_ = reached;
-                    if (reached) rooms_ = rooms;
+        try {
+            rooms_thread_ = std::thread([this] {
+                while (!shutting_down_.load(std::memory_order_acquire)) {
+                    if (room_watch_enabled_.load(std::memory_order_acquire)) {
+                        std::vector<cafe::host::netplay::Room> rooms;
+                        const bool reached = cafe::host::netplay::list_rooms(rooms);
+                        std::lock_guard lock(rooms_mutex_);
+                        rooms_reached_ = reached;
+                        if (reached) rooms_ = std::move(rooms);
+                    }
+                    for (int i = 0; i < 30 && !shutting_down_.load(std::memory_order_acquire); ++i) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    }
                 }
-                for (int i = 0; i < 30 && !quit_; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-        });
-        rooms_thread_.detach();
+            });
+        } catch (const std::exception&) {
+            std::lock_guard lock(rooms_mutex_);
+            rooms_reached_ = false;
+        }
     }
 
     void launch_guest(const std::string& target) {
@@ -1964,22 +1996,42 @@ private:
         signing_in_ = true;
         online_status_ = "Signing in to Pretendo...";
         online_ok_ = true;
-        std::thread([this, user = user_, password = password_] {
-            act_server::SignIn r = act_server::sign_in(user, password);
-            std::lock_guard lock(sign_in_mutex_);
-            sign_in_result_ = std::move(r);
-            sign_in_done_ = true;
-        }).detach();
-        password_.assign(password_.size(), '\0');
+        const std::string user = user_;
+        std::string password = std::move(password_);
         password_.clear();
+        try {
+            sign_in_thread_ = std::thread([this, user, password = std::move(password)] {
+                act_server::SignIn result;
+                try {
+                    result = act_server::sign_in(user, password);
+                } catch (const std::exception& error) {
+                    result.message = std::string("Sign-in failed: ") + error.what();
+                } catch (...) {
+                    result.message = "Sign-in failed because of an unknown error.";
+                }
+                std::lock_guard lock(sign_in_mutex_);
+                sign_in_result_ = std::move(result);
+                sign_in_done_ = true;
+            });
+        } catch (const std::exception& error) {
+            std::lock_guard lock(sign_in_mutex_);
+            sign_in_result_.message = std::string("Could not start sign-in: ") + error.what();
+            sign_in_done_ = true;
+        }
+        password.assign(password.size(), '\0');
+        password.clear();
     }
 
     // The sign-in's result, on the launcher's thread: account.dat, or why not.
     void finish_sign_in() {
-        act_server::SignIn r;
         {
             std::lock_guard lock(sign_in_mutex_);
             if (!sign_in_done_) return;
+        }
+        if (sign_in_thread_.joinable()) sign_in_thread_.join();
+        act_server::SignIn r;
+        {
+            std::lock_guard lock(sign_in_mutex_);
             sign_in_done_ = false;
             r = std::move(sign_in_result_);
         }
@@ -2271,18 +2323,22 @@ private:
     bool mod_dialog_ = false, installing_ = false, mod_ok_ = true, install_done_ = false;
     std::string mod_status_;
     std::mutex install_mutex_;
+    std::thread install_thread_;
     Installed install_result_;
     int editing_ = -1; // the field being typed in
     // Netplay.
     bool netplay_host_ = false;
     std::string netplay_name_, netplay_address_;
     std::thread rooms_thread_;
+    std::atomic<bool> shutting_down_{false};
+    std::atomic<bool> room_watch_enabled_{false};
     std::mutex rooms_mutex_;
     std::vector<cafe::host::netplay::Room> rooms_;
     bool rooms_reached_ = false;
     std::vector<SDL_FRect> online_rects_; // each Online row's box, for the mouse
     std::string user_, password_, online_status_;
     std::mutex sign_in_mutex_;
+    std::thread sign_in_thread_;
     bool sign_in_done_ = false;
     act_server::SignIn sign_in_result_;
 };
