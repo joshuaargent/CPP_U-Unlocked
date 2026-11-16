@@ -10,6 +10,7 @@
 #include "host/controller_profiles.h"
 #include "host/display_settings.h"
 #include "host/rooms.h"
+#include "host/http.h"
 #include "os/act_server.h"
 #include "os/online_identity.h"
 #include "host/paint.h" // before the stb_truetype implementation below
@@ -37,6 +38,8 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
+#include <exception>
 #include <cctype>
 #include <cstdlib>
 #include <cmath>
@@ -362,6 +365,70 @@ void secure_erase(std::string& value) {
     value.clear();
 }
 
+struct AppUpdateCheck {
+    bool ok = false;
+    bool available = false;
+    std::string version;
+    std::string release_url;
+    std::string message;
+};
+
+std::string json_string_field(std::string_view json, std::string_view key) {
+    const std::string needle = "\"" + std::string(key) + "\"";
+    const size_t key_pos = json.find(needle);
+    if (key_pos == std::string_view::npos) return {};
+    const size_t colon = json.find(':', key_pos + needle.size());
+    if (colon == std::string_view::npos) return {};
+    size_t pos = colon + 1;
+    while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos]))) ++pos;
+    if (pos >= json.size() || json[pos++] != '"') return {};
+    std::string value;
+    while (pos < json.size()) {
+        const char c = json[pos++];
+        if (c == '"') return value;
+        if (c == '\\') {
+            if (pos >= json.size()) return {};
+            const char escaped = json[pos++];
+            if (escaped == '"' || escaped == '\\' || escaped == '/') value.push_back(escaped);
+            else if (escaped == 'n') value.push_back('\n');
+            else if (escaped == 'r') value.push_back('\r');
+            else if (escaped == 't') value.push_back('\t');
+            else return {};
+        } else if (static_cast<unsigned char>(c) >= 0x20) {
+            value.push_back(c);
+        } else {
+            return {};
+        }
+    }
+    return {};
+}
+
+std::array<int, 3> numeric_version(std::string version) {
+    if (!version.empty() && (version.front() == 'v' || version.front() == 'V')) version.erase(version.begin());
+    const size_t suffix = version.find_first_of("-+");
+    if (suffix != std::string::npos) version.resize(suffix);
+    std::array<int, 3> parts{};
+    size_t start = 0;
+    for (size_t i = 0; i < parts.size(); ++i) {
+        const size_t end = i + 1 == parts.size() ? version.size() : version.find('.', start);
+        if (end == std::string::npos || end <= start) return {};
+        const auto parsed = std::from_chars(version.data() + start, version.data() + end, parts[i]);
+        if (parsed.ec != std::errc{} || parsed.ptr != version.data() + end || parts[i] < 0) return {};
+        start = end + 1;
+    }
+    return parts;
+}
+
+bool is_newer_release(const std::string& latest, const std::string& current) {
+    const auto a = numeric_version(latest);
+    const auto b = numeric_version(current);
+    if (a == std::array<int, 3>{} || b == std::array<int, 3>{}) return false;
+    if (a != b) return a > b;
+    const bool current_development = current.find("-dev") != std::string::npos;
+    const bool latest_stable = latest.find_first_of("-+") == std::string::npos;
+    return current_development && latest_stable;
+}
+
 // ------------------------------------------------------------------ the launcher
 
 enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay, kControls, kControlTest, kLibrary, kUpdates, kDiagnostics };
@@ -387,6 +454,7 @@ public:
         if (auto it = ini.find("netplay_host"); it != ini.end()) netplay_host_ = it->second == "yes";
         if (auto it = ini.find("netplay_name"); it != ini.end()) netplay_name_ = it->second;
         if (auto it = ini.find("netplay_address"); it != ini.end()) netplay_address_ = it->second;
+        if (auto it = ini.find("update_channel"); it != ini.end() && it->second == "beta") update_channel_ = "beta";
         online::load(dir_ / "online");
         refresh();
         font_.open({dir_ / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/segoeui.ttf",
@@ -403,6 +471,7 @@ public:
         if (rooms_thread_.joinable()) rooms_thread_.join();
         if (install_thread_.joinable()) install_thread_.join();
         if (sign_in_thread_.joinable()) sign_in_thread_.join();
+        if (update_check_thread_.joinable()) update_check_thread_.join();
     }
 
     void event(SDL_Event& e) {
@@ -548,6 +617,7 @@ public:
         }
         finish_sign_in();
         finish_install();
+        finish_launcher_update_check();
         if (!done) return;
         SDL_SetWindowTitle(window_, "U Unlocked");
         if (cemu_dialog_) {
@@ -769,9 +839,14 @@ private:
                      {"BACK"}};
             break;
         case Screen::kUpdates:
-            list_ = {{"INSTALLED UPDATE", valid_[kUpdate] ? "Version " + std::to_string(update_version_) : "Not installed"},
-                     {"SELECT UPDATE FOLDER", "Choose a valid update dump"},
-                     {"REMOVE UPDATE", valid_[kUpdate] ? "Remove configured update" : "Nothing to remove"},
+            list_ = {{"APPLICATION VERSION", kVersion},
+                     {"UPDATE CHANNEL", update_channel_ == "stable" ? "Stable" : "Beta"},
+                     {"CHECK FOR APPLICATION UPDATES", update_status_},
+                     {"INSTALL APPLICATION UPDATE", update_available_ ? update_release_version_ : "No update ready"},
+                     {"OPEN RELEASE PAGE", update_release_url_.empty() ? "Not available" : "Open GitHub release"},
+                     {"INSTALLED GAME UPDATE", valid_[kUpdate] ? "Version " + std::to_string(update_version_) : "Not installed"},
+                     {"SELECT GAME UPDATE FOLDER", "Choose a valid update dump"},
+                     {"REMOVE GAME UPDATE", valid_[kUpdate] ? "Remove configured update" : "Nothing to remove"},
                      {"BACK"}};
             break;
         case Screen::kDiagnostics: {
@@ -1004,6 +1079,7 @@ private:
         room_watch_enabled_.store(s == Screen::kNetplay, std::memory_order_release);
         if (s == Screen::kNetplay) watch_rooms();
         screen_ = s;
+        if (s == Screen::kUpdates) check_launcher_updates();
         selected_ = 0;
         selection_y_ = 0;
         fade_ = 0;
@@ -1052,6 +1128,15 @@ private:
         }
         if (screen_ == Screen::kNetplay && selected_ == kHostSwitch) {
             netplay_host_ = !netplay_host_;
+            save_launcher_ini();
+            return;
+        }
+        if (screen_ == Screen::kUpdates && selected_ == 1) {
+            update_channel_ = update_channel_ == "stable" ? "beta" : "stable";
+            update_status_ = "Not checked";
+            update_available_ = false;
+            update_release_version_.clear();
+            update_release_url_.clear();
             save_launcher_ini();
             return;
         }
@@ -1112,13 +1197,18 @@ private:
             } else back();
             break;
         case Screen::kUpdates:
-            if (selected_ == 1) choose_folder(kUpdate);
-            else if (selected_ == 2) {
+            if (selected_ == 1) change(1);
+            else if (selected_ == 2) check_launcher_updates();
+            else if (selected_ == 3) install_launcher_update();
+            else if (selected_ == 4) {
+                if (!update_release_url_.empty() && update_release_url_.starts_with("https://")) SDL_OpenURL(update_release_url_.c_str());
+            } else if (selected_ == 6) choose_folder(kUpdate);
+            else if (selected_ == 7) {
                 paths_[kUpdate].clear();
                 asked_[kUpdate] = true;
                 save_launcher_ini();
                 refresh();
-            } else back();
+            } else if (selected_ == 8) back();
             break;
         case Screen::kDiagnostics:
             if (selected_ == 10) {
@@ -1499,7 +1589,117 @@ private:
                "# (0005000C10144F00) folders, as chosen in the menu. Only the game is needed.\n";
         for (int s = 0; s < kSlots; ++s) out << kSlotKeys[s] << " = " << paths_[s].string() << "\n";
         out << "netplay_host = " << (netplay_host_ ? "yes" : "no") << "\nnetplay_name = " << netplay_name_
-            << "\nnetplay_address = " << netplay_address_ << "\n";
+            << "\nnetplay_address = " << netplay_address_ << "\nupdate_channel = " << update_channel_ << "\n";
+    }
+
+    void check_launcher_updates() {
+        if (update_checking_) return;
+        if (update_check_thread_.joinable()) update_check_thread_.join();
+        update_checking_ = true;
+        update_status_ = "Checking GitHub releases...";
+        update_available_ = false;
+        update_release_version_.clear();
+        update_release_url_.clear();
+        try {
+            const std::string channel = update_channel_;
+            update_check_thread_ = std::thread([this, channel] {
+                AppUpdateCheck result;
+                try {
+                    const std::string endpoint = channel == "beta"
+                        ? "https://api.github.com/repos/joshuaargent/CPP_U-Unlocked/releases?per_page=1"
+                        : "https://api.github.com/repos/joshuaargent/CPP_U-Unlocked/releases/latest";
+                    const auto response = cafe::host::http_request(
+                        "GET", endpoint,
+                        {"Accept: application/vnd.github+json", "User-Agent: U-Unlocked-Updater",
+                         "X-GitHub-Api-Version: 2022-11-28"},
+                        {});
+                    if (response.status != 200) {
+                        result.message = response.error.empty()
+                            ? "GitHub returned HTTP " + std::to_string(response.status)
+                            : response.error;
+                    } else {
+                        result.version = json_string_field(response.body, "tag_name");
+                        result.release_url = json_string_field(response.body, "html_url");
+                        if (result.version.empty() || result.release_url.empty() ||
+                            !result.release_url.starts_with("https://github.com/")) {
+                            result.message = "GitHub returned an invalid release record.";
+                        } else {
+                            result.ok = true;
+                            result.available = is_newer_release(result.version, kVersion);
+                            result.message = result.available
+                                ? "Version " + result.version + " is available"
+                                : "You're up to date";
+                        }
+                    }
+                } catch (const std::exception& error) {
+                    result.message = std::string("Update check failed: ") + error.what();
+                } catch (...) {
+                    result.message = "Update check failed because of an unknown error.";
+                }
+                std::lock_guard lock(update_check_mutex_);
+                update_check_result_ = std::move(result);
+                update_check_done_ = true;
+            });
+        } catch (const std::exception& error) {
+            update_checking_ = false;
+            update_status_ = std::string("Could not start update check: ") + error.what();
+        }
+    }
+
+    void finish_launcher_update_check() {
+        {
+            std::lock_guard lock(update_check_mutex_);
+            if (!update_check_done_) return;
+        }
+        if (update_check_thread_.joinable()) update_check_thread_.join();
+        AppUpdateCheck result;
+        {
+            std::lock_guard lock(update_check_mutex_);
+            update_check_done_ = false;
+            result = std::move(update_check_result_);
+        }
+        update_checking_ = false;
+        update_available_ = result.ok && result.available;
+        update_status_ = result.message.empty() ? "Update check unavailable" : result.message;
+        if (result.ok) {
+            update_release_version_ = std::move(result.version);
+            update_release_url_ = std::move(result.release_url);
+        }
+    }
+
+    void install_launcher_update() {
+        if (!update_available_) {
+            update_status_ = "Check for updates first";
+            return;
+        }
+#ifdef _WIN32
+        const fs::path updater = dir_ / "update-launcher.ps1";
+        std::error_code ec;
+        if (!fs::is_regular_file(updater, ec)) {
+            update_status_ = "Updater missing. Reinstall the launcher package.";
+            return;
+        }
+        const std::string updater_path = updater.string();
+        const std::string install_path = dir_.string();
+        const std::string version = kVersion;
+        const std::string channel = update_channel_;
+        const std::string process_id = std::to_string(GetCurrentProcessId());
+        const char* args[] = {
+            "powershell.exe", "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass",
+            "-File", updater_path.c_str(), "-InstallDirectory", install_path.c_str(),
+            "-CurrentVersion", version.c_str(), "-Channel", channel.c_str(),
+            "-ParentProcessId", process_id.c_str(), nullptr
+        };
+        SDL_Process* process = SDL_CreateProcess(args, false);
+        if (!process) {
+            update_status_ = std::string("Could not start updater: ") + SDL_GetError();
+            return;
+        }
+        SDL_DestroyProcess(process);
+        quit_ = true;
+#else
+        update_status_ = "Automatic updates are currently supported on Windows only.";
+#endif
     }
 
     // Shortened with "..." in the middle to fit `width`.
@@ -2354,6 +2554,16 @@ private:
     std::thread sign_in_thread_;
     bool sign_in_done_ = false;
     act_server::SignIn sign_in_result_;
+    std::thread update_check_thread_;
+    std::mutex update_check_mutex_;
+    bool update_check_done_ = false;
+    bool update_checking_ = false;
+    bool update_available_ = false;
+    std::string update_channel_ = "stable";
+    std::string update_status_ = "Not checked";
+    std::string update_release_version_;
+    std::string update_release_url_;
+    AppUpdateCheck update_check_result_;
 };
 
 } // namespace
