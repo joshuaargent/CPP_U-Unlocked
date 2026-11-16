@@ -203,7 +203,17 @@ constexpr size_t kMaxQueuedRetirements = 256;
 
 void retire_later(const Retirement& r) {
     std::unique_lock lock(g_retire_mutex);
-    g_retire_cv.wait(lock, [] { return g_retire_queue.size() < kMaxQueuedRetirements; });
+    if (g_retire_queue.size() >= kMaxQueuedRetirements) {
+        static const bool trace_pressure = std::getenv("TTT2_TRACE_PACING") != nullptr;
+        const auto started = std::chrono::steady_clock::now();
+        g_retire_cv.wait(lock, [] { return g_retire_queue.size() < kMaxQueuedRetirements; });
+        if (trace_pressure) {
+            const double waited_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - started).count();
+            std::fprintf(stderr, "ttt2: GPU retirement queue back-pressure: %.2f ms (capacity %zu)\n",
+                         waited_ms, kMaxQueuedRetirements);
+        }
+    }
     g_retire_queue.push_back(r);
     lock.unlock();
     g_retire_cv.notify_one();
@@ -641,7 +651,17 @@ void start() {
 
 uint64_t submit(uint32_t buffer, uint32_t words) {
     std::unique_lock lock(g_queue_mutex);
-    g_queue_cv.wait(lock, [] { return g_queue.size() < kMaxQueuedSubmissions; });
+    if (g_queue.size() >= kMaxQueuedSubmissions) {
+        static const bool trace_pressure = std::getenv("TTT2_TRACE_PACING") != nullptr;
+        const auto started = std::chrono::steady_clock::now();
+        g_queue_cv.wait(lock, [] { return g_queue.size() < kMaxQueuedSubmissions; });
+        if (trace_pressure) {
+            const double waited_ms = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - started).count();
+            std::fprintf(stderr, "ttt2: GPU submission queue back-pressure: %.2f ms (capacity %zu)\n",
+                         waited_ms, kMaxQueuedSubmissions);
+        }
+    }
     const uint64_t timestamp = ++g_submitted;
     g_queue.push_back({buffer, words, timestamp});
     lock.unlock();
