@@ -24,7 +24,14 @@ jobs:
       - name: Install SDL3
         shell: pwsh
         run: |
-          & "$env:VCPKG_ROOT/vcpkg.exe" install sdl3:x64-windows
+          $vcpkgRoot = $env:VCPKG_INSTALLATION_ROOT
+          if ([string]::IsNullOrWhiteSpace($vcpkgRoot)) {
+            $vcpkgCommand = Get-Command vcpkg.exe -ErrorAction Stop
+            $vcpkgRoot = Split-Path $vcpkgCommand.Source
+          }
+          $env:VCPKG_ROOT = $vcpkgRoot
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows
 
       - name: Configure controller test target
         shell: pwsh
