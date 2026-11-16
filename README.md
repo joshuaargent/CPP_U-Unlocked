@@ -87,10 +87,9 @@ No Nintendo game data, keys, console files, user saves, or generated recompiled 
 ### Requirements
 
 - 64-bit Windows 10 or Windows 11.
-- Git and Python 3.
+- Windows Package Manager (`winget`) and an internet connection for the first local build. The build bootstrap installs pinned compiler/build utilities and Python automatically.
 - Approximately 16 GB RAM for a full native build; more memory and free disk space provide additional headroom.
 - A Vulkan 1.3-capable graphics driver.
-- The Windows toolchain: llvm-mingw, Ninja, and CMake.
 - Your own legally obtained Super Smash Bros. for Wii U game dump.
 
 ### Get the source
@@ -102,22 +101,7 @@ git clone https://github.com/joshuaargent/CPP_U-Unlocked.git
 cd CPP_U-Unlocked
 ```
 
-Place the `toolchain\` directory beside `engine\`:
-
-```text
-CPP_U-Unlocked\
-  toolchain\
-    llvm-mingw\
-    Ninja\
-    CMake\
-  engine\
-    CMakeLists.txt
-    runtime\
-    recomp\
-    third_party\
-  docs\
-  tools\
-```
+The first build bootstraps the pinned Windows toolchain into the local `toolchain\` directory. The setup uses the official llvm-mingw release archive with a checked SHA-256 digest, plus version-pinned CMake, Ninja, and Python packages. Pinned third-party source revisions are fetched as immutable GitHub commit archives; Git is not required for the local build kit.
 
 ### Game files
 
@@ -139,9 +123,9 @@ Run the library build entry point from the repository root, using the same separ
 .\tools\windows\build-from-library.ps1 -GameDirectory '<extracted base-game folder>' -UpdateDirectory '<extracted update folder>'
 ```
 
-The script validates each folder's `code\app.xml` title ID and `code\cross_f.rpx` before starting. It records a timestamped build log under `%LOCALAPPDATA%\U Unlocked\BuildLogs`, verifies the four resulting game executables and launcher, and writes the completed build to `Play\`. The lower-level `build-u-unlocked.ps1` entry point remains available when RPX file paths are already known.
+The script validates each folder's `code\app.xml` title ID and `code\cross_f.rpx` before starting. It bootstraps the compiler/build tools, fetches pinned third-party sources, records a timestamped build log under `%LOCALAPPDATA%\U Unlocked\BuildLogs`, builds the Vulkan runtime and all four CPU/game variants, verifies every executable, and writes the completed build to `Play\`. The launcher now exposes **BUILD RUNTIME** and automatically starts this workflow from **PLAY** when the required executable is missing. The lower-level `build-u-unlocked.ps1` entry point remains available when RPX file paths are already known.
 
-This workflow currently requires a complete source checkout and the Windows toolchain described above. The launcher-only ZIP does not yet contain that source/toolchain or run this workflow itself; integrating the build kit and first-run launcher handoff is still a release blocker. Do not distribute generated game code or executables built from user game files.
+The release packager now embeds a clean source-only build kit beside the launcher. It contains no Nintendo game data, keys, generated game code, or game executables. The build kit uses the selected local game/update RPX files and keeps all generated game-specific output on this PC. The existing `v0.1.0-dev` launcher-only ZIP predates this integration; a new release must be built and validated before users receive the new workflow. Do not distribute generated game code or executables built from user game files.
 
 ### Package the launcher for a release
 
