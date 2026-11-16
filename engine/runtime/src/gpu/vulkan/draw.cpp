@@ -680,8 +680,8 @@ VkPipeline Renderer::build_pipeline(const PipelineKey& k, VkShaderModule vs, VkS
     return pipeline;
 }
 
-// Everything earlier runs compiled, before the title draws: the modules
-// from their SPIR-V, then the pipelines on every core.
+// Everything earlier runs compiled before the title draws: shader modules
+// from SPIR-V, then pipelines on a bounded set of worker threads.
 void Renderer::precompile() {
     const auto started = std::chrono::steady_clock::now();
     std::unordered_map<uint64_t, SavedShader> shaders;
@@ -706,12 +706,14 @@ void Renderer::precompile() {
         jobs.push_back({k, vm, pm, layout, VK_NULL_HANDLE});
     }
     if (jobs.empty()) return;
-    std::fprintf(stderr, "ttt2: gpu: precompiling %zu pipelines (%zu shaders)\n", jobs.size(), modules_.size());
+    
     // Bound driver/compiler parallelism. Creating one worker per logical CPU can
     // exhaust memory and starve the game on high-core-count and integrated-GPU systems.
     const unsigned hardware_threads = std::thread::hardware_concurrency();
     const unsigned preferred_workers = hardware_threads == 0 ? 2u : std::clamp(hardware_threads / 2u, 1u, 4u);
     const unsigned worker_count = static_cast<unsigned>(std::min<size_t>(jobs.size(), preferred_workers));
+    std::fprintf(stderr, "ttt2: gpu: precompiling %zu pipelines (%zu shaders) on %u workers\n", jobs.size(),
+                 modules_.size(), worker_count);
     std::vector<VkPipelineCache> worker_caches(worker_count, VK_NULL_HANDLE);
     // Seed each worker with the previous run's driver cache so prewarming can
     // reuse cached compilation data rather than starting from an empty cache.
