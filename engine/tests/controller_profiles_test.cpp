@@ -166,6 +166,8 @@ int main() {
         invalid = profile;
         invalid.player_slot = 8;
         expect_true("invalid player slot is rejected", !save_to_file(test_guid, invalid, &error));
+        invalid.player_slot = 0;
+        expect_true("keyboard-reserved player slot is rejected", !save_to_file(test_guid, invalid, &error));
         std::ifstream after(path, std::ios::binary);
         const std::string unchanged{std::istreambuf_iterator<char>(after), {}};
         after.close();
