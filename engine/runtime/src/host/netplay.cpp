@@ -818,12 +818,16 @@ os::ProPadState local_pad() {
         {os::vpad::kA, os::pro::kA}, {os::vpad::kB, os::pro::kB}, {os::vpad::kX, os::pro::kX}, {os::vpad::kY, os::pro::kY},
         {os::vpad::kUp, os::pro::kUp}, {os::vpad::kDown, os::pro::kDown}, {os::vpad::kLeft, os::pro::kLeft},
         {os::vpad::kRight, os::pro::kRight}, {os::vpad::kL, os::pro::kL}, {os::vpad::kR, os::pro::kR},
-        {os::vpad::kZL, os::pro::kZL}, {os::vpad::kZR, os::pro::kZR}, {os::vpad::kPlus, os::pro::kPlus},
-        {os::vpad::kMinus, os::pro::kMinus}, {os::vpad::kHome, os::pro::kHome}};
-    // shortcut: the default keys only (not the player's keyboard.ini); read it here if guests ask.
-    static const keymap::Keys keys = keymap::default_keys();
+        {os::vpad::kZL, os::pro::kZL}, {os::vpad::kZR, os::pro::kZR},
+        {os::vpad::kStickL, os::pro::kStickL}, {os::vpad::kStickR, os::pro::kStickR},
+        {os::vpad::kPlus, os::pro::kPlus}, {os::vpad::kMinus, os::pro::kMinus},
+        {os::vpad::kHome, os::pro::kHome}};
+    // A netplay guest uses the same configurable keyboard mapping as the host.
+    static const keymap::Keys keys = keymap::load(keymap::file_path(), [](const std::string& name) {
+        return static_cast<uint16_t>(SDL_GetScancodeFromName(name.c_str()));
+    }).keys;
     const bool* down = SDL_GetKeyboardState(nullptr);
-    float kx = 0, ky = 0;
+    float kx = 0, ky = 0, krx = 0, kry = 0;
     for (size_t i = 0; i < keymap::kInputCount; ++i) {
         if (!down[keys[i]]) continue;
         for (const auto& [vpad, pro] : kAsPro) {
@@ -831,8 +835,11 @@ os::ProPadState local_pad() {
         }
         kx += keymap::kInputs[i].stick_x;
         ky += keymap::kInputs[i].stick_y;
+        krx += keymap::kInputs[i].right_x;
+        kry += keymap::kInputs[i].right_y;
     }
     if (kx != 0 || ky != 0) s.left_x = std::clamp(kx, -1.0f, 1.0f), s.left_y = std::clamp(ky, -1.0f, 1.0f);
+    if (krx != 0 || kry != 0) s.right_x = std::clamp(krx, -1.0f, 1.0f), s.right_y = std::clamp(kry, -1.0f, 1.0f);
     // U_UNLOCKED_NETPLAY_TEST_A=1: A for a tenth of a second every two seconds (trying netplay without a pad).
     static const bool test_a = std::getenv("U_UNLOCKED_NETPLAY_TEST_A") != nullptr;
     if (test_a && SDL_GetTicks() % 2000 < 100) s.buttons |= os::pro::kA;
