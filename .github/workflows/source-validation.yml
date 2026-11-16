@@ -141,11 +141,19 @@ jobs:
           ./engine/tools/windows/build-recomp.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Recompiler and function finder build failed.' }
 
-      - name: Compile complete Vulkan runtime
+      - name: Configure generated-code compile fixtures
         shell: pwsh
         run: |
-          ninja -j 2 -C engine/build cafe_runtime
-          if ($LASTEXITCODE -ne 0) { throw 'The complete Vulkan runtime failed to compile.' }
+          $updateFixture = (Resolve-Path 'engine/tests/cmake_game_targets/fixtures/update').Path
+          $baseFixture = (Resolve-Path 'engine/tests/cmake_game_targets/fixtures/base').Path
+          cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-clang++ -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_EXE_LINKER_FLAGS=-static "-DSMASH_GENERATED_DIR=$updateFixture" "-DSMASH_BASE_GENERATED_DIR=$baseFixture"
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configuration with generated game compile fixtures failed.' }
+
+      - name: Compile Vulkan runtime, game host, CPU variants, launcher, and WUA tool
+        shell: pwsh
+        run: |
+          ninja -j 2 -C engine/build cafe_runtime smash_host_compile_check_v3 smash_host_compile_check_v2 smash_update_generated_v3 smash_update_generated_v2 smash_base_generated_v3 smash_base_generated_v2 smash-launcher wua_extract
+          if ($LASTEXITCODE -ne 0) { throw 'The complete Vulkan runtime, host, CPU variants, launcher, or WUA extractor failed to compile/link.' }
 
   validate:
     name: Validate source tree and project scripts
