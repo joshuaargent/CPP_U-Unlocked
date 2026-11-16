@@ -40,7 +40,7 @@ U Unlocked is an independent project. Melee Unlocked is a design reference only;
 - **Diagnostics** - planned hardware detection, Vulkan capability reporting, shader-cache information and actionable troubleshooting.
 - **Preserved game behaviour** - performance settings must not change deterministic game simulation or silently alter gameplay timing.
 
-Features described as planned are not represented as already implemented. See the project status below and the implementation roadmap for the current delivery sequence.
+Features described as planned are not represented as already implemented. See the [implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md) and [architecture](docs/ARCHITECTURE.md) for the delivery sequence and engineering requirements.
 
 ## Why U Unlocked?
 
