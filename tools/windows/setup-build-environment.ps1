@@ -42,21 +42,24 @@ function Find-Executable {
 }
 
 $cmake = Find-Executable 'cmake.exe'
-if (-not $cmake) {
+$cmakeVersionLine = if ($cmake) { (& $cmake --version | Select-Object -First 1) } else { '' }
+if ($cmakeVersionLine -notmatch '3\.31\.6') {
     Invoke-WingetInstall -Id 'Kitware.CMake' -Version '3.31.6'
     $cmake = Find-Executable 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
 }
 if (-not $cmake) { throw 'CMake 3.31.6 was installed but cmake.exe could not be located.' }
 
 $ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
-if (-not $ninja) {
+$ninjaVersionLine = if ($ninja) { (& $ninja --version | Out-String).Trim() } else { '' }
+if ($ninjaVersionLine -ne '1.12.1') {
     Invoke-WingetInstall -Id 'Ninja-build.Ninja' -Version '1.12.1'
     $ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
 }
 if (-not $ninja) { throw 'Ninja 1.12.1 was installed but ninja.exe could not be located.' }
 
 $python = Find-Executable 'python.exe'
-if (-not $python) {
+$pythonVersion = if ($python) { (& $python --version 2>&1 | Out-String).Trim() } else { '' }
+if ($pythonVersion -notmatch '^Python 3\.12\.') {
     Invoke-WingetInstall -Id 'Python.Python.3.12' -Version '3.12.10'
     $python = Find-Executable 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
 }
@@ -101,6 +104,9 @@ if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { throw 'The llvm-mi
 
 $cmakeVersion = (& $cmake --version | Select-Object -First 1)
 $ninjaVersion = (& $ninja --version | Out-String).Trim()
+if ($cmakeVersion -notmatch '3\.31\.6' -or $ninjaVersion -ne '1.12.1') {
+    throw "Unexpected build tool versions: $cmakeVersion; Ninja $ninjaVersion. Expected CMake 3.31.6 and Ninja 1.12.1."
+}
 Write-Host "Build tools ready: $cmakeVersion; Ninja $ninjaVersion; $pythonVersion; llvm-mingw $llvmVersion." -ForegroundColor Green
 
 $env:PATH = @((Split-Path -Parent $python), (Split-Path -Parent $cmake), (Split-Path -Parent $ninja),
