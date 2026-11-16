@@ -69,7 +69,7 @@
 
 ## Mod management
 
-- [x] Implement basic archive/folder installation and enable/disable toggles for detected content folders.
+- [x] Implement folder-based mod installation and enable/disable toggles for detected content folders. Archive-based mod installation remains disabled until a bounded ZIP/7z/RAR extractor is integrated.
 - [x] Disable unbounded system-tar archive extraction; mod installation now accepts folders only, rejects symlinks/reparse points and special files, caps traversal at 20,000 entries and 4 GiB, and stages copies before activation. Secure ZIP/7z/RAR support remains blocked on a bounded archive reader with traversal/link/overwrite protections.
 - [ ] Implement a versioned mod manifest.
 - [ ] Implement named enable/disable profiles, dependency checks, and conflict reporting.
