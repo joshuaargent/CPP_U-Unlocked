@@ -1,0 +1,80 @@
+name: U Unlocked Source Validation
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate source tree and project scripts
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify in-repository native source
+        shell: pwsh
+        run: ./tools/windows/verify-checkout.ps1 -SkipToolchainCheck
+
+      - name: Generate the application resource icon
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if (-not (Test-Path 'engine/runtime/res/u-unlocked.ico')) {
+            throw 'The U Unlocked icon was not generated.'
+          }
+
+      - name: Parse project PowerShell scripts
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path '.').Path
+          $scriptRoots = @((Join-Path $root 'tools'), (Join-Path $root 'engine/tools'))
+          $files = @($scriptRoots | ForEach-Object { Get-ChildItem -Path $_ -Filter '*.ps1' -Recurse -File })
+          foreach ($file in $files) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $file.FullName,
+              [ref]$tokens,
+              [ref]$parseErrors
+            ) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | ForEach-Object { Write-Error "$($file.FullName): $($_.Message)" }
+              throw "PowerShell syntax validation failed: $($file.FullName)"
+            }
+          }
+
+      - name: Ensure protected game data is not tracked
+        shell: pwsh
+        run: |
+          $tracked = @(git ls-files)
+          $forbidden = @($tracked | Where-Object {
+            $_ -match '(^|/)(0005000010144F00|0005000E10144F00|0005000C10144F00|UserData|saves|console|keys|generated)(/|$)' -or
+            $_ -match '\.wua$|(^|/)cross_f\.rpx$'
+          })
+          if ($forbidden.Count -gt 0) {
+            $forbidden | ForEach-Object { Write-Error "Protected game data is tracked: $_" }
+            throw 'Protected game data must never be committed.'
+          }
+
+      - name: Verify required licence notices
+        shell: pwsh
+        run: |
+          $required = @(
+            'LICENSES/RECOMPILATION-MIT-LICENSE.txt',
+            'engine/third_party/cemu_nex/LICENSE.txt'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required licence notice is missing: $path"
+            }
+          }

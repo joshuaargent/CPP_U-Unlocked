@@ -1,0 +1,51 @@
+# Toolchains and local build output
+/toolchain/
+/generated/
+/Play/
+/dist/
+/build/
+/build-*/
+/.cache/
+/engine/build/
+/engine/build-*/
+/engine/build-deps/
+/engine/generated/
+/engine/Play/
+/engine/dist/
+
+# User game data, console data, and generated recompiled code
+/0005000010144F00/
+/0005000E10144F00/
+/0005000C10144F00/
+/UserData/
+/saves/
+/console/
+/keys/
+*.wua
+cross_f.rpx
+
+# Runtime caches and logs
+/cache/
+/shader-cache/
+*.log
+*.cache
+
+# IDE and operating-system files
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.obj
+*.o
+*.a
+*.lib
+*.spv
