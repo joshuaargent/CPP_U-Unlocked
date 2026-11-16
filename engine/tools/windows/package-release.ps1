@@ -11,8 +11,12 @@ $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScript
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $launcher = Join-Path $engineRoot 'build\U Unlocked.exe'
 $prefix = Join-Path $engineRoot 'build-deps\prefix'
+$updater = Join-Path $repoRoot 'tools\windows\update-launcher.ps1'
 if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
     throw "Launcher build not found: $launcher. Build U Unlocked first."
+}
+if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
+    throw "The Windows launcher updater is missing: $updater"
 }
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -33,6 +37,7 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stage 'licenses') | Out-Null
 
 Copy-Item -LiteralPath $launcher -Destination $stage
+Copy-Item -LiteralPath $updater -Destination $stage
 $dllDirectory = Join-Path $prefix 'bin'
 if (-not (Test-Path -LiteralPath $dllDirectory -PathType Container)) {
     throw "Launcher dependency directory is missing: $dllDirectory"
@@ -40,6 +45,30 @@ if (-not (Test-Path -LiteralPath $dllDirectory -PathType Container)) {
 $dlls = @(Get-ChildItem -LiteralPath $dllDirectory -Filter '*.dll' -File)
 if ($dlls.Count -eq 0) { throw 'No runtime DLLs were found beside the build dependencies.' }
 foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $stage }
+
+# The updater only replaces these explicitly listed launcher files. It never
+# infers install targets from arbitrary archive paths.
+$packageFiles = @(
+    Get-ChildItem -LiteralPath $stage -File |
+        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Extension -eq '.dll' } |
+        Sort-Object Name
+)
+if (-not ($packageFiles | Where-Object { $_.Name -eq 'U Unlocked.exe' })) {
+    throw 'The launcher executable is missing from the package.'
+}
+$manifest = [ordered]@{
+    schema_version = 1
+    version = $Version
+    files = @(
+        foreach ($file in $packageFiles) {
+            [ordered]@{
+                name = $file.Name
+                sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+        }
+    )
+}
+$manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $stage 'package-manifest.json') -Encoding UTF8
 
 Copy-Item -LiteralPath (Join-Path $repoRoot 'README.md') -Destination $stage
 Copy-Item -LiteralPath (Join-Path $repoRoot 'docs\THIRD_PARTY_NOTICES.md') -Destination $stage
@@ -83,5 +112,9 @@ $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 if (-not (Test-Path -LiteralPath $tar -PathType Leaf)) { throw "tar.exe was not found: $tar" }
 & $tar -a -cf $zip -C $dist $name
 if ($LASTEXITCODE -ne 0) { throw "Launcher archive creation failed with exit code $LASTEXITCODE." }
+$archiveHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+"$archiveHash  $([System.IO.Path]::GetFileName($zip))" |
+    Set-Content -LiteralPath "$zip.sha256" -Encoding ASCII
 Remove-Item -LiteralPath $stage -Recurse -Force
 Write-Host "Launcher package created: $zip" -ForegroundColor Green
+Write-Host "SHA-256 checksum created: $zip.sha256" -ForegroundColor Green
