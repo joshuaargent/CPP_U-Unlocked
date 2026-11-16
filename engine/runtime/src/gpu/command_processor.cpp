@@ -475,7 +475,7 @@ void execute_packet(uint32_t opcode, uint32_t payload, uint32_t count, uint32_t 
                 wait_total_ms += wait_ms;
                 wait_max_ms = std::max(wait_max_ms, wait_ms);
                 if (++measured_frames == 60) {
-                    std::fprintf(stderr, "ttt2: GPU pacing: previous-frame retirement wait avg %.2f ms, max %.2f ms (60 frames)\\n",
+                    std::fprintf(stderr, "ttt2: GPU pacing: previous-frame retirement wait avg %.2f ms, max %.2f ms (60 frames)\n",
                                  wait_total_ms / measured_frames, wait_max_ms);
                     measured_frames = 0;
                     wait_total_ms = wait_max_ms = 0;
