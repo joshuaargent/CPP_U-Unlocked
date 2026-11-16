@@ -33,7 +33,8 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 
 - **Native PC runtime** - C++20, Vulkan rendering, SDL3 input, and a native Windows game runtime.
 - **Game installation** - validation of the game, update, and optional DLC folders supplied by the user.
-- **Controller configuration** - the Controls page supports per-device button/axis remapping, per-player slot assignment, per-axis dead zones and stick inversion, trigger thresholds, a live input monitor, and JSON profile saving.
+- **Launcher dashboard** - a feature-rich startup screen with a featured launch panel, game/update/DLC status, and direct navigation to Online, Netplay, Controls, Graphics, Mods, and Quit.
+- **Controller configuration** - the Controls page supports per-device button/axis remapping, per-player slot assignment, per-axis dead zones and stick inversion, trigger thresholds, a live input monitor, JSON profile saving, and automatic discovery of standard Cemu profile folders.
 - **Cemu profile import** - imports Cemu Wii U GamePad and Pro Controller XML profiles using explicit SDLController mapping translation. Unsupported input APIs and settings are reported; imported mappings remain unsaved until reviewed and saved by the user.
 - **Graphics settings** - the existing display controls are available; expanded renderer options and hardware-aware quality presets remain planned.
 - **Mod management** - existing archive installation and enable/disable support, with profiles, dependency checks, conflict reporting, and transactional rollback planned.
@@ -51,7 +52,7 @@ Controller setup should be straightforward, settings should explain what they ch
 
 ## Current status
 
-The native runtime and Windows build foundation are now part of this repository. The launcher has a Controls page with physical button and axis capture, player-slot assignment, per-axis calibration, a live input monitor, per-device JSON profile persistence, and a Cemu XML importer for SDLController profiles. The C++ build and controller tests have not yet been run on the target laptop.
+The native runtime and Windows build foundation are now part of this repository. The launcher has a feature-rich home dashboard and a Controls page with physical button and axis capture, player-slot assignment, per-axis calibration, a live input monitor, per-device JSON profile persistence, automatic Cemu profile-folder discovery, and a Cemu XML importer for SDLController profiles. The dashboard and Cemu discovery changes have been committed to the current feature branch; full launcher compilation and runtime testing remain outstanding. The C++ build and controller tests have not yet been run on the target laptop.
 
 The initial target machine is an HP EliteBook 640 G9 provisionally identified as an Intel Core i5 model with Intel Iris Xe graphics and 16 GB RAM. The exact CPU model and Vulkan driver capabilities still need to be confirmed on the target machine. Defaults will be based on runtime detection and measured performance rather than the laptop model name.
 
