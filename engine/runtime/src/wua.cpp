@@ -96,7 +96,7 @@ std::vector<std::string> game_layers(ZArchiveReader& archive) {
         }
     }
     const auto game = std::find_if(folders.begin(), folders.end(), [&](const Folder& f) {
-        return archive.LookUp(f.name + "/code/Tekken.rpx") != ZARCHIVE_INVALID_NODE;
+        return archive.LookUp(f.name + "/code/cross_f.rpx") != ZARCHIVE_INVALID_NODE;
     });
     if (game == folders.end()) return {};
     // A folder not named as the game or its update holds all of it.
