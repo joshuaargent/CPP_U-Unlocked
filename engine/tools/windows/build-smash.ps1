@@ -44,6 +44,11 @@ function Build-Game([string]$rpx, [string]$generated, [string]$dir, [string[]]$t
 Build-Game $Rpx (Join-Path $root 'generated\smash') $build @('smash', 'smash-launcher', 'wua_extract')
 New-Item -ItemType Directory -Force $play | Out-Null
 Copy-Item (Join-Path $build 'smash.exe'), (Join-Path $build 'U Unlocked.exe'), (Join-Path $build 'wua_extract.exe') $play
+$titleLogo = Join-Path $engineRoot 'runtime\res\title-logo.png'
+if (-not (Test-Path -LiteralPath $titleLogo -PathType Leaf)) {
+    throw "The project-owned U Unlocked title logo is missing: $titleLogo"
+}
+Copy-Item -LiteralPath $titleLogo -Destination (Join-Path $play 'title-logo.png')
 # The same code for processors without AVX2/FMA (x86-64-v2); the launcher picks it on those.
 $compatBuild = Join-Path $engineRoot 'build-compat'
 Build-Game $Rpx (Join-Path $root 'generated\smash') $compatBuild @('smash') @('-DSMASH_COMPAT=ON')
@@ -54,8 +59,8 @@ if (Test-Path $BaseRpx) {
     Copy-Item (Join-Path $baseBuild 'smash.exe') (Join-Path $play 'smash-base.exe')
 }
 Copy-Item (Join-Path $prefix 'bin\*.dll') $play
-# U Unlocked supplies its own launcher identity; no game title artwork is copied.
-# U Unlocked uses its own launcher background.
+# U Unlocked supplies its own launcher identity and generated title-screen wordmark.
+# No artwork from another PC launcher or emulator is copied into the build.
 New-Item -ItemType Directory -Force (Join-Path $play 'mods') | Out-Null
 $updater = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))) 'tools\windows\update-launcher.ps1'
 if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
