@@ -19,12 +19,12 @@
 #include "cafe/runtime.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <deque>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -45,11 +45,12 @@ struct Submission {
 std::mutex g_queue_mutex;
 std::condition_variable g_queue_not_empty_cv;
 std::condition_variable g_queue_not_full_cv;
-std::deque<Submission> g_queue;
-// Keep command-buffer addresses alive only in a small bounded FIFO. At the
-// limit, the submitting guest thread applies back-pressure; submissions are
-// never dropped or reordered.
+// Fixed-capacity FIFO: no per-submission heap allocation and no unbounded
+// backlog of guest command-buffer addresses.
 constexpr size_t kMaxQueuedSubmissions = 256;
+std::array<Submission, kMaxQueuedSubmissions> g_queue{};
+size_t g_queue_head = 0;
+size_t g_queue_size = 0;
 uint64_t g_submitted = 0; // under g_queue_mutex
 uint64_t g_retired = 0;   // under the kernel lock
 
@@ -198,17 +199,19 @@ struct Retirement {
 std::mutex g_retire_mutex;
 std::condition_variable g_retire_not_empty_cv;
 std::condition_variable g_retire_not_full_cv;
-std::deque<Retirement> g_retire_queue;
-// A slow GPU must not let timeline-retirement metadata grow without bound.
-// The command processor waits for space rather than dropping guest writebacks.
+// Fixed-capacity FIFO; the command processor applies back-pressure rather
+// than dropping guest-visible GPU writebacks.
 constexpr size_t kMaxQueuedRetirements = 256;
+std::array<Retirement, kMaxQueuedRetirements> g_retire_queue{};
+size_t g_retire_head = 0;
+size_t g_retire_size = 0;
 
 void retire_later(const Retirement& r) {
     std::unique_lock lock(g_retire_mutex);
-    if (g_retire_queue.size() >= kMaxQueuedRetirements) {
+    if (g_retire_size >= kMaxQueuedRetirements) {
         static const bool trace_pressure = std::getenv("TTT2_TRACE_PACING") != nullptr;
         const auto started = std::chrono::steady_clock::now();
-        g_retire_not_full_cv.wait(lock, [] { return g_retire_queue.size() < kMaxQueuedRetirements; });
+        g_retire_not_full_cv.wait(lock, [] { return g_retire_size < kMaxQueuedRetirements; });
         if (trace_pressure) {
             const double waited_ms = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
@@ -216,7 +219,8 @@ void retire_later(const Retirement& r) {
                          waited_ms, kMaxQueuedRetirements);
         }
     }
-    g_retire_queue.push_back(r);
+    g_retire_queue[(g_retire_head + g_retire_size) % kMaxQueuedRetirements] = r;
+    ++g_retire_size;
     lock.unlock();
     g_retire_not_empty_cv.notify_one();
 }
@@ -228,9 +232,10 @@ void retirement_main() {
         Retirement r;
         {
             std::unique_lock lock(g_retire_mutex);
-            g_retire_not_empty_cv.wait(lock, [] { return !g_retire_queue.empty(); });
-            r = g_retire_queue.front();
-            g_retire_queue.pop_front();
+            g_retire_not_empty_cv.wait(lock, [] { return g_retire_size != 0; });
+            r = g_retire_queue[g_retire_head];
+            g_retire_head = (g_retire_head + 1) % kMaxQueuedRetirements;
+            --g_retire_size;
         }
         g_retire_not_full_cv.notify_one();
         g_backend->wait_for(r.done);
@@ -609,14 +614,15 @@ void command_processor_main() {
         Submission s;
         {
             std::unique_lock lock(g_queue_mutex);
-            if (g_queue.empty()) {
+            if (g_queue_size == 0) {
                 lock.unlock();
                 g_backend->idle();
                 lock.lock();
             }
-            g_queue_not_empty_cv.wait(lock, [] { return !g_queue.empty(); });
-            s = g_queue.front();
-            g_queue.pop_front();
+            g_queue_not_empty_cv.wait(lock, [] { return g_queue_size != 0; });
+            s = g_queue[g_queue_head];
+            g_queue_head = (g_queue_head + 1) % kMaxQueuedSubmissions;
+            --g_queue_size;
         }
         g_queue_not_full_cv.notify_one();
         {
@@ -653,10 +659,10 @@ void start() {
 
 uint64_t submit(uint32_t buffer, uint32_t words) {
     std::unique_lock lock(g_queue_mutex);
-    if (g_queue.size() >= kMaxQueuedSubmissions) {
+    if (g_queue_size >= kMaxQueuedSubmissions) {
         static const bool trace_pressure = std::getenv("TTT2_TRACE_PACING") != nullptr;
         const auto started = std::chrono::steady_clock::now();
-        g_queue_not_full_cv.wait(lock, [] { return g_queue.size() < kMaxQueuedSubmissions; });
+        g_queue_not_full_cv.wait(lock, [] { return g_queue_size < kMaxQueuedSubmissions; });
         if (trace_pressure) {
             const double waited_ms = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
@@ -665,7 +671,8 @@ uint64_t submit(uint32_t buffer, uint32_t words) {
         }
     }
     const uint64_t timestamp = ++g_submitted;
-    g_queue.push_back({buffer, words, timestamp});
+    g_queue[(g_queue_head + g_queue_size) % kMaxQueuedSubmissions] = {buffer, words, timestamp};
+    ++g_queue_size;
     lock.unlock();
     g_queue_not_empty_cv.notify_one();
     return timestamp;
