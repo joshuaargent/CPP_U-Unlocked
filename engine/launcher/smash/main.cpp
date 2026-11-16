@@ -370,6 +370,7 @@ void secure_erase(std::string& value) {
 struct AppUpdateCheck {
     bool ok = false;
     bool available = false;
+    std::string channel;
     std::string version;
     std::string release_url;
     std::string message;
@@ -1626,6 +1627,7 @@ private:
             const std::string channel = update_channel_;
             update_check_thread_ = std::thread([this, channel] {
                 AppUpdateCheck result;
+                result.channel = channel;
                 try {
                     const std::string endpoint = channel == "beta"
                         ? "https://api.github.com/repos/joshuaargent/CPP_U-Unlocked/releases?per_page=1"
@@ -1681,6 +1683,10 @@ private:
             result = std::move(update_check_result_);
         }
         update_checking_ = false;
+        if (!result.channel.empty() && result.channel != update_channel_) {
+            check_launcher_updates();
+            return;
+        }
         update_available_ = result.ok && result.available;
         update_status_ = result.message.empty() ? "Update check unavailable" : result.message;
         if (result.ok) {
