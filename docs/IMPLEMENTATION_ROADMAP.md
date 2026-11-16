@@ -18,7 +18,8 @@
 - [x] Add a bounded Windows WUA extraction utility using the pinned ZArchive reader, with strict path/filename validation, case-collision detection, reparse-point rejection, exclusive file creation, and depth/file-count/expanded-size limits; add a dedicated Windows compile check in CI. The POSIX extractor now has matching inventory limits.
 - [x] Integrate WUA archive selection into the launcher Library workflow, with private staging, cleanup on failure, Smash title-folder validation, preservation of the original archive, and activation into the local game library.
 - [ ] Run end-to-end tests against real WUA dumps and verify interrupted-import recovery on Windows.
-- [ ] Connect the validated, user-supplied Smash Wii U base/update RPX files to the local cafe-recomp and native Vulkan runtime build pipeline; keep all game-derived code and data on the user's machine and out of CI/release assets.
+- [x] Add a local developer build pipeline that recompiles user-supplied base/update RPX files into separate ignored output directories and builds update/base executables for x86-64-v3 and x86-64-v2 in one CMake configuration, sharing the native runtime and launcher; keep all game-derived code and data on the user's machine and out of CI/release assets.
+- [ ] Integrate that local pipeline into the launcher's first-run Build workflow; a developer script is still required.
 - [ ] Complete first-run build UX: toolchain/dependency checks, progress and logs, cancellation, interrupted-build recovery, and incremental rebuilds.
 - [ ] Verify the launcher starts the locally generated game runtime after a clean WUA import, without requiring a developer checkout or manually run build script.
 - [x] Add a game-update management page for selecting and removing the locally installed update dump.
@@ -58,7 +59,7 @@
 - [x] Correct launcher guidance to explain the direct host connection and current security boundary.
 - [ ] Add authenticated guest pairing and explicit host approval.
 - [ ] Add encryption and message integrity protection for video, audio, and controller datagrams.
-- [x] Enforce exact host-side UDP packet lengths, reject stale input sequence numbers, clamp controller axes, rate-limit total incoming packets and handshakes with token buckets, and limit each guest to one keyframe request per second.
+- [x] Enforce exact host-side UDP packet lengths, reject stale input sequence numbers, clamp controller axes, rate-limit total and per-source-IP incoming packets/handshakes with bounded token buckets, and limit each guest to one keyframe request per second.
 - [x] Bound guest-side video reassembly to 8 MiB, validate fragment counts/indices/lengths and consistent frame metadata, and reject malformed stereo int16 audio packet framing before decode/playback.
 - [ ] Add authenticated guest pairing, cryptographic replay protection, per-peer abuse controls, and host approval before enabling public internet connectivity.
 - [ ] Add secure public-internet connectivity only after the authentication and transport security work is complete.
