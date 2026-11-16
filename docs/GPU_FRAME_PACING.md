@@ -42,6 +42,15 @@ The renderer header explicitly documents that the current command processor / re
 
 The presentation queue and image pool are independent of the command processor's GPU timeline. Increasing the number of command frames in flight without accounting for this pool can merely move the stall.
 
+### Other renderer and command-queue waits
+
+- `Renderer::cmd()` rotates through 64 Vulkan command-buffer slots and waits for a slot's previous timeline value before reusing it.
+- `Renderer::upload()` waits for upload-ring chunks when they are still referenced by submitted work.
+- Explicit GX2 synchronization, resource resizing/destruction, stream changes, and diagnostic captures can call `submit(true)` and wait for all prior renderer submissions.
+- The Vulkan renderer already reports waits per frame for command slots, upload chunks, explicit sync, and other waits in its periodic GPU statistics. `TTT2_TRACE_PACING=1` also enables swap-to-vblank timing and the new frame/presentation-pool measurements.
+- The command processor's guest submission queue (`g_queue`) and GPU retirement queue (`g_retire_queue`) are deques without explicit capacity limits. A decoupled producer must not turn these into unbounded memory growth.
+- Each command-processor queue item currently stores a guest command-buffer address and word count, not an owned copy. Any producer/consumer separation must establish command-buffer and indirect-buffer lifetime before allowing the guest CPU to reuse that memory.
+
 ### GPU-visible side effects
 
 GPU writebacks, end-of-pipe writes, timestamps, stream-out, and guest waits have observable ordering. The retirement thread processes backend completion values in order and makes those results visible to guest memory. Any decoupling must preserve these semantics; a completed simulation tick must not imply that an unfinished GPU writeback is already visible to the guest.
