@@ -52,6 +52,54 @@ try {
     $icon.Save($stream)
     $stream.Flush()
     Write-Host "Generated original U Unlocked icon: $outputPath" -ForegroundColor Green
+
+    # The in-game title screen uses this project-owned transparent wordmark.
+    # smash_logo.cpp overlays it onto the game's existing title-logo regions;
+    # no upstream launcher or game-logo artwork is distributed.
+    $logoBitmap = [System.Drawing.Bitmap]::new(1600, 500, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $logoGraphics = [System.Drawing.Graphics]::FromImage($logoBitmap)
+    $logoRingPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(0, 190, 196), 18)
+    $logoLetterBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(0, 190, 196))
+    $logoWordBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(242, 246, 250))
+    $logoFont = [System.Drawing.Font]::new('Segoe UI', 230, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $wordFont = [System.Drawing.Font]::new('Segoe UI', 174, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $accentPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(0, 190, 196), 12)
+    $logoFormat = [System.Drawing.StringFormat]::new()
+    try {
+        $logoGraphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+        $logoGraphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+        $logoGraphics.Clear([System.Drawing.Color]::Transparent)
+
+        $logoGraphics.DrawEllipse($logoRingPen, 76, 76, 348, 348)
+        $logoFormat.Alignment = [System.Drawing.StringAlignment]::Center
+        $logoFormat.LineAlignment = [System.Drawing.StringAlignment]::Center
+        $logoGraphics.DrawString(
+            'U',
+            $logoFont,
+            $logoLetterBrush,
+            [System.Drawing.RectangleF]::new(88, 65, 324, 370),
+            $logoFormat
+        )
+
+        $wordBounds = [System.Drawing.RectangleF]::new(485, 92, 1050, 250)
+        $logoGraphics.DrawString('UNLOCKED', $wordFont, $logoWordBrush, $wordBounds)
+        $logoGraphics.DrawLine($accentPen, 495, 375, 1480, 375)
+
+        $logoPath = Join-Path $resourceDirectory 'title-logo.png'
+        $logoBitmap.Save($logoPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        Write-Host "Generated original U Unlocked title logo: $logoPath" -ForegroundColor Green
+    }
+    finally {
+        $logoFormat.Dispose()
+        $accentPen.Dispose()
+        $wordFont.Dispose()
+        $logoFont.Dispose()
+        $logoWordBrush.Dispose()
+        $logoLetterBrush.Dispose()
+        $logoRingPen.Dispose()
+        $logoGraphics.Dispose()
+        $logoBitmap.Dispose()
+    }
 }
 finally {
     if ($stream) { $stream.Dispose() }
