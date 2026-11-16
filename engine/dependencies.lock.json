@@ -15,6 +15,10 @@
     "url": "https://github.com/libsdl-org/SDL.git",
     "revision": "fa2c02bb6e21974a89ea9824bc53c9932abe5f9c"
   },
+  "stb": {
+    "url": "https://github.com/nothings/stb.git",
+    "revision": "9600522de53973336fa033a289858a4354cbb04c"
+  },
   "Vulkan-Headers": {
     "url": "https://github.com/KhronosGroup/Vulkan-Headers.git",
     "revision": "b0c3dd6851e22621f194306d511b9253e4c1577f"
