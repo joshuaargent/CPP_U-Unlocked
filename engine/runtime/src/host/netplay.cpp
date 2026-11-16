@@ -42,7 +42,7 @@ using Clock = std::chrono::steady_clock;
 
 // ------------------------------------------------------------------ the protocol
 // UDP datagrams, a type byte first; numbers little-endian.
-constexpr uint32_t kMagic = 0x504E3453; // "S4NP"
+constexpr uint32_t kMagic = 0x504E5555; // "UUNP"
 constexpr uint16_t kVersion = 3;
 enum Type : uint8_t {
     kPunch = 1,      // either: opens the routers' way (ignored)
@@ -308,13 +308,13 @@ class Encoder {
 public:
     bool open() {
         start_media_foundation();
-        if (!std::getenv("SMASH_NETPLAY_SOFTWARE_ENCODER") && open_hardware()) return true;
+        if (!std::getenv("U_UNLOCKED_NETPLAY_SOFTWARE_ENCODER") && open_hardware()) return true;
         release(t_);
         release(api_);
         release(events_);
         if (FAILED(CoCreateInstance(CLSID_CMSH264EncoderMFT, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&t_)))) return false;
         if (!configure()) return false;
-        std::fprintf(stderr, "ttt2: netplay: H.264 encoder: Windows' (software)\n");
+        std::fprintf(stderr, "u-unlocked: netplay: H.264 encoder: Windows' (software)\n");
         return true;
     }
 
@@ -388,7 +388,7 @@ private:
             attributes->Release();
         }
         if (FAILED(t_->QueryInterface(IID_PPV_ARGS(&events_))) || !configure()) return false;
-        std::fprintf(stderr, "ttt2: netplay: H.264 encoder: %s (GPU)\n", name.c_str());
+        std::fprintf(stderr, "u-unlocked: netplay: H.264 encoder: %s (GPU)\n", name.c_str());
         return true;
     }
 
@@ -474,7 +474,7 @@ Guest* guest_at(Endpoint e) {
 }
 
 void drop(Guest& g, const char* why) {
-    std::fprintf(stderr, "ttt2: netplay: %s (player %d) %s\n", g.name.c_str(), g.channel + 2, why);
+    std::fprintf(stderr, "u-unlocked: netplay: %s (player %d) %s\n", g.name.c_str(), g.channel + 2, why);
     g_guests[g.channel].reset();
     --g_guest_count;
 }
@@ -530,7 +530,7 @@ std::optional<PendingFrame> g_frame;
 void encoder_main() {
     Encoder encoder;
     if (!encoder.open()) {
-        std::fprintf(stderr, "ttt2: netplay: no H.264 encoder (Windows Media Foundation); guests get no picture\n");
+        std::fprintf(stderr, "u-unlocked: netplay: no H.264 encoder (Windows Media Foundation); guests get no picture\n");
         return;
     }
     std::vector<uint8_t> nv12;
@@ -590,7 +590,7 @@ void host_receive_main() {
             const uint8_t w[5] = {static_cast<uint8_t>(guest.channel), kStreamWidth & 0xFF, kStreamWidth >> 8,
                                   kStreamHeight & 0xFF, kStreamHeight >> 8};
             g_socket.send(from, kWelcome, w, sizeof w);
-            std::fprintf(stderr, "ttt2: netplay: %s joined as player %d\n", guest.name.c_str(), guest.channel + 2);
+            std::fprintf(stderr, "u-unlocked: netplay: %s joined as player %d\n", guest.name.c_str(), guest.channel + 2);
             break;
         }
         case kInput: {
@@ -608,7 +608,7 @@ void host_receive_main() {
             s.right_y = axes[3] / 32767.0f;
             if (s.buttons && !g->pressed) {
                 g->pressed = true;
-                std::fprintf(stderr, "ttt2: netplay: player %d's controller works\n", g->channel + 2);
+                std::fprintf(stderr, "u-unlocked: netplay: player %d's controller works\n", g->channel + 2);
             }
             g->pad = s;
             break;
@@ -624,8 +624,12 @@ void host_receive_main() {
     }
 }
 
-// The room on the room server, every two seconds: listed, and the guests trying to reach it introduced.
+// The optional room directory, every two seconds: list the host and introduce guests when configured.
 void host_rooms_main() {
+    if (room_server().empty()) {
+        std::fprintf(stderr, "u-unlocked: netplay: room discovery is disabled; guests can still join by direct address\\n");
+        for (;;) std::this_thread::sleep_for(std::chrono::seconds(30));
+    }
     const uint32_t id = random_id();
     for (int round = 0;; ++round) {
         if (g_socket.pub().ip == 0 || round % 15 == 0) g_socket.ask_stun(); // (and now and then: NATs forget)
@@ -638,7 +642,7 @@ void host_rooms_main() {
         c.room.max = kMaxPlayers;
         const CheckInReply r = check_in(c);
         if (round == 0) {
-            std::fprintf(stderr, r.ok ? "ttt2: netplay: room listed on %s\n" : "ttt2: netplay: room server %s not reached; "
+            std::fprintf(stderr, r.ok ? "u-unlocked: netplay: room listed on %s\n" : "u-unlocked: netplay: room server %s not reached; "
                                                                                "guests can still join by address\n",
                          room_server().c_str());
         }
@@ -746,14 +750,14 @@ os::ProPadState local_pad() {
         ky += keymap::kInputs[i].stick_y;
     }
     if (kx != 0 || ky != 0) s.left_x = std::clamp(kx, -1.0f, 1.0f), s.left_y = std::clamp(ky, -1.0f, 1.0f);
-    // SMASH_NETPLAY_TEST_A=1: A for a tenth of a second every two seconds (trying netplay without a pad).
-    static const bool test_a = std::getenv("SMASH_NETPLAY_TEST_A") != nullptr;
+    // U_UNLOCKED_NETPLAY_TEST_A=1: A for a tenth of a second every two seconds (trying netplay without a pad).
+    static const bool test_a = std::getenv("U_UNLOCKED_NETPLAY_TEST_A") != nullptr;
     if (test_a && SDL_GetTicks() % 2000 < 100) s.buttons |= os::pro::kA;
     return s;
 }
 
 void show_error(const std::string& text) {
-    std::fprintf(stderr, "smash: netplay: %s\n", text.c_str());
+    std::fprintf(stderr, "u-unlocked: netplay: %s\n", text.c_str());
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "U Unlocked netplay", text.c_str(), nullptr);
 }
 
@@ -763,12 +767,12 @@ void show_error(const std::string& text) {
 
 bool start_host(const std::string& name) {
     if (!g_socket.open(kDefaultPort)) {
-        std::fprintf(stderr, "ttt2: netplay: no UDP socket (error %d)\n", WSAGetLastError());
+        std::fprintf(stderr, "u-unlocked: netplay: no UDP socket (error %d)\n", WSAGetLastError());
         return false;
     }
     g_room_name = name.empty() ? "Player" : name;
     g_hosting = true;
-    std::fprintf(stderr, "ttt2: netplay: hosting %s's room on UDP port %u\n", g_room_name.c_str(), g_socket.lan().port);
+    std::fprintf(stderr, "u-unlocked: netplay: hosting %s's room on UDP port %u\n", g_room_name.c_str(), g_socket.lan().port);
     std::thread(encoder_main).detach();
     std::thread(host_receive_main).detach();
     std::thread(host_rooms_main).detach();
@@ -824,6 +828,10 @@ int run_guest(const std::string& target, const std::string& name) {
     uint32_t room = 0;
     if (target.rfind("room:", 0) == 0) {
         room = static_cast<uint32_t>(std::strtoul(target.c_str() + 5, nullptr, 16));
+        if (room_server().empty()) {
+            show_error("Room-code joining is not configured. Enter the host's IP address or VPN address instead.");
+            return 1;
+        }
     } else {
         std::string host = target, port = std::to_string(kDefaultPort);
         if (std::count(host.begin(), host.end(), ':') == 1) {
@@ -842,7 +850,7 @@ int run_guest(const std::string& target, const std::string& name) {
         freeaddrinfo(found);
     }
 
-    // Hello until welcomed (20 s), asking the room server for the host's addresses meanwhile.
+    // Hello until welcomed (20 s), asking the configured room directory for the host's addresses meanwhile.
     uint8_t hello[38] = {};
     std::memcpy(hello, &kMagic, 4);
     std::memcpy(hello + 4, &kVersion, 2);
@@ -864,8 +872,8 @@ int run_guest(const std::string& target, const std::string& name) {
                 for (const Introduction& peer : r.peers) {
                     if (peer.id != room) continue;
                     std::lock_guard lock(candidates_mutex);
-                    // SMASH_NETPLAY_PUBLIC_ONLY=1: only the public address, as from another network (testing on one PC).
-                    static const bool public_only = std::getenv("SMASH_NETPLAY_PUBLIC_ONLY") != nullptr;
+                    // U_UNLOCKED_NETPLAY_PUBLIC_ONLY=1: only the public address, as from another network (testing on one PC).
+                    static const bool public_only = std::getenv("U_UNLOCKED_NETPLAY_PUBLIC_ONLY") != nullptr;
                     for (Endpoint e : {peer.pub, public_only ? Endpoint{} : peer.lan}) {
                         if (e.ip && std::find(candidates.begin(), candidates.end(), e) == candidates.end()) candidates.push_back(e);
                     }
@@ -939,7 +947,7 @@ int run_guest(const std::string& target, const std::string& name) {
     std::atomic<uint32_t> pictures{0}, video_bytes{0}, lost_frames{0}; // for the log, every 10 s
     std::thread receiver([&] {
         Decoder decoder;
-        if (!decoder.open(width, height)) std::fprintf(stderr, "smash: netplay: no H.264 decoder\n");
+        if (!decoder.open(width, height)) std::fprintf(stderr, "u-unlocked: netplay: no H.264 decoder\n");
         uint32_t frame = 0, pieces = 0, got = 0;
         std::vector<uint8_t> data;
         std::vector<bool> have;
@@ -1030,7 +1038,7 @@ int run_guest(const std::string& target, const std::string& name) {
         std::memcpy(input + 8, axes, 8);
         socket.send(host_address, kInput, input, sizeof input);
         if (Clock::now() - last_log > std::chrono::seconds(10)) {
-            std::fprintf(stderr, "smash: netplay: %.1f pictures/s, %.1f Mbit/s, %u frames lost\n", pictures.exchange(0) / 10.0,
+            std::fprintf(stderr, "u-unlocked: netplay: %.1f pictures/s, %.1f Mbit/s, %u frames lost\n", pictures.exchange(0) / 10.0,
                          video_bytes.exchange(0) * 8 / 10.0 / 1e6, lost_frames.exchange(0));
             last_log = Clock::now();
         }
@@ -1050,8 +1058,8 @@ int run_guest(const std::string& target, const std::string& name) {
     socket.send(host_address, kBye);
     leaving = true;
     receiver.join();
-    // SMASH_NETPLAY_DUMP=FILE: the last picture, raw NV12, for checking the stream.
-    if (const char* dump = std::getenv("SMASH_NETPLAY_DUMP")) {
+    // U_UNLOCKED_NETPLAY_DUMP=FILE: the last picture, raw NV12, for checking the stream.
+    if (const char* dump = std::getenv("U_UNLOCKED_NETPLAY_DUMP")) {
         std::lock_guard lock(picture_mutex);
         if (FILE* f = std::fopen(dump, "wb")) {
             std::fwrite(picture.data(), 1, picture.size(), f);
