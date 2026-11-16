@@ -97,7 +97,7 @@ def fetch_dependency(name, dependency):
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     url = archive_url(dependency["url"], revision)
-    with tempfile.TemporaryDirectory(prefix=f"u-unlocked-{name}-") as temporary:
+    with tempfile.TemporaryDirectory(prefix=f".u-unlocked-{name}-", dir=destination.parent) as temporary:
         temporary_path = Path(temporary)
         archive = temporary_path / "source.zip"
         extraction = temporary_path / "source"
@@ -124,8 +124,8 @@ def fetch_dependency(name, dependency):
         roots = list(extraction.iterdir())
         if len(roots) != 1 or not roots[0].is_dir():
             raise RuntimeError(f"{name}: source archive has an unexpected root layout.")
-        shutil.move(str(roots[0]), str(destination))
-        (destination / MARKER).write_text(revision + "\n", encoding="ascii")
+        (roots[0] / MARKER).write_text(revision + "\n", encoding="ascii")
+        os.replace(roots[0], destination)
     print(f"{name}: {revision} (downloaded and pinned)")
 
 
