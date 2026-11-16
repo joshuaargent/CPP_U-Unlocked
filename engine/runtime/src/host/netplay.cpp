@@ -554,7 +554,11 @@ void encoder_main() {
         f.release();
         const int64_t time = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start).count() / 100;
         encoder.encode(nv12, time, g_force_key.exchange(false),
-                       [](const BYTE* data, DWORD size, bool key) { send_video(data, size, kevoid host_receive_main() {
+                       [](const BYTE* data, DWORD size, bool key) { send_video(data, size, key); });
+    }
+}
+
+void host_receive_main() {
     std::vector<uint8_t> p(2048);
     // Protect the host loop from packet floods without constraining normal
     // 60 Hz input from all seven remote controller slots.
@@ -655,11 +659,6 @@ void encoder_main() {
             if (g && n == 1) drop(*g, "left");
             break;
         default: break; // Punches and unknown packet types are ignored.
-        }
-    }
-}
-
-ult: break; // punches
         }
     }
 }
