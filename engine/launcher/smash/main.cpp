@@ -568,6 +568,12 @@ public:
         if (sign_in_thread_.joinable()) sign_in_thread_.join();
         if (update_check_thread_.joinable()) update_check_thread_.join();
         if (wua_thread_.joinable()) wua_thread_.join();
+        if (build_process_) {
+            int code = 0;
+            SDL_WaitProcess(build_process_, true, &code);
+            SDL_DestroyProcess(build_process_);
+            build_process_ = nullptr;
+        }
         if (!wua_stage_path_.empty()) {
             std::error_code cleanup_error;
             fs::remove_all(wua_stage_path_, cleanup_error);
@@ -705,6 +711,27 @@ public:
         repeat(stick_x_, held_x_, [&](int d) { change(d); });
         selection_y_ = ease(selection_y_, float(selected_), dt, 18);
         fade_ = std::min(1.0f, fade_ + dt * 5.5f);
+        if (build_process_) {
+            int code = 0;
+            if (SDL_WaitProcess(build_process_, false, &code)) {
+                SDL_DestroyProcess(build_process_);
+                build_process_ = nullptr;
+                building_runtime_ = false;
+                build_exit_code_ = code;
+                refresh();
+                std::error_code build_ec;
+                const bool update_runtime = fs::is_regular_file(dir_ / "smash.exe", build_ec) && !build_ec;
+                build_ec.clear();
+                const bool base_runtime = fs::is_regular_file(dir_ / "smash-base.exe", build_ec) && !build_ec;
+                if (code == 0 && update_runtime && base_runtime) {
+                    build_status_ = "Runtime built. Select Play.";
+                    launch_error_.clear();
+                } else {
+                    build_status_ = "Build failed (exit " + std::to_string(code) + "). Open BuildLogs in Local AppData.";
+                    launch_error_ = build_status_;
+                }
+            }
+        }
         if (process_) {
             int code = 0;
             if (SDL_WaitProcess(process_, false, &code)) {
@@ -882,7 +909,7 @@ public:
 
 private:
     // The main menu: Play, the game / update / DLC folders, Settings, Mods, Quit.
-    enum MainItem { kPlay, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kLibraryItem, kUpdatesItem, kDiagnosticsItem, kQuitItem };
+    enum MainItem { kPlay, kBuildItem, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kLibraryItem, kUpdatesItem, kDiagnosticsItem, kQuitItem };
     // The Netplay page (host/netplay.h: the host's game streamed to its guests): hosting, a name, joining.
     // Then the open rooms (or a line saying there are none), then Back.
     enum NetplayItem { kHostSwitch, kNameField, kAddressField, kFirstRoom };
@@ -931,6 +958,7 @@ private:
         switch (screen_) {
         case Screen::kMain:
             list_ = {{"PLAY"},
+                     {"BUILD RUNTIME", building_runtime_ ? "Building locally..." : build_status_},
                      {"GAME", folder_value(kGame)},
                      {"UPDATE", folder_value(kUpdate)},
                      {"DLC", folder_value(kDlc)},
@@ -1324,6 +1352,7 @@ private:
         switch (screen_) {
         case Screen::kMain:
             if (selected_ == kPlay) play();
+            if (selected_ == kBuildItem) build_runtime();
             if (const auto slot = folder_slot(selected_)) choose_folder(*slot);
             if (selected_ == kOnlineItem) go(Screen::kOnline);
             if (selected_ == kNetplayItem) go(Screen::kNetplay);
@@ -1573,8 +1602,54 @@ private:
         return dir_ / (cafe::host::cpu_has_x86_64_v3() ? "smash.exe" : "smash-compat.exe");
     }
 
+    void build_runtime() {
+        if (process_ || build_process_) return;
+        if (!valid_[kGame]) {
+            build_status_ = "Select a valid base-game folder first.";
+            choose_folder(kGame);
+            return;
+        }
+        if (!valid_[kUpdate]) {
+            build_status_ = "Select the game update folder to build the updated runtime.";
+            choose_folder(kUpdate);
+            return;
+        }
+
+        fs::path script = dir_ / "build-kit" / "tools" / "windows" / "build-from-library.ps1";
+        if (!fs::is_regular_file(script)) {
+            script = dir_.parent_path() / "tools" / "windows" / "build-from-library.ps1";
+        }
+        std::error_code ec;
+        if (!fs::is_regular_file(script, ec) || ec) {
+            build_status_ = "Build kit missing. Reinstall the complete release package.";
+            launch_error_ = "The local build kit is missing beside the launcher. Download the complete U Unlocked release package again.";
+            return;
+        }
+
+        const std::vector<std::string> words = {
+            "powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
+            "-File", script.string(),
+            "-GameDirectory", paths_[kGame].string(),
+            "-UpdateDirectory", paths_[kUpdate].string()
+        };
+        std::vector<const char*> args;
+        args.reserve(words.size() + 1);
+        for (const std::string& word : words) args.push_back(word.c_str());
+        args.push_back(nullptr);
+
+        build_status_ = "Preparing local Vulkan runtime...";
+        launch_error_.clear();
+        build_process_ = SDL_CreateProcess(args.data(), false);
+        if (build_process_) {
+            building_runtime_ = true;
+        } else {
+            build_status_ = std::string("Build could not start: ") + SDL_GetError();
+            launch_error_ = build_status_;
+        }
+    }
+
     void play() {
-        if (process_) return;
+        if (process_ || building_runtime_) return;
         if (!valid_[kGame] || (!asked_[kUpdate] && !valid_[kUpdate]) || (!asked_[kDlc] && !valid_[kDlc])) {
             // Ask for what is missing, one folder after another (once per run for the optional ones).
             prompting_ = true;
@@ -1587,7 +1662,7 @@ private:
         if (!ready()) return;
         std::error_code ec;
         if (ec || !fs::is_regular_file(game_exe(), ec) || ec) {
-            launch_error_ = "The game files are verified, but the local game runtime has not been built yet. This launcher-only release cannot compile it. Build the runtime from your own base-game and update RPX files using the repository's Windows build instructions, then place the generated Play files beside this launcher.";
+            build_runtime();
             return;
         }
         launch_error_.clear();
@@ -2875,7 +2950,7 @@ private:
 
     SDL_Window* window_;
     SDL_Renderer* r_;
-    std::array<SDL_FRect, 13> main_rects_{};
+    std::array<SDL_FRect, 14> main_rects_{};
     fs::path cemu_profiles_dir_ = cemu_profiles_directory();
     size_t cemu_profile_count_ = count_cemu_profiles(cemu_profiles_dir_);
     std::string cemu_dialog_directory_;
@@ -2907,6 +2982,10 @@ private:
     float selection_y_ = 0, fade_ = 0, time_ = 0;
     float stick_x_ = 0, stick_y_ = 0, held_x_ = 0, held_y_ = 0;
     SDL_Process* process_ = nullptr;
+    SDL_Process* build_process_ = nullptr;
+    bool building_runtime_ = false;
+    std::string build_status_ = "Not built";
+    int build_exit_code_ = 0;
     int exit_code_ = 0;
     std::string launch_error_;
     std::mutex dialog_mutex_;
