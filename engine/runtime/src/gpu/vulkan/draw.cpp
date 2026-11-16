@@ -358,10 +358,10 @@ const ShaderModule* Renderer::shader(Stage stage, uint32_t address, uint32_t siz
                 VK_CHECK(vkCreateShaderModule(ctx_.device, &mci, nullptr, &pending->module));
                 pending->state = Built::kReady;
                 } catch (const std::exception& error) {
-                    std::fprintf(stderr, "ttt2: gpu: asynchronous shader compilation failed: %s\\n", error.what());
+                    std::fprintf(stderr, "ttt2: gpu: asynchronous shader compilation failed: %s\n", error.what());
                     pending->state = Built::kFailed;
                 } catch (...) {
-                    std::fprintf(stderr, "ttt2: gpu: asynchronous shader compilation failed with an unknown exception\\n");
+                    std::fprintf(stderr, "ttt2: gpu: asynchronous shader compilation failed with an unknown exception\n");
                     pending->state = Built::kFailed;
                 }
             });
@@ -439,9 +439,9 @@ void Renderer::compile_async(std::function<void()> job) {
                     try {
                         next();
                     } catch (const std::exception& error) {
-                        std::fprintf(stderr, "ttt2: gpu: shader worker failed: %s\\n", error.what());
+                        std::fprintf(stderr, "ttt2: gpu: shader worker failed: %s\n", error.what());
                     } catch (...) {
-                        std::fprintf(stderr, "ttt2: gpu: shader worker failed with an unknown exception\\n");
+                        std::fprintf(stderr, "ttt2: gpu: shader worker failed with an unknown exception\n");
                     }
                 }
             });
