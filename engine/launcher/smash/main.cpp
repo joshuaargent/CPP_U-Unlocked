@@ -247,35 +247,70 @@ std::string pack_name(const fs::path& root) {
     return {};
 }
 
-// Unpacks `archive` into `into` with the system's tar (libarchive: .zip, .7z, .rar, .tar.*); false if it couldn't.
-bool extract_archive(const fs::path& archive, const fs::path& into) {
+// Archive extraction is deliberately disabled until a bounded, link-safe extractor is
+// integrated. The Windows tar utility is not an acceptable security boundary for
+// archives supplied by users.
+
+// What installing a mod (a folder) did: the mod's name, or why it failed.
+struct Installed {
+    bool ok = false;
+    std::string message;
+};
+
+bool is_reparse_point(const fs::path& path) {
 #ifdef _WIN32
-    wchar_t system[MAX_PATH] = {};
-    GetSystemDirectoryW(system, MAX_PATH);
-    std::wstring command = L"\"" + (fs::path(system) / "tar.exe").wstring() + L"\" -xf \"" + archive.wstring() + L"\" -C \"" +
-                           into.wstring() + L"\"";
-    STARTUPINFOW si{};
-    si.cb = sizeof si;
-    PROCESS_INFORMATION pi{};
-    if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
-        return false;
-    }
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD code = 1;
-    GetExitCodeProcess(pi.hProcess, &code);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-    return code == 0;
+    const DWORD attributes = GetFileAttributesW(path.c_str());
+    return attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
 #else
-    const char* args[] = {"tar", "-xf", archive.c_str(), "-C", into.c_str(), nullptr};
-    SDL_Process* process = SDL_CreateProcess(args, false);
-    int code = 1;
-    if (process) {
-        SDL_WaitProcess(process, true, &code);
-        SDL_DestroyProcess(process);
-    }
-    return code == 0;
+    std::error_code ec;
+    const auto status = fs::symlink_status(path, ec);
+    return ec || fs::is_symlink(status);
 #endif
+}
+
+void copy_mod_folder_safely(const fs::path& source, const fs::path& destination) {
+    constexpr size_t kMaximumEntries = 20000;
+    constexpr uint64_t kMaximumExpandedBytes = 4ULL * 1024 * 1024 * 1024;
+    std::error_code ec;
+    const auto root_status = fs::symlink_status(source, ec);
+    if (ec || !fs::is_directory(root_status) || fs::is_symlink(root_status) || is_reparse_point(source))
+        throw std::runtime_error("The selected mod folder is not a normal directory.");
+    fs::create_directories(destination, ec);
+    if (ec) throw std::runtime_error("Cannot create the mod staging directory: " + ec.message());
+
+    size_t entries = 0;
+    uint64_t expanded_bytes = 0;
+    for (fs::recursive_directory_iterator it(source, fs::directory_options::none, ec), end; it != end; it.increment(ec)) {
+        if (ec) throw std::runtime_error("Cannot inspect the selected mod folder: " + ec.message());
+        if (++entries > kMaximumEntries)
+            throw std::runtime_error("The mod folder exceeds the 20,000-entry safety limit.");
+        const fs::path input = it->path();
+        const fs::path relative = input.lexically_relative(source);
+        if (relative.empty() || relative.is_absolute())
+            throw std::runtime_error("The mod folder contains an invalid relative path.");
+        for (const auto& component : relative) {
+            if (component == "." || component == "..")
+                throw std::runtime_error("The mod folder contains an unsafe path.");
+        }
+        const auto status = it->symlink_status(ec);
+        if (ec || fs::is_symlink(status) || is_reparse_point(input))
+            throw std::runtime_error("The mod folder contains a symbolic link or reparse point: " + relative.string());
+        const fs::path output = destination / relative;
+        if (fs::is_directory(status)) {
+            fs::create_directory(output, ec);
+            if (ec) throw std::runtime_error("Cannot create mod directory: " + ec.message());
+        } else if (fs::is_regular_file(status)) {
+            const uint64_t size = fs::file_size(input, ec);
+            if (ec || size > kMaximumExpandedBytes - expanded_bytes)
+                throw std::runtime_error("The mod folder exceeds the 4 GiB expanded-size safety limit.");
+            expanded_bytes += size;
+            fs::copy_file(input, output, fs::copy_options::none, ec);
+            if (ec) throw std::runtime_error("Cannot copy mod file " + relative.string() + ": " + ec.message());
+        } else {
+            throw std::runtime_error("The mod folder contains an unsupported filesystem entry: " + relative.string());
+        }
+    }
+    if (ec) throw std::runtime_error("Cannot finish inspecting the mod folder: " + ec.message());
 }
 
 // What installing a mod (an archive or a folder) did: the mod's name, or why it failed.
@@ -288,26 +323,31 @@ struct Installed {
 // content\ layout somewhere inside (find_content_root), the formats find_mods reads.
 Installed install_mod(const fs::path& source, const fs::path& mods) {
     std::error_code ec;
+    const auto source_status = fs::symlink_status(source, ec);
+    if (ec || !fs::is_directory(source_status) || fs::is_symlink(source_status) || is_reparse_point(source))
+        return {false, "Select an extracted mod folder. Archive installation is temporarily disabled until secure extraction is available."};
     fs::create_directories(mods, ec);
-    std::string name = fs::is_directory(source, ec) ? source.filename().string() : source.stem().string();
-    if (name.size() > 4 && name.substr(name.size() - 4) == ".tar") name.resize(name.size() - 4);
+    if (ec) return {false, "Cannot create the mods directory: " + ec.message()};
+    std::string name = source.filename().string();
     for (char& c : name) {
         if (std::string("<>:\"/\\|?*").find(c) != std::string::npos || static_cast<unsigned char>(c) < 32) c = '_';
     }
     if (name.empty() || name[0] == '.') name = "mod" + name;
-    // Unpacked (or copied) beside the mods first, then moved into place in one step.
+    // Copy into a fresh staging directory, then atomically rename into the mods list.
     const fs::path staging = mods / (".installing-" + name);
-    fs::remove_all(staging, ec);
-    fs::create_directories(staging, ec);
+    if (fs::exists(staging, ec))
+        return {false, "A previous installation is still staged for this mod. Remove " + staging.filename().string() + " and retry."};
+    fs::create_directory(staging, ec);
+    if (ec) return {false, "Cannot create the mod staging directory: " + ec.message()};
     const auto fail = [&](std::string why) {
-        fs::remove_all(staging, ec);
+        std::error_code cleanup_error;
+        fs::remove_all(staging, cleanup_error);
         return Installed{false, std::move(why)};
     };
-    if (fs::is_directory(source, ec)) {
-        fs::copy(source, staging / source.filename(), fs::copy_options::recursive, ec);
-        if (ec) return fail("Couldn't copy that folder: " + ec.message());
-    } else if (!extract_archive(source, staging)) {
-        return fail("Couldn't unpack " + source.filename().string() + ". Unpack it yourself and drop the folder here.");
+    try {
+        copy_mod_folder_safely(source, staging / source.filename());
+    } catch (const std::exception& error) {
+        return fail(std::string("Mod folder rejected: ") + error.what());
     }
     if (find_content_root(staging, 5).empty()) {
         return fail(source.filename().string() + " isn't a Smash mod: there's no content folder in it.");
@@ -1371,10 +1411,9 @@ private:
             if (files && files[0]) l->dialog_result_ = files[0];
             l->dialog_done_ = true;
         };
-        static const SDL_DialogFileFilter filters[] = {{"Mod archives", "zip;7z;rar"}, {"All files", "*"}};
         mod_dialog_ = true;
-        SDL_SetWindowTitle(window_, "Choose a mod to install (.zip, .7z or .rar)");
-        SDL_ShowOpenFileDialog(callback, this, window_, filters, 2, nullptr, false);
+        SDL_SetWindowTitle(window_, "Choose an extracted mod folder");
+        SDL_ShowOpenFolderDialog(callback, this, window_, nullptr, false);
     }
 
     // Unpacks off the launcher's thread (a big pack takes a while).
