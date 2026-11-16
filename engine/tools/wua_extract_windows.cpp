@@ -4,6 +4,7 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 
 #include <zarchive/zarchivereader.h>
 
@@ -24,6 +25,18 @@
 namespace fs = std::filesystem;
 
 namespace {
+
+struct CommandLineArgs {
+    LPWSTR* values = nullptr;
+    ~CommandLineArgs() { if (values) LocalFree(values); }
+};
+
+fs::path path_from_utf8(std::string_view value) {
+    std::u8string encoded;
+    encoded.reserve(value.size());
+    for (const unsigned char c : value) encoded.push_back(static_cast<char8_t>(c));
+    return fs::path(encoded);
+}
 
 constexpr size_t kMaximumEntries = 100000;
 constexpr unsigned kMaximumDepth = 128;
@@ -66,7 +79,7 @@ bool reserved_device_name(std::wstring_view component) {
     std::wstring stem(component.substr(0, dot));
     while (!stem.empty() && (stem.back() == L' ' || stem.back() == L'.')) stem.pop_back();
     std::transform(stem.begin(), stem.end(), stem.begin(),
-                   [](wchar_t c) { return c >= L'a' && c <= L'z' ? c - (L'a' - L'A') : c; });
+                   [](wchar_t c) { return c >= L'a' && c <= L'z' ? static_cast<wchar_t>(c - (L'a' - L'A')) : c; });
     if (stem == L"CON" || stem == L"PRN" || stem == L"AUX" || stem == L"NUL" ||
         stem == L"CONIN$" || stem == L"CONOUT$") return true;
     if (stem.size() == 4 && (stem.compare(0, 3, L"COM") == 0 || stem.compare(0, 3, L"LPT") == 0) &&
@@ -211,7 +224,7 @@ void ensure_safe_root(const fs::path& requested) {
 }
 
 void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& root) {
-    const fs::path relative = fs::u8path(entry.path);
+    const fs::path relative = path_from_utf8(entry.path);
     fs::path parent = root;
     for (const auto& component : relative.parent_path()) {
         parent /= component;
@@ -268,12 +281,22 @@ void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& ro
 
 } // namespace
 
-int main(int argc, char** argv) {
-    const std::string command = argc > 1 ? argv[1] : "";
-    const bool list = command == "list";
-    const bool analysis = command == "extract-analysis";
-    const bool all = command == "extract-all";
-    if ((!list && !analysis && !all) || argc != (list ? 3 : 4)) {
+int main(int, char**) {
+    CommandLineArgs arguments{CommandLineToArgvW(GetCommandLineW(), nullptr)};
+    int argument_count = 0;
+    if (arguments.values) {
+        // CommandLineToArgvW requires the output count pointer; fetch it in the call below.
+        LocalFree(arguments.values);
+        arguments.values = nullptr;
+    }
+    arguments.values = CommandLineToArgvW(GetCommandLineW(), &argument_count);
+    if (!arguments.values) win_error("Cannot parse the Windows command line");
+
+    const std::wstring command = argument_count > 1 ? arguments.values[1] : L"";
+    const bool list = command == L"list";
+    const bool analysis = command == L"extract-analysis";
+    const bool all = command == L"extract-all";
+    if ((!list && !analysis && !all) || argument_count != (list ? 3 : 4)) {
         std::cerr << "Usage:\n  wua_extract list ARCHIVE\n"
                   << "  wua_extract extract-analysis ARCHIVE OUTPUT_DIR\n"
                   << "  wua_extract extract-all ARCHIVE OUTPUT_DIR\n";
@@ -281,8 +304,8 @@ int main(int argc, char** argv) {
     }
 
     try {
-        std::unique_ptr<ZArchiveReader> reader(ZArchiveReader::OpenFromFile(fs::u8path(argv[2])));
-        if (!reader) throw std::runtime_error("Cannot open WUA/ZArchive: " + std::string(argv[2]));
+        std::unique_ptr<ZArchiveReader> reader(ZArchiveReader::OpenFromFile(fs::path(arguments.values[2])));
+        if (!reader) throw std::runtime_error("Cannot open WUA/ZArchive: archive open failed");
         const auto files = inventory(*reader, analysis);
 
         if (list) {
@@ -290,7 +313,7 @@ int main(int argc, char** argv) {
             for (const auto& entry : files)
                 std::cout << entry.path << '\t' << entry.size << '\n';
         } else {
-            const fs::path root = fs::u8path(argv[3]);
+            const fs::path root(arguments.values[3]);
             ensure_safe_root(root);
             uint64_t bytes = 0;
             for (const auto& entry : files) {
