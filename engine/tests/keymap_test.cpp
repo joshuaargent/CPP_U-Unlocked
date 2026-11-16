@@ -263,7 +263,7 @@ void test_load(const fs::path& scratch) {
     const keymap::Loaded loaded = keymap::load(file, sdl_name);
     check(loaded.keys[index_of("l")] == 5 && loaded.keys[index_of("r")] == 40, "file: keys");
     const std::vector<std::string> log{"keyboard: " + file.string() + ":2: unknown input \"jump\", line ignored",
-                                       "keyboard: 2 of 19 keys from " + file.string()};
+                                       "keyboard: 2 of 25 keys from " + file.string()};
     check(loaded.log == log, "file: log " + joined(loaded.log));
 
     write(file, "");
