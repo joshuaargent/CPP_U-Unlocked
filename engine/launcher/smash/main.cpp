@@ -1636,10 +1636,10 @@ private:
 
         const std::vector<std::string> words = {
             "powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
-            "-File", script.string(),
-            "-GameDirectory", paths_[kGame].string(),
-            "-UpdateDirectory", paths_[kUpdate].string(),
-            "-LauncherDirectory", dir_.string()
+            "-File", path_utf8(script),
+            "-GameDirectory", path_utf8(paths_[kGame]),
+            "-UpdateDirectory", path_utf8(paths_[kUpdate]),
+            "-LauncherDirectory", path_utf8(dir_)
         };
         std::vector<const char*> args;
         args.reserve(words.size() + 1);
@@ -1676,17 +1676,17 @@ private:
         }
         launch_error_.clear();
         // smash.exe [--host PORT] [--mod FOLDER]... UPDATE GAME; smash-base.exe GAME (mods are made for the update).
-        std::vector<std::string> words{game_exe().string()};
+        std::vector<std::string> words{path_utf8(game_exe())};
         if (netplay_host_) words.insert(words.end(), {"--host", netplay_name_.empty() ? "Player" : netplay_name_});
         if (valid_[kUpdate]) {
             for (const Mod& m : mods_) {
-                if (m.on) words.insert(words.end(), {"--mod", m.root.string()});
+                if (m.on) words.insert(words.end(), {"--mod", path_utf8(m.root)});
             }
             // The DLC's items unlock what the update carries, so only with it.
-            if (valid_[kDlc]) words.insert(words.end(), {"--dlc", paths_[kDlc].string()});
-            words.push_back(paths_[kUpdate].string());
+            if (valid_[kDlc]) words.insert(words.end(), {"--dlc", path_utf8(paths_[kDlc])});
+            words.push_back(path_utf8(paths_[kUpdate]));
         }
-        words.push_back(paths_[kGame].string());
+        words.push_back(path_utf8(paths_[kGame]));
         std::vector<const char*> args;
         for (const std::string& w : words) args.push_back(w.c_str());
         args.push_back(nullptr);
@@ -1737,7 +1737,7 @@ private:
             return;
         }
         save_launcher_ini();
-        const std::string exe = (dir_ / "smash.exe").string();
+        const std::string exe = path_utf8(dir_ / "smash.exe");
         const std::string name = netplay_name_.empty() ? "Player" : netplay_name_;
         const char* args[] = {exe.c_str(), "--join", target.c_str(), name.c_str(), nullptr};
         SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SMASH_LOG", (dir_ / "smash.log").string().c_str(), true);
