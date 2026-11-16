@@ -841,12 +841,13 @@ private:
         case Screen::kUpdates:
             list_ = {{"APPLICATION VERSION", kVersion},
                      {"UPDATE CHANNEL", update_channel_ == "stable" ? "Stable" : "Beta"},
-                     {"CHECK FOR APPLICATION UPDATES", update_status_},
-                     {"INSTALL APPLICATION UPDATE", update_available_ ? update_release_version_ : "No update ready"},
-                     {"OPEN RELEASE PAGE", update_release_url_.empty() ? "Not available" : "Open GitHub release"},
+                     {"APPLICATION UPDATE STATUS", update_status_},
+                     {"CHECK FOR APPLICATION UPDATES"},
+                     {"INSTALL APPLICATION UPDATE"},
+                     {"OPEN RELEASE PAGE"},
                      {"INSTALLED GAME UPDATE", valid_[kUpdate] ? "Version " + std::to_string(update_version_) : "Not installed"},
-                     {"SELECT GAME UPDATE FOLDER", "Choose a valid update dump"},
-                     {"REMOVE GAME UPDATE", valid_[kUpdate] ? "Remove configured update" : "Nothing to remove"},
+                     {"SELECT GAME UPDATE FOLDER"},
+                     {"REMOVE GAME UPDATE"},
                      {"BACK"}};
             break;
         case Screen::kDiagnostics: {
@@ -1198,17 +1199,17 @@ private:
             break;
         case Screen::kUpdates:
             if (selected_ == 1) change(1);
-            else if (selected_ == 2) check_launcher_updates();
-            else if (selected_ == 3) install_launcher_update();
-            else if (selected_ == 4) {
+            else if (selected_ == 3) check_launcher_updates();
+            else if (selected_ == 4) install_launcher_update();
+            else if (selected_ == 5) {
                 if (!update_release_url_.empty() && update_release_url_.starts_with("https://")) SDL_OpenURL(update_release_url_.c_str());
-            } else if (selected_ == 6) choose_folder(kUpdate);
-            else if (selected_ == 7) {
+            } else if (selected_ == 7) choose_folder(kUpdate);
+            else if (selected_ == 8) {
                 paths_[kUpdate].clear();
                 asked_[kUpdate] = true;
                 save_launcher_ini();
                 refresh();
-            } else if (selected_ == 8) back();
+            } else if (selected_ == 9) back();
             break;
         case Screen::kDiagnostics:
             if (selected_ == 10) {
