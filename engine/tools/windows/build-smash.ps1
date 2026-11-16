@@ -2,9 +2,26 @@
 # the launcher. Output in Play\: "U Unlocked.exe" (the launcher), smash.exe (built from the update's v304 code),
 # smash-base.exe (from the game's own v1.0 code, to play without the update), smash-compat.exe (the update's for
 # processors without AVX2), the launcher dependencies and required licence notices.
-param([string]$Rpx = 'N:\ROMS\Wii U\Super Smash Bros for Wii U [Update] [0005000e10144f00]\code\cross_f.rpx',
-      [string]$BaseRpx = 'N:\ROMS\Wii U\Super Smash Bros for Wii U [Game] [0005000010144f00]\code\cross_f.rpx')
+# Supply paths to legally dumped RPX files on this machine; no developer-specific ROM paths are assumed.
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$Rpx,
+    [string]$BaseRpx = ''
+)
 $ErrorActionPreference = 'Stop'
+
+if (-not (Test-Path -LiteralPath $Rpx -PathType Leaf)) {
+    throw "The update RPX file does not exist: $Rpx"
+}
+$Rpx = (Resolve-Path -LiteralPath $Rpx).Path
+if (-not [string]::IsNullOrWhiteSpace($BaseRpx)) {
+    if (-not (Test-Path -LiteralPath $BaseRpx -PathType Leaf)) {
+        throw "The base-game RPX file does not exist: $BaseRpx"
+    }
+    $BaseRpx = (Resolve-Path -LiteralPath $BaseRpx).Path
+}
+
 # Run from the repository's tools\windows: the repository's parent holds toolchain\ (llvm-mingw, Ninja, CMake)
 # and receives generated\, Play\ and dist\.
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
@@ -53,7 +70,7 @@ Copy-Item -LiteralPath $titleLogo -Destination (Join-Path $play 'title-logo.png'
 $compatBuild = Join-Path $engineRoot 'build-compat'
 Build-Game $Rpx (Join-Path $root 'generated\smash') $compatBuild @('smash') @('-DSMASH_COMPAT=ON')
 Copy-Item (Join-Path $compatBuild 'smash-compat.exe') $play
-if (Test-Path $BaseRpx) {
+if (-not [string]::IsNullOrWhiteSpace($BaseRpx)) {
     $baseBuild = Join-Path $engineRoot 'build-base'
     Build-Game $BaseRpx (Join-Path $root 'generated\smash-base') $baseBuild @('smash')
     Copy-Item (Join-Path $baseBuild 'smash.exe') (Join-Path $play 'smash-base.exe')
