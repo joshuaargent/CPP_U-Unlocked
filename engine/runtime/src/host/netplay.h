@@ -5,10 +5,10 @@
 // Controllers (players 2-8). Nothing to keep in step, so every mode, 8 players, items and mods all work, and
 // guests need no game files.
 //
-// Rooms: a hosting game lists itself on the room server (server/worker: a Cloudflare Worker) and guests pick it
-// from the launcher's list. Both learn their public UDP address from a STUN server and the room server introduces
-// them, then they send to each other until their routers let the packets through (hole punching): no port
-// forwarding. Everything after that goes directly between the two PCs, over UDP.
+// Guests can join directly using a host IP / hostname and UDP port. Optional room discovery and NAT introduction
+// are available only when U_UNLOCKED_ROOM_SERVER points to a separately deployed, compatible U Unlocked service.
+// No third-party room service is contacted by default. Direct internet joins generally require UDP port forwarding;
+// a private VPN such as Tailscale can provide a simpler route. Once connected, game traffic travels directly over UDP.
 
 #include "cafe/input.h"
 #include "host/rooms.h"
