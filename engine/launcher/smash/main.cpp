@@ -1880,7 +1880,11 @@ private:
         for (int slot = 0; slot < kSlots; ++slot) {
             if (result.slots[slot].empty()) continue;
             const fs::path relative = result.slots[slot].lexically_relative(result.extracted);
-            if (relative.empty() || relative.is_absolute()) continue;
+            if (relative.is_absolute()) continue;
+            if (relative.empty() || relative == ".") {
+                paths_[slot] = final_extracted;
+                continue;
+            }
             bool unsafe = false;
             for (const auto& component : relative) {
                 if (component == "." || component == "..") unsafe = true;
