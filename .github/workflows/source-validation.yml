@@ -43,6 +43,22 @@ jobs:
       - name: Run controller tests
         run: ctest --test-dir build/controller-profile-tests -C Release --output-on-failure
 
+      - name: Fetch pinned stb headers
+        shell: pwsh
+        run: |
+          python engine/tools/setup_deps.py stb
+          if ($LASTEXITCODE -ne 0) { throw 'Fetching pinned stb headers failed.' }
+          if (-not (Test-Path 'engine/third_party/stb/stb_image.h')) { throw 'stb_image.h is missing.' }
+          if (-not (Test-Path 'engine/third_party/stb/stb_truetype.h')) { throw 'stb_truetype.h is missing.' }
+          if (-not (Test-Path 'engine/third_party/stb/LICENSE')) { throw 'The stb licence notice is missing.' }
+
+      - name: Configure launcher compile check
+        shell: pwsh
+        run: cmake -S engine/tests/launcher_compile -B build/launcher-compile -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Compile complete launcher source
+        run: cmake --build build/launcher-compile --config Release
+
   validate:
     name: Validate source tree and project scripts
     runs-on: windows-latest
