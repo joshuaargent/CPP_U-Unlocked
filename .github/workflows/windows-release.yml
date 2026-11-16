@@ -110,6 +110,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $engineBuild, $runtimeDlls | Out-Null
           Copy-Item -LiteralPath $launcher.FullName -Destination (Join-Path $engineBuild 'U Unlocked.exe')
           Copy-Item -LiteralPath $extractor.FullName -Destination (Join-Path $engineBuild 'wua_extract.exe')
+          $titleLogo = 'engine/runtime/res/title-logo.png'
+          if (-not (Test-Path -LiteralPath $titleLogo -PathType Leaf)) { throw 'Generated U Unlocked title logo is missing.' }
+          Copy-Item -LiteralPath $titleLogo -Destination (Join-Path $engineBuild 'title-logo.png')
 
           $vcpkgBin = Join-Path $env:VCPKG_ROOT 'installed/x64-windows/bin'
           $dlls = @(Get-ChildItem -LiteralPath $vcpkgBin -Filter '*.dll' -File)
@@ -145,7 +148,7 @@ jobs:
               if ($entries.ContainsKey($name)) { throw "Duplicate path in release ZIP: $name" }
               $entries.Add($name, $entry)
             }
-            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'update-launcher.ps1')) {
+            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png', 'update-launcher.ps1')) {
               if (-not $entries.ContainsKey($required)) { throw "Release ZIP is missing root entry: $required" }
             }
 
