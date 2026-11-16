@@ -18,6 +18,7 @@
 - [ ] Add Windows WUA archive selection and safe extraction into the Build workflow, with strict path, link, file-count, and expanded-size validation. Preserve the original archive and stage extraction before activating the resulting folder.
 - [x] Add a game-update management page for selecting and removing the locally installed update dump.
 - [x] Add a Diagnostics page for platform, CPU core count, system memory, CPU optimisation path, SDL renderer, game/update validation, active mods, shader-cache count, log path, and clipboard export.
+- [x] Own and join the launcher's background workers for mod installation, Pretendo sign-in, room discovery, and application update checks; contain worker exceptions and clear the sign-in password buffer after use.
 - [x] Make Netplay status explain the actual direct IP/VPN connection requirements instead of implying that an unconfigured room directory is active.
 - [ ] Rework the launcher into a consistent Melee Unlocked-inspired product flow: Build, Play, Updates, Mods, and Online as primary destinations, with configuration and diagnostics grouped cleanly.
 - [ ] Complete responsive layouts, high-DPI scaling, focus states, keyboard/controller navigation, and accessibility.
