@@ -55,6 +55,12 @@ The presentation queue and image pool are independent of the command processor's
 
 GPU writebacks, end-of-pipe writes, timestamps, stream-out, and guest waits have observable ordering. The retirement thread processes backend completion values in order and makes those results visible to guest memory. Any decoupling must preserve these semantics; a completed simulation tick must not imply that an unfinished GPU writeback is already visible to the guest.
 
+## Queue bounds added before decoupling
+
+The command processor and GPU-retirement metadata queues are now capped independently at 256 entries each. When the submission queue is full, the GX2 submitting thread waits for the command processor to consume an entry. When the retirement queue is full, the command processor waits for the retirement worker to consume an entry. Work is never dropped, reordered, or coalesced by these limits.
+
+This prevents an unbounded backlog of guest command-buffer addresses and GPU timeline-retirement records if a producer outruns the consumer. It is deliberately back-pressure, not simulation/render decoupling: it does not make the guest run at 59.94 Hz when the GPU cannot keep up, and it does not snapshot guest memory. The existing one-frame retirement wait remains in place until ownership and lifetime rules are addressed.
+
 ## Required design
 
 The target is a deterministic guest simulation clock at the title's 59.94 Hz cadence, independently scheduled from image production and host presentation. The renderer may produce fewer than 59.94 new images per second when the hardware cannot keep up; presentation may repeat the latest completed image. Do not run gameplay, physics, collision, input sampling, or netplay simulation faster to compensate for a slow renderer.
