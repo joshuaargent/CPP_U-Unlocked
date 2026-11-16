@@ -28,7 +28,7 @@
 - [x] Implement per-axis dead zones and stick-axis inversion.
 - [x] Add a live controller input monitor for all mapped buttons, sticks, and triggers.
 - [ ] Implement full stick/trigger calibration and saturation.
-- [ ] Implement Cemu XML import with explicit mapping translation and preview.
+- [x] Import Cemu Wii U GamePad and Pro Controller XML profiles for the SDLController API with explicit button/axis mapping translation and a review-before-save workflow.
 - [x] Add automated tests for axis normalization, dead zones, inversion, profile persistence, and invalid-save protection.
 - [ ] Add tests for reconnects, ambiguous device identities, and multi-controller setups.
 

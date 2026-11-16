@@ -94,7 +94,9 @@ if(SMASH_GENERATED_DIR)
 
     # U Unlocked's launcher (launcher/smash/): the menu that runs smash.exe.
     find_package(SDL3 REQUIRED CONFIG)
-    add_executable(smash-launcher WIN32 launcher/smash/main.cpp runtime/src/host/display_settings.cpp runtime/src/host/controller_profiles.cpp
+    add_executable(smash-launcher WIN32 launcher/smash/main.cpp runtime/src/host/display_settings.cpp
+        runtime/src/host/controller_profiles.cpp runtime/src/host/controller_profile_import.cpp
+        third_party/tinyxml2/tinyxml2.cpp
         # Pretendo sign-in (the Online page)
         runtime/src/os/online_identity.cpp runtime/src/os/sect233.cpp runtime/src/os/act_server.cpp
         runtime/src/host/http.cpp
@@ -104,7 +106,7 @@ if(SMASH_GENERATED_DIR)
     if(WIN32)
         target_sources(smash-launcher PRIVATE runtime/res/smash.rc)
     endif()
-    target_include_directories(smash-launcher PRIVATE runtime/src)
+    target_include_directories(smash-launcher PRIVATE runtime/src third_party/tinyxml2)
     target_include_directories(smash-launcher SYSTEM PRIVATE third_party/stb)
     target_compile_features(smash-launcher PRIVATE cxx_std_20)
     target_link_libraries(smash-launcher PRIVATE SDL3::SDL3 $<$<PLATFORM_ID:Windows>:winhttp bcrypt ws2_32>)

@@ -2,9 +2,9 @@
 
 ## Current runtime input layer
 
-The Windows runtime uses SDL3 for physical gamepad discovery and events. The current implementation maps physical controls into Wii U GamePad and Pro Controller state, but does not yet expose a complete physical remapping interface.
+The Windows runtime uses SDL3 for physical gamepad discovery and events. The launcher exposes per-device physical button/axis remapping, per-player assignment, per-axis dead zones, stick inversion, trigger thresholds, and a live input monitor. The runtime translates these profiles into Wii U GamePad and Pro Controller state.
 
-The integration points are the existing pad-state mapping and update functions in `engine/runtime/src/host/window.cpp`. Preserve controller slot assignment, remote-pad routing, virtual-pad test hooks, and the distinction between Wii U GamePad and Pro Controller state.
+The runtime integration points are the controller profile module and pad-state routing in `engine/runtime/src/host/window.cpp`. Preserve remote-pad routing, virtual-pad test hooks, and the distinction between Wii U GamePad and Pro Controller state.
 
 ## Cemu profile format
 
@@ -21,22 +21,18 @@ References:
 - Cemu controller profile loader/saver: https://github.com/cemu-project/Cemu/blob/main/src/input/InputManager.cpp
 - Cemu controller setup guide: https://cemu.cfw.guide/controller-configuration.html
 
-## Import compatibility rules
+## Implemented import scope
 
-Cemu numeric mapping/button values are Cemu-internal identifiers, not SDL3 button or axis enums. Its `uuid` is tied to the selected input API and must not be assumed to equal an SDL GUID. Copying those values directly into a U Unlocked profile would be incorrect.
+The importer is deliberately limited to Cemu profiles containing an `SDLController` entry and an emulated type of `Wii U GamePad` or `Wii U Pro Controller`.
 
-The importer must:
+- The XML parser is TinyXML-2. Files are limited to 1 MiB and malformed XML, missing required elements, unsupported controller types, and profiles without an SDLController entry are rejected.
+- Cemu logical mapping IDs are translated using separate GamePad and Pro Controller tables. Physical SDL button and axis identifiers are translated through explicit lookup tables; numeric IDs are never cast directly to SDL enums.
+- The importer prefers a controller UUID matching the currently selected device. A mismatch is reported for review; it does not silently claim the devices are identical.
+- Stick and trigger dead zones are imported. The Cemu stick dead zone is applied to both axes of the relevant stick as an approximation of Cemu's radial processing.
+- Cemu range, rumble, motion, non-SDL APIs, unsupported controls, and conflicting mappings are not silently discarded: the import report records warnings and skipped mappings.
+- Imported settings are loaded into the Controls page in memory only. The source XML and saved U Unlocked profile are not changed until the user explicitly selects Save Profile.
 
-1. Parse XML with a real XML parser and reject malformed or oversized files.
-2. Validate the root, emulated controller type, and required fields.
-3. Identify each controller API. Support only APIs with an explicit, tested translation path; show a clear unsupported-API warning for the rest.
-4. Translate known mapping IDs through a versioned mapping table. Never cast numeric values directly to SDL enums.
-5. Match a physical device using available vendor/product/name/serial/GUID hints. If the identifier cannot be matched reliably, ask the user to select the device.
-6. Preserve supported dead-zone, range, trigger, and axis-inversion settings. Warn about unsupported motion/rumble/custom settings rather than silently dropping them.
-7. Preview every translated mapping and show unmapped/ambiguous inputs before saving.
-8. Save as a new U Unlocked profile. Never overwrite the source XML or an existing U Unlocked profile during import.
-
-The first import target should be SDL-based profiles. Other APIs should be supported only after their identifiers and semantics are independently mapped and tested.
+The importer does not yet import XInput, DirectInput, DSU, motion, rumble, or Cemu range/gain settings. It does not claim byte-for-byte equivalence with Cemu's radial dead-zone algorithm.
 
 ## U Unlocked profile model
 

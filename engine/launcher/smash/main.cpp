@@ -13,6 +13,7 @@
 #include "os/act_server.h"
 #include "os/online_identity.h"
 #include "host/paint.h" // before the stb_truetype implementation below
+#include "host/controller_profile_import.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -36,6 +37,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -404,7 +406,7 @@ public:
             if (int i = item_at(e.button.x, e.button.y); i >= 0) {
                 select(i);
                 const bool control_action = screen_ == Screen::kControls &&
-                    (i == 3 || i == 5 || i == 8 || i == 9 || i == 10);
+                    (i == 3 || i == 5 || i == 9 || i == 10 || i == 11 || i == 12);
                 if (!control_action && !items()[i].value.empty() && !folder_slot(i) && screen_ != Screen::kOnline) {
                     change(e.button.x < layout_.right_chevron - layout_.h * 0.06f ? -1 : 1);
                 } else {
@@ -471,6 +473,12 @@ public:
         finish_install();
         if (!done) return;
         SDL_SetWindowTitle(window_, "U Unlocked");
+        if (cemu_dialog_) {
+            cemu_dialog_ = false;
+            if (!chosen.empty()) import_cemu_profile_file(chosen);
+            else controls_status_ = "Cemu profile import cancelled.";
+            return;
+        }
         if (mod_dialog_) {
             mod_dialog_ = false;
             if (!chosen.empty()) start_install(chosen);
@@ -734,6 +742,7 @@ private:
                      {"INVERT AXIS", control_axis_action_ >= static_cast<size_t>(controller_profiles::AxisAction::kLeftTrigger)
                          ? "N/A" : (control_profile_.axis_inverted[control_axis_action_] ? "On" : "Off")},
                      {"TRIGGER THRESHOLD", threshold},
+                     {"IMPORT CEMU PROFILE", "Choose XML"},
                      {"LIVE TEST", "Open"},
                      {"SAVE PROFILE", "Save"},
                      {"RESET PROFILE", "Defaults"},
@@ -978,10 +987,13 @@ private:
                 } else controls_status_ = "Connect a controller before binding inputs.";
                 break;
             case 9:
+                choose_cemu_profile();
+                break;
+            case 10:
                 go(Screen::kControlTest);
                 controls_status_ = "Move the sticks and press buttons to verify the selected mapping.";
                 break;
-            case 10: {
+            case 11: {
                 std::string error;
                 if (SDL_Gamepad* pad = selected_control_gamepad()) {
                     if (controller_profiles::save_for_device(pad, control_profile_, &error)) controls_status_ = "Controller profile saved.";
@@ -989,12 +1001,12 @@ private:
                 } else controls_status_ = "Connect a controller before saving its profile.";
                 break;
             }
-            case 11:
+            case 12:
                 control_profile_ = controller_profiles::default_profile();
                 if (SDL_Gamepad* pad = selected_control_gamepad()) control_profile_.device_guid = controller_profiles::device_info(pad).guid;
                 controls_status_ = "Default bindings restored. Save to keep them.";
                 break;
-            case 12: back(); break;
+            case 13: back(); break;
             default: change(1); break;
             }
             break;
@@ -1490,6 +1502,56 @@ private:
         }
     }
 
+    void choose_cemu_profile() {
+        if (!selected_control_gamepad()) {
+            controls_status_ = "Connect and select a controller before importing a profile.";
+            return;
+        }
+        static constexpr SDL_DialogFileFilter filters[] = {
+            {"Cemu controller profile", "xml"}
+        };
+        {
+            std::lock_guard lock(dialog_mutex_);
+            dialog_result_.clear();
+            dialog_done_ = false;
+        }
+        cemu_dialog_ = true;
+        SDL_SetWindowTitle(window_, "Select a Cemu controller profile XML file");
+        SDL_ShowOpenFileDialog([](void* self, const char* const* files, int) {
+            auto* launcher = static_cast<Launcher*>(self);
+            std::lock_guard lock(launcher->dialog_mutex_);
+            if (files && files[0]) launcher->dialog_result_ = files[0];
+            launcher->dialog_done_ = true;
+        }, this, window_, filters, 1, nullptr, false);
+    }
+
+    void import_cemu_profile_file(const fs::path& path) {
+        std::error_code ec;
+        const auto size = fs::file_size(path, ec);
+        if (ec || size == 0 || size > 1024 * 1024) {
+            controls_status_ = "The selected XML file is empty, unavailable, or larger than 1 MiB.";
+            return;
+        }
+        std::ifstream input(path, std::ios::binary);
+        if (!input) {
+            controls_status_ = "Unable to read the selected Cemu profile.";
+            return;
+        }
+        const std::string xml{std::istreambuf_iterator<char>(input), {}};
+        controller_profiles::Profile imported;
+        controller_profiles::CemuImportReport report;
+        std::string error;
+        if (!controller_profiles::import_cemu_profile_xml(xml, control_profile_, imported, report, &error)) {
+            controls_status_ = "Cemu import failed: " + error;
+            return;
+        }
+        control_profile_ = std::move(imported);
+        controls_status_ = "Imported " + std::to_string(report.imported_button_bindings) +
+            " button and " + std::to_string(report.imported_axis_bindings) +
+            " axis bindings. Review the settings, then Save Profile.";
+        if (!report.warnings.empty()) controls_status_ += " " + report.warnings.front();
+    }
+
     // Dumpling's online files: otp.bin, seeprom.bin and (if the console's account was dumped) its account.dat.
     void choose_console_files() {
         static const auto callback = [](void* self, const char* const* files, int) {
@@ -1847,7 +1909,7 @@ private:
     std::string dialog_result_;
     bool quit_ = false;
     // The Online page.
-    bool online_dialog_ = false, signing_in_ = false, online_ok_ = true;
+    bool online_dialog_ = false, cemu_dialog_ = false, signing_in_ = false, online_ok_ = true;
     // The mod installer.
     bool mod_dialog_ = false, installing_ = false, mod_ok_ = true, install_done_ = false;
     std::string mod_status_;

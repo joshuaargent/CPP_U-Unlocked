@@ -113,8 +113,12 @@ add_test(NAME keymap_test COMMAND keymap_test ${CMAKE_CURRENT_BINARY_DIR}/keymap
 
 # Controller profile persistence and physical-axis calibration math.
 add_executable(controller_profiles_test controller_profiles_test.cpp
-    ${CMAKE_SOURCE_DIR}/runtime/src/host/controller_profiles.cpp)
-target_include_directories(controller_profiles_test PRIVATE ${CMAKE_SOURCE_DIR}/runtime/src)
+    ${CMAKE_SOURCE_DIR}/runtime/src/host/controller_profiles.cpp
+    ${CMAKE_SOURCE_DIR}/runtime/src/host/controller_profile_import.cpp
+    ${CMAKE_SOURCE_DIR}/third_party/tinyxml2/tinyxml2.cpp)
+target_include_directories(controller_profiles_test PRIVATE
+    ${CMAKE_SOURCE_DIR}/runtime/src
+    ${CMAKE_SOURCE_DIR}/third_party/tinyxml2)
 target_compile_features(controller_profiles_test PRIVATE cxx_std_20)
 target_link_libraries(controller_profiles_test PRIVATE SDL3::SDL3)
 target_compile_options(controller_profiles_test PRIVATE -Wall -Wextra -Wpedantic)

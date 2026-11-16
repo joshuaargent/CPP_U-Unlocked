@@ -10,6 +10,10 @@ The MIT licence notice for the incorporated native runtime and recompilation sou
 
 The client implementation under `engine/third_party/cemu_nex/` is distributed under Mozilla Public License 2.0. Its complete licence is retained at `engine/third_party/cemu_nex/LICENSE.txt`. Changes to files covered by that licence must comply with its file-level source-distribution requirements.
 
+## XML parsing
+
+The controller-profile importer uses TinyXML-2, distributed under its zlib-style licence. The vendored source is under `engine/third_party/tinyxml2/`; its full notice is retained in `engine/third_party/tinyxml2/LICENSE.txt`. The imported version is pinned to commit `8224e427b655b83dae5e2298f1e6919523a78737`.
+
 ## Other dependencies
 
 Build-time dependencies are declared in `engine/dependencies.lock.json` and acquired by the dependency build scripts. Their respective licence notices must be retained in the dependency/build output and must be reviewed whenever dependency versions change.

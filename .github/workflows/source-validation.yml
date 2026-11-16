@@ -14,6 +14,28 @@ permissions:
   contents: read
 
 jobs:
+  controller-profile-tests:
+    name: Build and test controller profiles
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install SDL3
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_ROOT/vcpkg.exe" install sdl3:x64-windows
+
+      - name: Configure controller test target
+        shell: pwsh
+        run: cmake -S engine/tests/controller_profile_unit -B build/controller-profile-tests -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Build controller tests
+        run: cmake --build build/controller-profile-tests --config Release
+
+      - name: Run controller tests
+        run: ctest --test-dir build/controller-profile-tests -C Release --output-on-failure
+
   validate:
     name: Validate source tree and project scripts
     runs-on: windows-latest
@@ -71,7 +93,8 @@ jobs:
         run: |
           $required = @(
             'LICENSES/RECOMPILATION-MIT-LICENSE.txt',
-            'engine/third_party/cemu_nex/LICENSE.txt'
+            'engine/third_party/cemu_nex/LICENSE.txt',
+            'engine/third_party/tinyxml2/LICENSE.txt'
           )
           foreach ($path in $required) {
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
