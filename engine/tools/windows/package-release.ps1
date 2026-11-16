@@ -44,6 +44,24 @@ Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $stage 'licenses') | Out-Null
 
+# Ship the complete, game-data-free source build kit with the launcher. The kit
+# bootstraps its pinned compiler/build tools and compiles game-specific code only
+# from the user's local RPX files. Git archive includes tracked source only.
+$buildKit = Join-Path $stage 'build-kit'
+$buildKitArchive = Join-Path $dist "$name-build-kit-source.zip"
+Remove-Item -LiteralPath $buildKitArchive -Force -ErrorAction SilentlyContinue
+& git -C $repoRoot archive --format=zip --output=$buildKitArchive HEAD
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $buildKitArchive -PathType Leaf)) {
+    throw 'Unable to create the clean source build kit from the release commit.'
+}
+Expand-Archive -LiteralPath $buildKitArchive -DestinationPath $buildKit -Force
+Remove-Item -LiteralPath $buildKitArchive -Force
+foreach ($requiredBuildFile in @('tools\\windows\\build-from-library.ps1', 'tools\\windows\\setup-build-environment.ps1', 'engine\\tools\\setup_deps.py', 'engine\\dependencies.lock.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
+        throw "The embedded build kit is incomplete: $requiredBuildFile"
+    }
+}
+
 Copy-Item -LiteralPath $launcher -Destination $stage
 Copy-Item -LiteralPath $updater -Destination $stage
 Copy-Item -LiteralPath $wuaExtractor -Destination $stage
@@ -117,11 +135,11 @@ stb_image and stb_truetype (Sean Barrett): public domain or MIT, at your choice;
 '@ | Set-Content -LiteralPath (Join-Path $stage 'licenses\stb.txt') -Encoding utf8
 
 @'
-This package contains the U Unlocked launcher and its bounded WUA extraction utility.
+This package contains the U Unlocked launcher, its bounded WUA extraction utility, and the complete source build kit.
 
-The game runtime is built locally for each user from their own legally obtained game files.
-No Nintendo game data, console keys, saves, generated recompiled code, or game executable is included.
-Clone the U Unlocked source repository and follow the README build instructions to build your local runtime.
+Select your base-game and update folders in the launcher, then choose BUILD RUNTIME (or select PLAY when no runtime has been built). The launcher runs the included build kit, which installs the pinned compiler/build tools and builds the Vulkan runtime locally from your own legally obtained game files.
+
+No Nintendo game data, console keys, saves, generated recompiled code, or game executable is included. Generated game code and executables remain on this PC.
 '@ | Set-Content -LiteralPath (Join-Path $stage 'RUNTIME-BUILD-REQUIRED.txt') -Encoding utf8
 
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
