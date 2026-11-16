@@ -164,7 +164,7 @@ try {
     foreach($file in $files) {
         $name=[string]$file.name
         $hash=[string]$file.sha256
-        $allowed = $name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|title-logo[.]png|[A-Za-z0-9_.+-]+[.]dll)$'
+        $allowed = $name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|title-logo[.]png|build-kit[.]zip|[A-Za-z0-9_.+-]+[.]dll)$'
         if(-not $allowed -or $name.Contains('..') -or -not $seen.Add($name) -or $hash -notmatch '^[0-9a-fA-F]{64}$') {
             throw "Invalid file in update manifest: $name"
         }
@@ -182,6 +182,31 @@ try {
         if($name -eq 'U Unlocked.exe'){$hasExe=$true}
     }
     if(-not $hasExe){throw 'Manifest does not contain the launcher executable.'}
+
+    # The build kit is a separately hashed source archive. Validate its complete
+    # inner path inventory before extraction; it contains no generated game data.
+    $buildKitArchivePath=Join-Path $newFiles 'build-kit.zip'
+    if(Test-Path -LiteralPath $buildKitArchivePath -PathType Leaf) {
+        $buildKitArchive=[IO.Compression.ZipFile]::OpenRead($buildKitArchivePath)
+        try {
+            if($buildKitArchive.Entries.Count -gt 10000){throw 'Build kit archive contains too many entries.'}
+            $buildKitEntries=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            [int64]$buildKitExpanded=0
+            foreach($entry in $buildKitArchive.Entries) {
+                Validate-ArchiveEntry $entry
+                if(-not $buildKitEntries.Add($entry.FullName)){throw "Duplicate build kit path: $($entry.FullName)"}
+                $buildKitExpanded += [int64]$entry.Length
+                if($buildKitExpanded -gt 1GB){throw 'Expanded build kit exceeds 1 GiB.'}
+            }
+        } finally { $buildKitArchive.Dispose() }
+        $buildKitStage=Join-Path $newFiles 'build-kit'
+        Expand-Archive -LiteralPath $buildKitArchivePath -DestinationPath $buildKitStage -Force
+        foreach($required in @('tools/windows/build-from-library.ps1','tools/windows/setup-build-environment.ps1','engine/tools/setup_deps.py','engine/dependencies.lock.json')) {
+            if(-not(Test-Path -LiteralPath (Join-Path $buildKitStage $required) -PathType Leaf)) {
+                throw "Updated build kit is incomplete: $required"
+            }
+        }
+    }
     $archive.Dispose()
     $archive=$null
 
@@ -201,17 +226,30 @@ try {
     try {
         foreach($file in $files) {
             $name=[string]$file.name
+            if($name -eq 'build-kit.zip'){continue}
             $target=Join-Path $InstallDirectory $name
             $backup=Join-Path $rollback $name
             if(Test-Path -LiteralPath $target -PathType Leaf){Copy-Item -LiteralPath $target -Destination $backup}
             $changed.Add($name)
             Move-Item -LiteralPath (Join-Path $newFiles $name) -Destination $target -Force
         }
+        if(Test-Path -LiteralPath (Join-Path $newFiles 'build-kit') -PathType Container) {
+            $buildKitTarget=Join-Path $InstallDirectory 'build-kit'
+            $buildKitBackup=Join-Path $rollback 'build-kit'
+            if(Test-Path -LiteralPath $buildKitTarget -PathType Container){Move-Item -LiteralPath $buildKitTarget -Destination $buildKitBackup}
+            $changed.Add('build-kit')
+            Move-Item -LiteralPath (Join-Path $newFiles 'build-kit') -Destination $buildKitTarget
+        }
         Start-Process -FilePath (Join-Path $InstallDirectory 'U Unlocked.exe') -WorkingDirectory $InstallDirectory | Out-Null
     } catch {
         foreach($name in $changed) {
             $target=Join-Path $InstallDirectory $name
             $backup=Join-Path $rollback $name
+            if($name -eq 'build-kit') {
+                if(Test-Path -LiteralPath $target -PathType Container){Remove-Item -LiteralPath $target -Recurse -Force}
+                if(Test-Path -LiteralPath $backup -PathType Container){Move-Item -LiteralPath $backup -Destination $target}
+                continue
+            }
             if(Test-Path -LiteralPath $backup -PathType Leaf){Copy-Item -LiteralPath $backup -Destination $target -Force}
             elseif(Test-Path -LiteralPath $target -PathType Leaf){Remove-Item -LiteralPath $target -Force}
         }
