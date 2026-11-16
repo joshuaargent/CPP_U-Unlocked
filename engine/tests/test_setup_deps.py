@@ -67,7 +67,22 @@ class DependencyArchiveTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 setup_deps.safe_extract(archive, destination)
 
-    def test_rejects_symbolic_links(self):
+    def test_materializes_safe_relative_symbolic_links(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "source.zip"
+            destination = root / "out"
+            destination.mkdir()
+            with zipfile.ZipFile(archive, "w") as output:
+                output.writestr("source/bin/zstd", "binary placeholder")
+                info = zipfile.ZipInfo("source/bin/unzstd")
+                info.create_system = 3
+                info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                output.writestr(info, "zstd")
+            setup_deps.safe_extract(archive, destination)
+            self.assertEqual((destination / "bin" / "unzstd").read_text(), "binary placeholder")
+
+    def test_rejects_symbolic_link_escape(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "bad.zip"
@@ -77,7 +92,7 @@ class DependencyArchiveTests(unittest.TestCase):
                 info = zipfile.ZipInfo("source/link")
                 info.create_system = 3
                 info.external_attr = (stat.S_IFLNK | 0o777) << 16
-                output.writestr(info, "../outside")
+                output.writestr(info, "../../outside")
             with self.assertRaises(RuntimeError):
                 setup_deps.safe_extract(archive, destination)
 
