@@ -1732,6 +1732,10 @@ private:
             wua_status_ = "The selected WUA archive is empty or cannot be read.";
             return;
         }
+        if (archive_size > 64ULL * 1024 * 1024 * 1024) {
+            wua_status_ = "The selected WUA archive exceeds the 64 GiB safety limit.";
+            return;
+        }
         const fs::path imports = dir_ / "imports";
         fs::create_directories(imports, ec);
         if (ec) {
