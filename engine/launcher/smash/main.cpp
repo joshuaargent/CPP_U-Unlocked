@@ -356,7 +356,7 @@ Image load_image(SDL_Renderer* renderer, const fs::path& path) {
 
 // ------------------------------------------------------------------ the launcher
 
-enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay, kControls, kControlTest };
+enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay, kControls, kControlTest, kLibrary, kUpdates, kDiagnostics };
 
 
 struct Item {
@@ -582,6 +582,9 @@ public:
         if (name == "online") go(Screen::kOnline);
         if (name == "netplay") go(Screen::kNetplay);
         if (name == "mods") go(Screen::kMods);
+        if (name == "library") go(Screen::kLibrary);
+        if (name == "updates") go(Screen::kUpdates);
+        if (name == "diagnostics") go(Screen::kDiagnostics);
         if (name == "play") play();
     }
 
@@ -678,7 +681,7 @@ public:
 
 private:
     // The main menu: Play, the game / update / DLC folders, Settings, Mods, Quit.
-    enum MainItem { kPlay, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kQuitItem };
+    enum MainItem { kPlay, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kLibraryItem, kUpdatesItem, kDiagnosticsItem, kQuitItem };
     // The Netplay page (host/netplay.h: the host's game streamed to its guests): hosting, a name, joining.
     // Then the open rooms (or a line saying there are none), then Back.
     enum NetplayItem { kHostSwitch, kNameField, kAddressField, kFirstRoom };
@@ -735,8 +738,43 @@ private:
                      {"CONTROLS"},
                      {"SETTINGS"},
                      {"MODS", "", static_cast<int>(std::count_if(mods_.begin(), mods_.end(), [](const Mod& m) { return m.on; }))},
+                     {"LIBRARY"},
+                     {"UPDATES", valid_[kUpdate] ? "Installed" : "Not installed"},
+                     {"DIAGNOSTICS"},
                      {"QUIT"}};
             break;
+        case Screen::kLibrary:
+            list_ = {{"BASE GAME", folder_value(kGame)},
+                     {"GAME UPDATE", folder_value(kUpdate)},
+                     {"DLC CONTENT", folder_value(kDlc)},
+                     {"OPEN GAME DIRECTORY", paths_[kGame].empty() ? "Not configured" : paths_[kGame].string()},
+                     {"OPEN UPDATE DIRECTORY", paths_[kUpdate].empty() ? "Not configured" : paths_[kUpdate].string()},
+                     {"OPEN DLC DIRECTORY", paths_[kDlc].empty() ? "Not configured" : paths_[kDlc].string()},
+                     {"BACK"}};
+            break;
+        case Screen::kUpdates:
+            list_ = {{"INSTALLED UPDATE", valid_[kUpdate] ? "Version " + std::to_string(update_version_) : "Not installed"},
+                     {"SELECT UPDATE FOLDER", "Choose a valid update dump"},
+                     {"REMOVE UPDATE", valid_[kUpdate] ? "Remove configured update" : "Nothing to remove"},
+                     {"BACK"}};
+            break;
+        case Screen::kDiagnostics: {
+            const char* platform = SDL_GetPlatform();
+            const char* renderer = SDL_GetRendererName(r_);
+            list_ = {{"PLATFORM", platform ? platform : "Unknown"},
+                     {"LOGICAL CPU CORES", std::to_string(SDL_GetNumLogicalCPUCores())},
+                     {"SYSTEM MEMORY", std::to_string(SDL_GetSystemRAM()) + " MB"},
+                     {"CPU OPTIMISATION", cafe::host::cpu_has_x86_64_v3() ? "x86-64-v3 available" : "Compatibility path"},
+                     {"LAUNCHER RENDERER", renderer ? renderer : "Unknown"},
+                     {"BASE GAME", valid_[kGame] ? "Verified" : "Missing or invalid"},
+                     {"GAME UPDATE", valid_[kUpdate] ? "Version " + std::to_string(update_version_) : "Not installed"},
+                     {"ACTIVE MODS", std::to_string(std::count_if(mods_.begin(), mods_.end(), [](const Mod& m) { return m.on; }))},
+                     {"SHADER CACHE", std::to_string(shaders_) + " files"},
+                     {"LOG FILE", (dir_ / "smash.log").string()},
+                     {"COPY DIAGNOSTIC REPORT", "Copy to clipboard"},
+                     {"BACK"}};
+            break;
+        }
         case Screen::kSettings: {
             const char* res = "Automatic";
             switch (settings_.resolution) {
@@ -1041,7 +1079,50 @@ private:
             if (selected_ == kControlsItem) { load_control_profile(); go(Screen::kControls); }
             if (selected_ == kSettingsItem) go(Screen::kSettings);
             if (selected_ == kModsItem) go(Screen::kMods);
+            if (selected_ == kLibraryItem) go(Screen::kLibrary);
+            if (selected_ == kUpdatesItem) go(Screen::kUpdates);
+            if (selected_ == kDiagnosticsItem) go(Screen::kDiagnostics);
             if (selected_ == kQuitItem) quit_ = true;
+            break;
+        case Screen::kLibrary:
+            if (selected_ == 0) choose_folder(kGame);
+            else if (selected_ == 1) choose_folder(kUpdate);
+            else if (selected_ == 2) choose_folder(kDlc);
+            else if (selected_ >= 3 && selected_ <= 5) {
+                const Slot slot = static_cast<Slot>(selected_ - 3);
+                if (paths_[slot].empty()) controls_status_ = "Choose this folder first.";
+                else SDL_OpenURL((std::string("file:///") + paths_[slot].generic_string()).c_str());
+            } else back();
+            break;
+        case Screen::kUpdates:
+            if (selected_ == 1) choose_folder(kUpdate);
+            else if (selected_ == 2) {
+                paths_[kUpdate].clear();
+                asked_[kUpdate] = true;
+                save_launcher_ini();
+                refresh();
+            } else back();
+            break;
+        case Screen::kDiagnostics:
+            if (selected_ == 10) {
+                const char* platform = SDL_GetPlatform();
+                const char* renderer = SDL_GetRendererName(r_);
+                std::ostringstream report;
+                report << "U Unlocked diagnostics\\n"
+                       << "Platform: " << (platform ? platform : "Unknown") << "\\n"
+                       << "Logical CPU cores: " << SDL_GetNumLogicalCPUCores() << "\\n"
+                       << "System memory: " << SDL_GetSystemRAM() << " MB\\n"
+                       << "CPU optimisation: " << (cafe::host::cpu_has_x86_64_v3() ? "x86-64-v3" : "compatibility") << "\\n"
+                       << "Launcher renderer: " << (renderer ? renderer : "Unknown") << "\\n"
+                       << "Base game: " << (valid_[kGame] ? "verified" : "missing/invalid") << "\\n"
+                       << "Update: " << (valid_[kUpdate] ? std::to_string(update_version_) : "not installed") << "\\n"
+                       << "Active mods: " << std::count_if(mods_.begin(), mods_.end(), [](const Mod& m) { return m.on; }) << "\\n"
+                       << "Shader cache files: " << shaders_ << "\\n"
+                       << "Launcher directory: " << dir_.string() << "\\n"
+                       << "Game log: " << (dir_ / "smash.log").string();
+                if (SDL_SetClipboardText(report.str().c_str())) launch_error_ = "Diagnostic report copied to clipboard.";
+                else launch_error_ = std::string("Could not copy diagnostics: ") + SDL_GetError();
+            } else back();
             break;
         case Screen::kSettings:
             if (selected_ == kSettingsBack) back();
@@ -1536,16 +1617,19 @@ private:
                    "Select a row to locate or change its folder.", H * 0.013f, mix_alpha(muted, 0.85f));
 
         // Six feature cards. The same hit boxes drive mouse, touchpad and controller selection.
-        const int feature_items[] = {kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kQuitItem};
-        const char* feature_titles[] = {"ONLINE", "NETPLAY", "CONTROLS", "GRAPHICS", "MODS", "QUIT"};
+        const int feature_items[] = {kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem,
+                                      kLibraryItem, kUpdatesItem, kDiagnosticsItem, kQuitItem};
+        const char* feature_titles[] = {"ONLINE", "NETPLAY", "CONTROLS", "GRAPHICS", "MODS",
+                                        "LIBRARY", "UPDATES", "DIAGNOSTICS", "QUIT"};
         const char* feature_descriptions[] = {
-            "Pretendo Network account", "Play with friends", "Configure every controller",
-            "Resolution and frame pacing", "Install and manage content", "Close U Unlocked"
+            "Pretendo Network services", "Private play with friends", "Configure every controller",
+            "Resolution and frame pacing", "Install and manage content", "Manage game files",
+            "Manage game updates", "System and runtime health", "Close U Unlocked"
         };
-        const float grid_y = H * 0.545f, grid_gap_x = W * 0.014f, grid_gap_y = H * 0.018f;
+        const float grid_y = H * 0.535f, grid_gap_x = W * 0.014f, grid_gap_y = H * 0.012f;
         const float grid_w = (W - margin * 2 - grid_gap_x * 2) / 3.0f;
-        const float grid_h = H * 0.145f;
-        for (size_t i = 0; i < 6; ++i) {
+        const float grid_h = H * 0.105f;
+        for (size_t i = 0; i < 9; ++i) {
             const int item = feature_items[i];
             const int column = static_cast<int>(i % 3), row = static_cast<int>(i / 3);
             const float x = margin + column * (grid_w + grid_gap_x);
@@ -1620,12 +1704,12 @@ private:
                                       : "Join: you play on the host's game as the next free player (up to 8).";
                 detail = "You need no game files to join. Your pads and keyboard play as one of their Pro Controllers.";
             } else if (netplay_host_) {
-                line = "Hosting: while you play, your room is listed and friends join from their list.";
-                detail = "No setup needed: nothing to forward on your router. Up to 7 friends join as players 2-8.";
+                line = "Hosting: your running game accepts direct IP and VPN connections.";
+                detail = "Share your LAN/VPN address. For direct internet access, forward UDP 52700 or use a private VPN such as Tailscale. Up to 7 guests can join.";
                 c = kGood;
             } else {
                 line = "Host: your game is streamed to up to 7 friends, who play as players 2-8.";
-                detail = "Everything works online this way: 8-Player Smash, every stage and mode, items and mods.";
+                detail = "The host runs the game and streams video/audio; guests send controller inputs. Guests do not need their own game files.";
             }
             font_.draw(r_, x, y, fit(line, px * 0.85f, layout_.w * 0.62f), px * 0.85f, c);
             if (!detail.empty()) font_.draw(r_, x, y + H * 0.045f, fit(detail, px * 0.8f, layout_.w * 0.62f), px * 0.8f, kDim);
@@ -2145,7 +2229,7 @@ private:
 
     SDL_Window* window_;
     SDL_Renderer* r_;
-    std::array<SDL_FRect, 10> main_rects_{};
+    std::array<SDL_FRect, 13> main_rects_{};
     fs::path cemu_profiles_dir_ = cemu_profiles_directory();
     size_t cemu_profile_count_ = count_cemu_profiles(cemu_profiles_dir_);
     std::string cemu_dialog_directory_;
