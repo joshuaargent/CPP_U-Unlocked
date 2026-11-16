@@ -12,10 +12,16 @@
 
 ## Launcher
 
-- [x] Replace the single-column startup menu with a feature-rich home dashboard, featured game launch panel, installation status, and direct navigation cards.
-- [ ] Complete the launcher design system, responsive layouts, DPI scaling, focus states, and controller-first navigation polish.
-- [ ] Implement responsive navigation, DPI scaling, focus states, and controller navigation.
-- [ ] Add Home, Controls, Mods, Graphics, Settings, Library, Updates, and Diagnostics sections.
+- [x] Replace the single-column startup menu with a feature-rich home dashboard and featured game launch panel.
+- [x] Add direct home-screen navigation to Play, Build, game-update management, Online, Netplay, Controls, Graphics, Mods, and Diagnostics.
+- [x] Add a Build/library workflow for selecting and validating the user's game, update, and DLC folders.
+- [x] Add a game-update management page for selecting and removing the locally installed update dump.
+- [x] Add a Diagnostics page for platform, CPU core count, system memory, CPU optimisation path, SDL renderer, game/update validation, active mods, shader-cache count, log path, and clipboard export.
+- [x] Make Netplay status explain the actual direct IP/VPN connection requirements instead of implying that an unconfigured room directory is active.
+- [ ] Rework the launcher into a consistent Melee Unlocked-inspired product flow: Build, Play, Updates, Mods, and Online as primary destinations, with configuration and diagnostics grouped cleanly.
+- [ ] Complete responsive layouts, high-DPI scaling, focus states, keyboard/controller navigation, and accessibility.
+- [ ] Add an application updater with stable/beta channels, signed or hash-verified packages, staged installation, rollback, and user-data preservation. This is separate from managing the game's update dump.
+- [ ] Add version selection and rollback for previous U Unlocked application releases.
 - [ ] Add an in-game settings overlay with keyboard and controller access.
 - [ ] Add consistent error, confirmation, progress, and recovery dialogs.
 
@@ -36,17 +42,19 @@
 
 ## Graphics and performance
 
-- [ ] Implement display mode, resolution, VSync, frame pacing, and scaling controls.
-- [ ] Implement Low Spec, Balanced, and Quality presets.
-- [ ] Add CPU/GPU/Vulkan capability detection and diagnostics.
+- [x] Expose the existing resolution, fullscreen/windowed, and frame-pacing controls in the launcher.
+- [ ] Add a clear graphics settings hierarchy with render scale, VSync, frame pacing, and advanced options.
+- [ ] Implement hardware-aware Low Spec, Balanced, and Quality presets.
+- [ ] Add detailed GPU/Vulkan capability detection and diagnostics.
 - [ ] Benchmark the HP EliteBook 640 G9 and tune defaults from measured results.
 - [ ] Verify graphics options do not alter deterministic game simulation.
 
 ## Mod management
 
+- [x] Implement basic archive/folder installation and enable/disable toggles for detected content folders.
+- [ ] Audit archive extraction against path traversal, symlink, decompression-bomb, and overwrite risks before broadening supported formats.
 - [ ] Implement a versioned mod manifest.
-- [ ] Implement archive/folder installation with path traversal protection.
-- [ ] Implement enable/disable profiles, dependency checks, and conflict reporting.
+- [ ] Implement named enable/disable profiles, dependency checks, and conflict reporting.
 - [ ] Implement transactional file changes, backups, and rollback.
 - [ ] Package the project-owned mod only after its contents and redistribution rights are verified.
 
