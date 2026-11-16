@@ -282,14 +282,8 @@ void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& ro
 } // namespace
 
 int main(int, char**) {
-    CommandLineArgs arguments{CommandLineToArgvW(GetCommandLineW(), nullptr)};
     int argument_count = 0;
-    if (arguments.values) {
-        // CommandLineToArgvW requires the output count pointer; fetch it in the call below.
-        LocalFree(arguments.values);
-        arguments.values = nullptr;
-    }
-    arguments.values = CommandLineToArgvW(GetCommandLineW(), &argument_count);
+    CommandLineArgs arguments{CommandLineToArgvW(GetCommandLineW(), &argument_count)};
     if (!arguments.values) win_error("Cannot parse the Windows command line");
 
     const std::wstring command = argument_count > 1 ? arguments.values[1] : L"";
