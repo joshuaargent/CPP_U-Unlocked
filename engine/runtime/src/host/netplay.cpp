@@ -570,6 +570,23 @@ void host_receive_main() {
     double hello_tokens = kHelloBurst;
     auto token_time = Clock::now();
 
+    // Bound abuse from one source without allocating per-packet state. The
+    // key is the source IP (not UDP port), so changing ports cannot evade the
+    // limit. A single NAT may represent all seven guests, hence the sustained
+    // allowance is above 7 * 60 controller packets per second.
+    struct PeerRateLimit {
+        uint32_t ip = 0;
+        double packet_tokens = 1200.0;
+        double hello_tokens = 4.0;
+        Clock::time_point updated{};
+        Clock::time_point last_seen{};
+    };
+    constexpr double kPeerPacketRate = 600.0;
+    constexpr double kPeerPacketBurst = 1200.0;
+    constexpr double kPeerHelloRate = 2.0;
+    constexpr double kPeerHelloBurst = 4.0;
+    std::array<PeerRateLimit, 256> peer_limits{};
+
     for (;;) {
         Endpoint from;
         const size_t n = g_socket.receive(p.data(), p.size(), from);
@@ -578,14 +595,41 @@ void host_receive_main() {
         token_time = now;
         packet_tokens = std::min(kPacketBurst, packet_tokens + elapsed * kPacketRate);
         hello_tokens = std::min(kHelloBurst, hello_tokens + elapsed * kHelloRate);
-        if (n == 0) continue;
-        if (packet_tokens < 1.0) continue;
+        if (n == 0 || from.ip == 0) continue;
+
+        PeerRateLimit* peer = nullptr;
+        for (auto& entry : peer_limits) {
+            if (entry.ip == from.ip) {
+                peer = &entry;
+                break;
+            }
+        }
+        if (peer == nullptr) {
+            peer = &*std::min_element(peer_limits.begin(), peer_limits.end(),
+                                      [](const PeerRateLimit& a, const PeerRateLimit& b) {
+                                          if ((a.ip == 0) != (b.ip == 0)) return a.ip == 0;
+                                          return a.last_seen < b.last_seen;
+                                      });
+            *peer = PeerRateLimit{};
+            peer->ip = from.ip;
+            peer->updated = now;
+            peer->last_seen = now;
+        }
+        const double peer_elapsed = std::max(0.0, std::chrono::duration<double>(now - peer->updated).count());
+        peer->updated = now;
+        peer->last_seen = now;
+        peer->packet_tokens = std::min(kPeerPacketBurst, peer->packet_tokens + peer_elapsed * kPeerPacketRate);
+        peer->hello_tokens = std::min(kPeerHelloBurst, peer->hello_tokens + peer_elapsed * kPeerHelloRate);
+
+        if (peer->packet_tokens < 1.0 || packet_tokens < 1.0) continue;
+        peer->packet_tokens -= 1.0;
         packet_tokens -= 1.0;
 
-        // A handshake is much rarer than controller traffic. Limit it
-        // separately so unauthenticated LAN broadcasts cannot churn slots.
+        // Handshakes are limited globally and per source IP, preventing one
+        // LAN peer from consuming every available guest slot through retries.
         if (p[0] == kHello) {
-            if (hello_tokens < 1.0) continue;
+            if (peer->hello_tokens < 1.0 || hello_tokens < 1.0) continue;
+            peer->hello_tokens -= 1.0;
             hello_tokens -= 1.0;
         }
 
