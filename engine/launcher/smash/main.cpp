@@ -32,6 +32,7 @@
 #include "stb_truetype.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -87,6 +88,44 @@ std::map<std::string, std::string> read_ini(const fs::path& path) {
         values[trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
     }
     return values;
+}
+
+fs::path cemu_profiles_directory() {
+#ifdef _WIN32
+    if (const char* app_data = std::getenv("APPDATA"); app_data && *app_data) {
+        return fs::path(app_data) / "Cemu" / "controllerProfiles";
+    }
+    if (const char* user_profile = std::getenv("USERPROFILE"); user_profile && *user_profile) {
+        return fs::path(user_profile) / "AppData" / "Roaming" / "Cemu" / "controllerProfiles";
+    }
+#elif defined(__APPLE__)
+    if (const char* home = std::getenv("HOME"); home && *home) {
+        return fs::path(home) / "Library" / "Application Support" / "Cemu" / "controllerProfiles";
+    }
+#else
+    if (const char* config = std::getenv("XDG_CONFIG_HOME"); config && *config == '/') {
+        return fs::path(config) / "Cemu" / "controllerProfiles";
+    }
+    if (const char* home = std::getenv("HOME"); home && *home) {
+        return fs::path(home) / ".config" / "Cemu" / "controllerProfiles";
+    }
+#endif
+    return {};
+}
+
+size_t count_cemu_profiles(const fs::path& directory) {
+    std::error_code ec;
+    if (directory.empty() || !fs::is_directory(directory, ec)) return 0;
+    size_t count = 0;
+    for (fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, ec), end;
+         it != end && !ec; it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        std::string extension = it->path().extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (extension == ".xml") ++count;
+    }
+    return count;
 }
 
 constexpr const char* kDlcId = "0005000C10144F00";
@@ -372,8 +411,12 @@ public:
             switch (e.key.key) {
             case SDLK_UP: case SDLK_W: move(-1); break;
             case SDLK_DOWN: case SDLK_S: move(1); break;
-            case SDLK_LEFT: case SDLK_A: change(-1); break;
-            case SDLK_RIGHT: case SDLK_D: change(1); break;
+            case SDLK_LEFT: case SDLK_A:
+                if (screen_ == Screen::kMain) move(-1); else change(-1);
+                break;
+            case SDLK_RIGHT: case SDLK_D:
+                if (screen_ == Screen::kMain) move(1); else change(1);
+                break;
             case SDLK_RETURN: case SDLK_SPACE: case SDLK_KP_ENTER: if (!e.key.repeat) activate(); break;
             case SDLK_ESCAPE: case SDLK_BACKSPACE: if (!e.key.repeat) back(); break;
             case SDLK_F11: SDL_SetWindowFullscreen(window_, !(SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN)); break;
@@ -385,8 +428,12 @@ public:
             switch (e.gbutton.button) {
             case SDL_GAMEPAD_BUTTON_DPAD_UP: move(-1); break;
             case SDL_GAMEPAD_BUTTON_DPAD_DOWN: move(1); break;
-            case SDL_GAMEPAD_BUTTON_DPAD_LEFT: change(-1); break;
-            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: change(1); break;
+            case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+                if (screen_ == Screen::kMain) move(-1); else change(-1);
+                break;
+            case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+                if (screen_ == Screen::kMain) move(1); else change(1);
+                break;
             case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: activate(); break;
             case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_BACK: back(); break;
             default: break;
@@ -532,6 +579,17 @@ public:
         SDL_SetRenderDrawBlendMode(r_, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(r_, 6, 8, 14, 255);
         SDL_RenderClear(r_);
+        if (screen_ == Screen::kMain) {
+            draw_home();
+            if (save) {
+                if (SDL_Surface* shot = SDL_RenderReadPixels(r_, nullptr)) {
+                    SDL_SaveBMP(shot, std::getenv("U_UNLOCKED_LAUNCHER_SHOT"));
+                    SDL_DestroySurface(shot);
+                }
+            }
+            SDL_RenderPresent(r_);
+            return;
+        }
         if (screen_ == Screen::kOnline) {
             // The Online page looks like the Wii U's own Nintendo Network ID Settings.
             draw_wiiu_online();
@@ -742,7 +800,8 @@ private:
                      {"INVERT AXIS", control_axis_action_ >= static_cast<size_t>(controller_profiles::AxisAction::kLeftTrigger)
                          ? "N/A" : (control_profile_.axis_inverted[control_axis_action_] ? "On" : "Off")},
                      {"TRIGGER THRESHOLD", threshold},
-                     {"IMPORT CEMU PROFILE", "Choose XML"},
+                     {"IMPORT CEMU PROFILE", cemu_profile_count_ == 0
+                         ? "Find Cemu XML..." : std::to_string(cemu_profile_count_) + " found"},
                      {"LIVE TEST", "Open"},
                      {"SAVE PROFILE", "Save"},
                      {"RESET PROFILE", "Defaults"},
@@ -1286,6 +1345,15 @@ private:
     }
 
     int item_at(float x, float y) const {
+        if (screen_ == Screen::kMain) {
+            for (size_t i = 0; i < main_rects_.size(); ++i) {
+                const SDL_FRect& b = main_rects_[i];
+                if (b.w > 0 && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                    return static_cast<int>(i);
+                }
+            }
+            return -1;
+        }
         if (screen_ == Screen::kOnline) {
             for (size_t i = 0; i < online_rects_.size(); ++i) {
                 const SDL_FRect& b = online_rects_[i];
@@ -1321,6 +1389,157 @@ private:
         paint_.rect(W * 0.30f, 0, W * 0.38f, H, {0, 0, 0, 0.62f}, clear, clear, {0, 0, 0, 0.62f});
         paint_.rect(0, H * 0.62f, W, H * 0.38f, clear, clear, {0, 0, 0, 0.70f}, {0, 0, 0, 0.70f});
         paint_.rect(0, 0, W, H * 0.18f, {0, 0, 0, 0.35f}, {0, 0, 0, 0.35f}, clear, clear);
+    }
+
+    void draw_home() {
+        const float W = layout_.w, H = layout_.h;
+        const float a = fade_;
+        const Color panel{0.025f, 0.035f, 0.055f, 0.94f};
+        const Color panel_alt{0.055f, 0.075f, 0.105f, 0.96f};
+        const Color border{0.22f, 0.29f, 0.38f, 0.72f};
+        const Color accent{0.10f, 0.72f, 0.96f, 1.0f};
+        const Color muted{0.62f, 0.69f, 0.78f, 1.0f};
+        const Color white{0.96f, 0.98f, 1.0f, 1.0f};
+        const auto mix_alpha = [&](Color c, float opacity) {
+            c.a *= a * opacity;
+            return c;
+        };
+        main_rects_.fill(SDL_FRect{});
+
+        // The home screen uses a static composition: no per-frame texture creation,
+        // no expensive blur, and only a restrained highlight animation on the active tile.
+        draw_background();
+
+        const float margin = W * 0.052f;
+        const float header_y = H * 0.055f;
+        if (logo_.texture) {
+            const float logo_h = H * 0.105f;
+            const float logo_w = logo_h * logo_.width / logo_.height;
+            paint_.image(logo_, {margin, header_y - logo_h * 0.78f, logo_w, logo_h});
+        } else {
+            font_.draw(r_, margin, header_y, "U UNLOCKED", H * 0.052f, mix_alpha(white, 1.0f));
+        }
+        font_.draw(r_, margin + H * 0.30f, header_y - H * 0.004f,
+                   "SUPER SMASH BROS. FOR WII U  /  PC", H * 0.018f, mix_alpha(muted, 0.95f));
+        const std::string version = std::string("BUILD ") + kVersion;
+        font_.draw(r_, W - margin - font_.width(r_, version, H * 0.018f),
+                   header_y - H * 0.004f, version, H * 0.018f, mix_alpha(muted, 0.9f));
+        paint_.rect(margin, H * 0.112f, W - margin * 2, H * 0.0018f, mix_alpha(border, 0.8f));
+
+        // Featured launch panel.
+        const float hero_x = margin, hero_y = H * 0.145f, hero_w = W * 0.575f, hero_h = H * 0.355f;
+        main_rects_[kPlay] = {hero_x, hero_y, hero_w, hero_h};
+        const bool play_selected = selected_ == kPlay;
+        paint_.round_rect(hero_x, hero_y, hero_w, hero_h, H * 0.018f, mix_alpha(play_selected ? panel_alt : panel, 1.0f));
+        paint_.round_rect(hero_x, hero_y, hero_w, H * 0.006f, H * 0.003f, mix_alpha(accent, play_selected ? 1.0f : 0.55f));
+        if (play_selected) {
+            const float pulse = 0.72f + 0.18f * std::sin(time_ * 3.2f);
+            paint_.round_rect(hero_x - H * 0.003f, hero_y - H * 0.003f, hero_w + H * 0.006f,
+                              hero_h + H * 0.006f, H * 0.02f, mix_alpha(accent, pulse * 0.14f));
+        }
+        font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.065f,
+                   "READY TO PLAY", H * 0.019f, mix_alpha(accent, 1.0f));
+        font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.145f,
+                   "SUPER SMASH BROS. FOR WII U", H * 0.035f, mix_alpha(white, 1.0f));
+        const bool game_ready = ready();
+        const std::string game_state = process_ ? "GAME RUNNING"
+                                      : game_ready ? "GAME FILES VERIFIED"
+                                                   : "SET UP YOUR GAME FILES";
+        const Color state_color = process_ ? kGold : game_ready ? kGood : kBad;
+        font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.195f,
+                   game_state, H * 0.019f, mix_alpha(state_color, 1.0f));
+        std::string detail = game_ready
+            ? (valid_[kUpdate] ? "Update v" + std::to_string(update_version_) : "Base game only")
+            : "Select your legally obtained game folder to get started.";
+        font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.245f,
+                   fit(detail, H * 0.019f, hero_w * 0.72f), H * 0.019f, mix_alpha(muted, 1.0f));
+
+        const float button_w = H * 0.205f, button_h = H * 0.064f;
+        const float button_x = hero_x + H * 0.035f, button_y = hero_y + hero_h - button_h - H * 0.035f;
+        paint_.round_rect(button_x, button_y, button_w, button_h, H * 0.009f,
+                          mix_alpha(game_ready ? accent : Color{0.20f, 0.26f, 0.34f, 1.0f}, 1.0f));
+        font_.draw(r_, button_x + H * 0.028f, button_y + button_h * 0.66f,
+                   process_ ? "RUNNING..." : "LAUNCH GAME", H * 0.020f,
+                   mix_alpha(game_ready ? Color{0.015f, 0.035f, 0.055f, 1.0f} : muted, 1.0f));
+        font_.draw(r_, button_x + button_w + H * 0.025f, button_y + button_h * 0.66f,
+                   "ENTER  /  A TO SELECT", H * 0.015f, mix_alpha(muted, 0.9f));
+
+        // Installation panel: each row remains independently selectable and editable.
+        const float setup_x = hero_x + hero_w + W * 0.022f;
+        const float setup_y = hero_y, setup_w = W - margin - setup_x, setup_h = hero_h;
+        paint_.round_rect(setup_x, setup_y, setup_w, setup_h, H * 0.018f, mix_alpha(panel, 1.0f));
+        font_.draw(r_, setup_x + H * 0.025f, setup_y + H * 0.055f,
+                   "GAME INSTALLATION", H * 0.020f, mix_alpha(white, 1.0f));
+        const float row_x = setup_x + H * 0.018f, row_w = setup_w - H * 0.036f;
+        const float row_h = H * 0.071f, row_gap = H * 0.012f;
+        const int setup_items[] = {kGameItem, kUpdateItem, kDlcItem};
+        const char* setup_labels[] = {"BASE GAME", "GAME UPDATE", "DLC"};
+        for (size_t n = 0; n < 3; ++n) {
+            const int item = setup_items[n];
+            const float y = setup_y + H * 0.085f + n * (row_h + row_gap);
+            main_rects_[item] = {row_x, y, row_w, row_h};
+            const bool selected = selected_ == item;
+            paint_.round_rect(row_x, y, row_w, row_h, H * 0.007f,
+                              mix_alpha(selected ? panel_alt : Color{0.035f, 0.048f, 0.068f, 1.0f}, 1.0f));
+            if (selected) paint_.round_rect(row_x, y, H * 0.004f, row_h, H * 0.002f, mix_alpha(accent, 1.0f));
+            font_.draw(r_, row_x + H * 0.014f, y + row_h * 0.63f,
+                       setup_labels[n], H * 0.016f, mix_alpha(selected ? white : muted, 1.0f));
+            const std::string value = folder_value(static_cast<Slot>(n));
+            const float value_size = H * 0.014f;
+            const float value_width = font_.width(r_, value, value_size);
+            font_.draw(r_, row_x + row_w - H * 0.014f - value_width,
+                       y + row_h * 0.63f, value, value_size,
+                       mix_alpha(valid_[n] ? kGood : (n == kDlc ? muted : kGold), 1.0f));
+        }
+        font_.draw(r_, setup_x + H * 0.025f, setup_y + setup_h - H * 0.025f,
+                   "Select a row to locate or change its folder.", H * 0.013f, mix_alpha(muted, 0.85f));
+
+        // Six feature cards. The same hit boxes drive mouse, touchpad and controller selection.
+        const int feature_items[] = {kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kQuitItem};
+        const char* feature_titles[] = {"ONLINE", "NETPLAY", "CONTROLS", "GRAPHICS", "MODS", "QUIT"};
+        const char* feature_descriptions[] = {
+            "Pretendo Network account", "Play with friends", "Configure every controller",
+            "Resolution and frame pacing", "Install and manage content", "Close U Unlocked"
+        };
+        const float grid_y = H * 0.545f, grid_gap_x = W * 0.014f, grid_gap_y = H * 0.018f;
+        const float grid_w = (W - margin * 2 - grid_gap_x * 2) / 3.0f;
+        const float grid_h = H * 0.145f;
+        for (size_t i = 0; i < 6; ++i) {
+            const int item = feature_items[i];
+            const int column = static_cast<int>(i % 3), row = static_cast<int>(i / 3);
+            const float x = margin + column * (grid_w + grid_gap_x);
+            const float y = grid_y + row * (grid_h + grid_gap_y);
+            main_rects_[item] = {x, y, grid_w, grid_h};
+            const bool selected = selected_ == item;
+            paint_.round_rect(x, y, grid_w, grid_h, H * 0.012f,
+                              mix_alpha(selected ? panel_alt : panel, 1.0f));
+            paint_.round_rect(x, y, grid_w, H * 0.003f,
+                              H * 0.0015f, mix_alpha(selected ? accent : border, 1.0f));
+            if (selected) {
+                paint_.round_rect(x - H * 0.002f, y - H * 0.002f, grid_w + H * 0.004f,
+                                  grid_h + H * 0.004f, H * 0.014f, mix_alpha(accent, 0.13f));
+            }
+            font_.draw(r_, x + H * 0.022f, y + H * 0.060f, feature_titles[i],
+                       H * 0.021f, mix_alpha(selected ? white : white, 1.0f));
+            font_.draw(r_, x + H * 0.022f, y + H * 0.100f,
+                       feature_descriptions[i], H * 0.014f, mix_alpha(muted, 0.95f));
+            if (item == kModsItem) {
+                const std::string count = std::to_string(std::count_if(mods_.begin(), mods_.end(),
+                    [](const Mod& mod) { return mod.on; })) + " ACTIVE";
+                font_.draw(r_, x + grid_w - H * 0.022f - font_.width(r_, count, H * 0.013f),
+                           y + H * 0.060f, count, H * 0.013f, mix_alpha(kGood, 1.0f));
+            } else if (item == kOnlineItem) {
+                const std::string status = online::account().present ? "SIGNED IN" : "NOT SIGNED IN";
+                font_.draw(r_, x + grid_w - H * 0.022f - font_.width(r_, status, H * 0.013f),
+                           y + H * 0.060f, status, H * 0.013f,
+                           mix_alpha(online::account().present ? kGood : kGold, 1.0f));
+            }
+        }
+
+        const std::string footer = "ARROWS / D-PAD NAVIGATE     ENTER / A SELECT     ESC / B BACK";
+        font_.draw(r_, margin, H * 0.965f, footer, H * 0.013f, mix_alpha(muted, 0.78f));
+        font_.draw(r_, W - margin - font_.width(r_, "MELEE UNLOCKED-INSPIRED DESIGN", H * 0.012f),
+                   H * 0.965f, "MELEE UNLOCKED-INSPIRED DESIGN", H * 0.012f, mix_alpha(muted, 0.55f));
     }
 
     void draw_status() {
@@ -1517,12 +1736,16 @@ private:
         }
         cemu_dialog_ = true;
         SDL_SetWindowTitle(window_, "Select a Cemu controller profile XML file");
+        std::error_code directory_error;
+        cemu_dialog_directory_ = fs::is_directory(cemu_profiles_dir_, directory_error)
+            ? cemu_profiles_dir_.string() : std::string{};
         SDL_ShowOpenFileDialog([](void* self, const char* const* files, int) {
             auto* launcher = static_cast<Launcher*>(self);
             std::lock_guard lock(launcher->dialog_mutex_);
             if (files && files[0]) launcher->dialog_result_ = files[0];
             launcher->dialog_done_ = true;
-        }, this, window_, filters, 1, nullptr, false);
+        }, this, window_, filters, 1,
+           cemu_dialog_directory_.empty() ? nullptr : cemu_dialog_directory_.c_str(), false);
     }
 
     void import_cemu_profile_file(const fs::path& path) {
@@ -1876,6 +2099,10 @@ private:
 
     SDL_Window* window_;
     SDL_Renderer* r_;
+    std::array<SDL_FRect, 10> main_rects_{};
+    fs::path cemu_profiles_dir_ = cemu_profiles_directory();
+    size_t cemu_profile_count_ = count_cemu_profiles(cemu_profiles_dir_);
+    std::string cemu_dialog_directory_;
     Painter paint_;
     Font font_;
     Image logo_, background_;
