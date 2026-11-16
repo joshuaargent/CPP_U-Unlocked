@@ -43,7 +43,7 @@ jobs:
           }
           $version = $tag.Substring(1)
           $main = Get-Content -LiteralPath 'engine/launcher/smash/main.cpp' -Raw
-          $match = [regex]::Match($main, 'kVersion$s*=$s*"([^"]+)"')
+          $match = [regex]::Match($main, 'kVersion\s*=\s*"([^"]+)"')
           if (-not $match.Success -or $match.Groups[1].Value -ne $version) {
             throw "Tag $tag does not match the launcher source version '$($match.Groups[1].Value)'. Update kVersion and create a new tag."
           }
@@ -126,7 +126,7 @@ jobs:
           if (-not (Test-Path -LiteralPath $zip -PathType Leaf) -or -not (Test-Path -LiteralPath $checksum -PathType Leaf)) {
             throw 'The release ZIP or SHA-256 sidecar is missing.'
           }
-          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '$s+')[0]
+          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\s+')[0]
           $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($expected -ne $actual) { throw 'The generated release checksum does not match the ZIP.' }
           "RELEASE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
