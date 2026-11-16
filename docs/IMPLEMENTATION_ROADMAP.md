@@ -20,8 +20,10 @@
 - [x] Make Netplay status explain the actual direct IP/VPN connection requirements instead of implying that an unconfigured room directory is active.
 - [ ] Rework the launcher into a consistent Melee Unlocked-inspired product flow: Build, Play, Updates, Mods, and Online as primary destinations, with configuration and diagnostics grouped cleanly.
 - [ ] Complete responsive layouts, high-DPI scaling, focus states, keyboard/controller navigation, and accessibility.
-- [ ] Add an application updater with stable/beta channels, signed or hash-verified packages, staged installation, rollback, and user-data preservation. This is separate from managing the game's update dump.
-- [ ] Add version selection and rollback for previous U Unlocked application releases.
+- [x] Add an on-demand Windows application update check with stable/beta channels, GitHub release links, SHA-256 package verification, per-file manifest verification, staged replacement, backups, and automatic rollback if replacement or relaunch fails. This is separate from managing the game's update dump.
+- [x] Add launcher release packaging with a versioned ZIP, per-file manifest, and SHA-256 sidecar asset.
+- [ ] Add a user-facing version history and rollback selector for previously installed U Unlocked releases.
+- [ ] Exercise clean install, stable/beta upgrade, interrupted update, rollback, and user-data preservation on Windows.
 - [ ] Add an in-game settings overlay with keyboard and controller access.
 - [ ] Add consistent error, confirmation, progress, and recovery dialogs.
 
@@ -72,6 +74,6 @@
 ## Release engineering
 
 - [ ] Add Windows build validation for the actual native targets.
-- [ ] Add reproducible packaging and output verification.
-- [ ] Add versioned release workflow after the package format is stable.
-- [ ] Test clean installation, upgrade, rollback, and user-data preservation.
+- [x] Add a launcher-only Windows package with a file manifest and SHA-256 sidecar; game runtime binaries and user game data remain excluded.
+- [ ] Add a versioned release workflow that uploads both the ZIP and checksum assets after review.
+- [ ] Test clean installation, upgrade, rollback, and user-data preservation on a clean Windows machine.
