@@ -12,7 +12,8 @@
 
 ## Launcher
 
-- [ ] Replace the starter launcher layout with the U Unlocked design system.
+- [x] Replace the single-column startup menu with a feature-rich home dashboard, featured game launch panel, installation status, and direct navigation cards.
+- [ ] Complete the launcher design system, responsive layouts, DPI scaling, focus states, and controller-first navigation polish.
 - [ ] Implement responsive navigation, DPI scaling, focus states, and controller navigation.
 - [ ] Add Home, Controls, Mods, Graphics, Settings, Library, Updates, and Diagnostics sections.
 - [ ] Add an in-game settings overlay with keyboard and controller access.
@@ -29,6 +30,7 @@
 - [x] Add a live controller input monitor for all mapped buttons, sticks, and triggers.
 - [ ] Implement full stick/trigger calibration and saturation.
 - [x] Import Cemu Wii U GamePad and Pro Controller XML profiles for the SDLController API with explicit button/axis mapping translation and a review-before-save workflow.
+- [x] Discover standard Cemu profile directories automatically and allow a custom configuration directory through CEMU_CONFIG_DIR.
 - [x] Add automated tests for axis normalization, dead zones, inversion, profile persistence, and invalid-save protection.
 - [ ] Add tests for reconnects, ambiguous device identities, and multi-controller setups.
 
