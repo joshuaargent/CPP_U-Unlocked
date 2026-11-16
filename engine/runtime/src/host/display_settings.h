@@ -2,17 +2,17 @@
 
 // The player's display settings: $XDG_CONFIG_HOME/u-unlocked/display.ini, which
 // the launcher's Settings write and the game reads when it starts (the
-// render size and the frame rate are fixed for a run). Lines are
+// render scale and presentation cadence are fixed for a run). Lines are
 // `name = value`, `#` starts a comment (at the start of a line or after a
 // space):
 //
 //   fullscreen    = yes | no     start fullscreen (F11 still switches); no
 //   resolution    = auto | 1280x720 | 1920x1080 | 2560x1440 | 3840x2160 |
 //                   5120x2880    the size the game draws at; auto
-//   interpolation = yes | no     120 frames per second on displays of 100 Hz
-//                                and more (60 below); yes
+//   interpolation = yes | no     render additional presentation frames on
+//                                displays of 100 Hz and more (60 below); yes
 //   frame_rate    = auto | 60 | 120 | 180 | 240 | uncapped   with
-//                                interpolation, the frames per second (above
+//                                interpolation, the presentation rate (above
 //                                the display's refresh it tears); uncapped:
 //                                as many as the GPU renders, without vsync;
 //                                auto
