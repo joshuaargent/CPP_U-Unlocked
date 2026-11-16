@@ -98,7 +98,7 @@ std::string oauth_token(uint64_t title_id, uint16_t title_version, Result& out) 
     for (uint8_t b : a.password_hash) hash += hex(b, 2);
     int expires = 0;
     g_oauth = login(title_id, title_version, a.account_id, hash, out, expires);
-    g_oauth_expires = std::chrono::steady_clock::now() + std::chrono::seconds(std::max(expires - 30, 0));
+    g_oauth_expires = std::chrono::steady_clock::now() + std::chrono::seconds((std::max)(expires - 30, 0));
     if (!g_oauth.empty()) std::fprintf(stderr, "ttt2: online: signed in to Pretendo as %s\n", a.account_id.c_str());
     return g_oauth;
 }
@@ -240,7 +240,9 @@ SignIn sign_in(const std::string& user, const std::string& password) {
     const size_t mii = profile.body.find("<mii>");
     const std::string mii_xml = mii == std::string::npos ? std::string() : profile.body.substr(mii);
     const std::vector<uint8_t> data = base64_decode(tag(mii_xml, "data"));
-    std::memcpy(r.mii.data(), data.data(), std::min(data.size(), r.mii.size()));
+    if (!data.empty()) {
+        std::memcpy(r.mii.data(), data.data(), (std::min)(data.size(), r.mii.size()));
+    }
     // The Mii's name, UTF-8 to UTF-16 (at most 10 characters).
     const std::string name = unescape(tag(mii_xml, "name"));
     size_t n = 0;
