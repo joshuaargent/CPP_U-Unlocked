@@ -47,6 +47,14 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 
 Features described as planned are not represented as already implemented. See the [implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md) and [architecture](docs/ARCHITECTURE.md) for the delivery sequence and engineering requirements.
 
+## Simulation and presentation timing
+
+The game simulation retains the Wii U title's 59.94 Hz cadence (one simulation frame every 1001/60000 seconds). Rendering and presentation are separate: the Vulkan presenter has its own thread and can repeat the newest completed image when the GPU has not produced another one yet. On supported high-refresh displays, optional interpolation can present additional images between real game frames. Those extra images must never execute another gameplay update, advance physics, process another input tick, or change collision results.
+
+For example, if the GPU produces 42 new images per second, the intended behaviour is still approximately 59.94 simulation updates per second while the display repeats completed images as necessary. This preserves gameplay timing; it does not make the picture itself 60 FPS. CPU saturation, runtime synchronisation, driver stalls, or a blocked game thread can still prevent the simulation from meeting its target, so this is an architectural goal that must be verified under GPU and CPU load rather than a guarantee of 60 updates in every circumstance.
+
+The renderer already contains a dedicated presentation thread, title-vblank tracking, and an interpolation/replay path. Further work should profile the game thread and GPU command processor under sustained load, verify that delayed presentation never changes simulation timing, and measure input-to-photon latency before changing synchronization or queue depth.
+
 ## Why U Unlocked?
 
 The objective is not simply to make the game launch on a PC.
