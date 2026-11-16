@@ -112,7 +112,7 @@ foreach ($dll in $dlls) {
 
 # SDL3 and other shared dependencies are built with llvm-mingw and can depend on
 # compiler runtime DLLs. Keep these beside the game executables in the runtime folder.
-$compilerDllDirectory = Join-Path $toolchain 'llvm-mingw\\bin'
+$compilerDllDirectory = Join-Path $toolchain 'llvm-mingw\bin'
 $compilerDlls = @(Get-ChildItem -LiteralPath $compilerDllDirectory -Filter '*.dll' -File)
 foreach ($dll in $compilerDlls) {
     Copy-Item -LiteralPath $dll.FullName -Destination $play -Force
