@@ -73,9 +73,12 @@ if ($UseSystemTools) {
 
     $ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
     $ninjaVersionLine = if ($ninja) { (& $ninja --version | Out-String).Trim() } else { '' }
-    if (-not ($ninjaVersionLine -match '^\d+\.\d+\.\d+
+    if (-not ($ninjaVersionLine -match '^\d+\.\d+\.\d+$') -or [version]$ninjaVersionLine -lt [version]'1.12.1') {
+        Invoke-WingetInstall -Id 'Ninja-build.Ninja' -Version '1.12.1'
+        $ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
+        $ninjaVersionLine = if ($ninja) { (& $ninja --version | Out-String).Trim() } else { '' }
+    }
     if (-not $ninja) { throw 'Ninja 1.12.1 was installed but ninja.exe could not be located.' }
-
     $python = Find-Executable 'python.exe'
     $pythonVersion = if ($python) { (& $python --version 2>&1 | Out-String).Trim() } else { '' }
     if ($pythonVersion -notmatch '^Python 3\.12\.') {
