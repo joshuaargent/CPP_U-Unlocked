@@ -33,11 +33,11 @@ function Invoke-WingetInstall {
 
 function Find-Executable {
     param([string]$Name, [string[]]$Candidates = @())
-    $command = Get-Command $Name -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
     foreach ($candidate in $Candidates) {
         if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
     }
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
     return $null
 }
 
