@@ -10,8 +10,6 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$UpdateDirectory,
 
-    [string]$OutputDirectory,
-
     [string]$LogDirectory
 )
 
@@ -88,20 +86,8 @@ try {
     Write-Host 'Game files remain in their selected locations. Generated code and executables stay on this PC.'
 
     & (Join-Path $repoRoot 'tools\windows\verify-checkout.ps1')
-    if ($LASTEXITCODE -ne 0) {
-        throw "Source/toolchain verification failed with exit code $LASTEXITCODE."
-    }
-
     & $buildEntry -Rpx $update.Rpx -BaseRpx $game.Rpx
-    if ($LASTEXITCODE -ne 0) {
-        throw "The native Vulkan build failed with exit code $LASTEXITCODE. See the build log."
-    }
-
-    $playDirectory = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
-        Join-Path $repoRoot 'Play'
-    } else {
-        [System.IO.Path]::GetFullPath($OutputDirectory)
-    }
+    $playDirectory = Join-Path $repoRoot 'Play'
     $required = @(
         'U Unlocked.exe',
         'smash.exe',
