@@ -71,38 +71,61 @@ if(UNIX)
     add_subdirectory(tests)
 endif()
 
-# How the generated game code is compiled. The faster build requires AVX2 and FMA.
-option(SMASH_COMPAT "Build for x86-64-v2 processors (smash-compat.exe)" OFF)
-if(SMASH_COMPAT)
-    set(SMASH_GENERATED_OPTIONS -O2 -march=x86-64-v2 -fno-exceptions -Wno-unused-label)
-else()
-    set(SMASH_GENERATED_OPTIONS -O2 -march=x86-64-v3 -fno-exceptions -Wno-unused-label)
-endif()
+# Compile the translated game code for both CPU tiers while sharing the native runtime,
+# launcher, Vulkan backend, and third-party objects. This avoids rebuilding the
+# large runtime four times and guarantees both executables use the same runtime.
+set(SMASH_GENERATED_DIR "" CACHE PATH "cafe-recomp output directory for the updated game")
+set(SMASH_BASE_GENERATED_DIR "" CACHE PATH "cafe-recomp output directory for the base game")
 
-# Super Smash Bros. for Wii U: the same runtime without unrelated title-specific extensions.
-# Point SMASH_GENERATED_DIR at cafe-recomp's output for cross_f.rpx.
-set(SMASH_GENERATED_DIR "" CACHE PATH "cafe-recomp output directory for Smash")
-if(SMASH_GENERATED_DIR)
-    include(${SMASH_GENERATED_DIR}/sources.cmake)
-    add_library(smash_generated OBJECT ${CAFE_GENERATED_SOURCES})
-    target_include_directories(smash_generated PRIVATE runtime/include)
-    target_compile_features(smash_generated PRIVATE cxx_std_20)
-    target_compile_options(smash_generated PRIVATE ${SMASH_GENERATED_OPTIONS})
+function(add_smash_generated_variant target_name generated_sources architecture)
+    add_library(${target_name} OBJECT ${generated_sources})
+    target_include_directories(${target_name} PRIVATE runtime/include)
+    target_compile_features(${target_name} PRIVATE cxx_std_20)
+    target_compile_options(${target_name} PRIVATE
+        -O2 -march=${architecture} -fno-exceptions -Wno-unused-label)
+endfunction()
 
-    add_executable(smash runtime/src/smash_main.cpp runtime/src/smash_logo.cpp runtime/src/smash_overlay.cpp)
-    target_include_directories(smash SYSTEM PRIVATE third_party/stb)
+function(add_smash_executable target_name output_name generated_target compatibility)
+    add_executable(${target_name}
+        runtime/src/smash_main.cpp
+        runtime/src/smash_logo.cpp
+        runtime/src/smash_overlay.cpp)
+    target_include_directories(${target_name} SYSTEM PRIVATE third_party/stb)
     if(WIN32)
         enable_language(RC)
-        target_sources(smash PRIVATE runtime/res/smash.rc) # the icon
+        target_sources(${target_name} PRIVATE runtime/res/smash.rc)
     endif()
-    target_link_libraries(smash PRIVATE cafe_runtime smash_generated $<$<PLATFORM_ID:Windows>:winmm>)
-    target_compile_options(smash PRIVATE -Wall -Wextra -Wpedantic)
-    if(SMASH_COMPAT)
-        target_compile_definitions(smash PRIVATE SMASH_COMPAT)
-        set_target_properties(smash PROPERTIES OUTPUT_NAME smash-compat)
+    target_link_libraries(${target_name} PRIVATE cafe_runtime ${generated_target}
+        $<$<PLATFORM_ID:Windows>:winmm>)
+    target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+    if(compatibility)
+        target_compile_definitions(${target_name} PRIVATE SMASH_COMPAT)
     endif()
+    set_target_properties(${target_name} PROPERTIES OUTPUT_NAME "${output_name}")
+endfunction()
 
-    # U Unlocked's launcher (launcher/smash/): the menu that runs smash.exe.
+function(add_smash_game_pair prefix generated_dir output_v3 output_v2)
+    if(NOT EXISTS "${generated_dir}/sources.cmake")
+        message(FATAL_ERROR "Missing cafe-recomp output: ${generated_dir}/sources.cmake")
+    endif()
+    include("${generated_dir}/sources.cmake")
+    set(generated_sources ${CAFE_GENERATED_SOURCES})
+
+    add_smash_generated_variant(${prefix}_generated_v3 "${generated_sources}" x86-64-v3)
+    add_smash_generated_variant(${prefix}_generated_v2 "${generated_sources}" x86-64-v2)
+    add_smash_executable(${prefix}_v3 "${output_v3}" ${prefix}_generated_v3 FALSE)
+    add_smash_executable(${prefix}_v2 "${output_v2}" ${prefix}_generated_v2 TRUE)
+endfunction()
+
+if(SMASH_GENERATED_DIR)
+    add_smash_game_pair(smash_update "${SMASH_GENERATED_DIR}" smash smash-compat)
+endif()
+if(SMASH_BASE_GENERATED_DIR)
+    add_smash_game_pair(smash_base "${SMASH_BASE_GENERATED_DIR}" smash-base smash-base-compat)
+endif()
+
+if(SMASH_GENERATED_DIR)
+    # U Unlocked's launcher (launcher/smash/): the menu that runs the game targets.
     find_package(SDL3 REQUIRED CONFIG)
     add_executable(smash-launcher WIN32 launcher/smash/main.cpp runtime/src/host/display_settings.cpp
         runtime/src/host/controller_profiles.cpp runtime/src/host/controller_profile_import.cpp
@@ -122,4 +145,3 @@ if(SMASH_GENERATED_DIR)
     target_link_libraries(smash-launcher PRIVATE SDL3::SDL3 $<$<PLATFORM_ID:Windows>:winhttp bcrypt ws2_32>)
     target_compile_options(smash-launcher PRIVATE -Wall -Wextra -Wno-missing-field-initializers)
 endif()
-
