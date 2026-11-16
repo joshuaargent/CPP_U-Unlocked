@@ -1,5 +1,5 @@
 # Build U Unlocked directly from the separately selected base-game and update folders.
-# Game-specific output is generated locally and is never copied into the source repository or release assets.
+# Generated game-specific code and executables remain local to this PC.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
@@ -38,7 +38,11 @@ function Resolve-TitleFolder {
         throw "$Label folder is missing code\cross_f.rpx. This build currently requires the title's cross_f.rpx input."
     }
 
-    [xml]$metadata = Get-Content -LiteralPath $metadataPath -Raw
+    try {
+        [xml]$metadata = Get-Content -LiteralPath $metadataPath -Raw
+    } catch {
+        throw "$Label code\app.xml is not valid XML: $($_.Exception.Message)"
+    }
     $titleNode = $metadata.SelectSingleNode('//title_id')
     if (-not $titleNode -or $titleNode.InnerText.Trim().ToUpperInvariant() -ne $ExpectedTitleId) {
         $actual = if ($titleNode) { $titleNode.InnerText.Trim() } else { 'not present' }
@@ -59,20 +63,14 @@ function Resolve-TitleFolder {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildEntry = Join-Path $repoRoot 'tools\windows\build-u-unlocked.ps1'
-if (-not (Test-Path -LiteralPath $buildEntry -PathType Leaf)) {
-    throw "The source build entry point is missing: $buildEntry. This build kit must be run from a complete U Unlocked source checkout."
-}
-
 $environmentSetup = Join-Path $PSScriptRoot 'setup-build-environment.ps1'
-if (-not (Test-Path -LiteralPath $environmentSetup -PathType Leaf)) {
-    throw "The build environment bootstrap is missing: $environmentSetup"
-}
-Write-Host 'Preparing the pinned Windows build environment...' -ForegroundColor Cyan
-& $environmentSetup
-if ($LASTEXITCODE -ne 0) { throw 'Windows build environment setup failed.' }
+$verifyScript = Join-Path $PSScriptRoot 'verify-checkout.ps1'
 
-$game = Resolve-TitleFolder -Path $GameDirectory -ExpectedTitleId '0005000010144F00' -Label 'Base game'
-$update = Resolve-TitleFolder -Path $UpdateDirectory -ExpectedTitleId '0005000E10144F00' -Label 'Game update'
+foreach ($required in @($buildEntry, $environmentSetup, $verifyScript)) {
+    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+        throw "A required local build script is missing: $required"
+    }
+}
 
 if ([string]::IsNullOrWhiteSpace($LogDirectory)) {
     $local = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:TEMP }
@@ -86,17 +84,29 @@ try {
     Start-Transcript -LiteralPath $logPath -Force | Out-Null
     $transcriptStarted = $true
 
-    Write-Host 'U Unlocked local runtime build' -ForegroundColor Cyan
+    Write-Host 'U Unlocked local Vulkan runtime build' -ForegroundColor Cyan
+    Write-Host 'Validating the selected game folders...'
+    $game = Resolve-TitleFolder -Path $GameDirectory -ExpectedTitleId '0005000010144F00' -Label 'Base game'
+    $update = Resolve-TitleFolder -Path $UpdateDirectory -ExpectedTitleId '0005000E10144F00' -Label 'Game update'
+
     Write-Host "Base game: $($game.Folder)"
     Write-Host "Update:    $($update.Folder)"
     Write-Host "Base RPX:  $($game.Size) bytes"
-    Write-Host "Update RPX:$($update.Size) bytes"
+    Write-Host "Update RPX: $($update.Size) bytes"
+    Write-Host 'Installing build prerequisites and preparing pinned dependencies. The first build can take a while.'
     Write-Host 'Game files remain in their selected locations. Generated code and executables stay on this PC.'
 
-    & (Join-Path $repoRoot 'tools\windows\verify-checkout.ps1')
+    & $environmentSetup
+    if ($LASTEXITCODE -ne 0) { throw "Windows build environment setup failed with exit code $LASTEXITCODE." }
+
+    & $verifyScript
+    if ($LASTEXITCODE -ne 0) { throw "Source/toolchain verification failed with exit code $LASTEXITCODE." }
+
     & $buildEntry -Rpx $update.Rpx -BaseRpx $game.Rpx
+    if ($LASTEXITCODE -ne 0) { throw "The native Vulkan build failed with exit code $LASTEXITCODE." }
+
     $playDirectory = Join-Path $repoRoot 'Play'
-    $required = @(
+    $requiredOutputs = @(
         'U Unlocked.exe',
         'smash.exe',
         'smash-compat.exe',
@@ -105,7 +115,7 @@ try {
         'wua_extract.exe',
         'title-logo.png'
     )
-    $missing = @($required | Where-Object {
+    $missing = @($requiredOutputs | Where-Object {
         -not (Test-Path -LiteralPath (Join-Path $playDirectory $_) -PathType Leaf)
     })
     if ($missing.Count -gt 0) {
