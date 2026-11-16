@@ -4,6 +4,7 @@
 // runtime's own calls to network services, not the title's sockets.
 
 #include <string>
+#include <cstdint>
 #include <vector>
 
 namespace cafe::host {
@@ -16,6 +17,6 @@ struct HttpResponse {
 
 // `headers` are "Name: value" lines. Server certificates are verified.
 HttpResponse http_request(const std::string& method, const std::string& url, const std::vector<std::string>& headers,
-                          const std::string& body);
+                          const std::string& body, int timeout_ms = 30000);
 
 } // namespace cafe::host
