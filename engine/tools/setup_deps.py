@@ -26,38 +26,47 @@ def archive_url(repository_url, revision):
 
 
 def safe_extract(archive, destination):
-    """Extract a GitHub source archive while rejecting traversal and link entries."""
+    """Extract a GitHub source archive without allowing traversal or external links."""
     with zipfile.ZipFile(archive) as source:
         members = source.infolist()
         if not members:
             raise RuntimeError("The dependency archive is empty.")
         if len(members) > 200000:
             raise RuntimeError("The dependency archive contains too many entries.")
+
         roots = set()
         seen = set()
         expanded_size = 0
+        symlinks = []
+        normalized_members = []
         for member in members:
             name = member.filename.replace("\\", "/")
             path = PurePosixPath(name)
-            if (path.is_absolute() or not path.parts or any(part in ("", ".", "..") or ":" in part for part in path.parts)):
+            if path.is_absolute() or not path.parts or any(
+                part in ("", ".", "..") or ":" in part for part in path.parts
+            ):
                 raise RuntimeError(f"Unsafe dependency archive path: {member.filename}")
+
             canonical = "/".join(path.parts).casefold()
             if canonical in seen:
                 raise RuntimeError(f"Dependency archive contains a duplicate path: {member.filename}")
             seen.add(canonical)
+            roots.add(path.parts[0])
             expanded_size += member.file_size
             if expanded_size > 2 * 1024 * 1024 * 1024:
                 raise RuntimeError("The dependency archive exceeds the 2 GiB expanded-size limit.")
+
             mode = (member.external_attr >> 16) & 0xFFFF
             if stat.S_ISLNK(mode):
-                raise RuntimeError(f"Dependency archive contains a symbolic link: {member.filename}")
-            roots.add(path.parts[0])
+                symlinks.append((member, path.parts[1:]))
+            else:
+                normalized_members.append((member, path.parts[1:]))
+
         if len(roots) != 1:
             raise RuntimeError("The dependency archive does not contain exactly one source root.")
 
         root = next(iter(roots))
-        for member in members:
-            relative = PurePosixPath(member.filename.replace("\\", "/")).parts[1:]
+        for member, relative in normalized_members:
             if not relative:
                 continue
             target = destination.joinpath(*relative)
@@ -71,6 +80,50 @@ def safe_extract(archive, destination):
             with source.open(member, "r") as incoming, target.open("wb") as outgoing:
                 shutil.copyfileobj(incoming, outgoing, length=1024 * 1024)
 
+        # GitHub source archives preserve Unix symlinks as ZIP entries. Windows
+        # builds do not need filesystem symlinks, so materialize safe relative
+        # links as ordinary copies after their targets have been extracted.
+        pending = list(symlinks)
+        while pending:
+            remaining = []
+            progressed = False
+            for member, relative in pending:
+                if not relative:
+                    raise RuntimeError(f"Invalid root-level symlink in dependency archive: {member.filename}")
+                raw_target = source.read(member).decode("utf-8", errors="strict").strip()
+                link_target = PurePosixPath(raw_target.replace("\\", "/"))
+                if not raw_target or link_target.is_absolute() or any(":" in part for part in link_target.parts):
+                    raise RuntimeError(f"Unsafe symbolic link target in dependency archive: {member.filename}")
+                stack = list(relative[:-1])
+                for part in link_target.parts:
+                    if part in ("", "."):
+                        continue
+                    if part == "..":
+                        if not stack:
+                            raise RuntimeError(f"Symbolic link escapes dependency source root: {member.filename}")
+                        stack.pop()
+                    else:
+                        stack.append(part)
+                if not stack:
+                    raise RuntimeError(f"Symbolic link resolves to the source root: {member.filename}")
+
+                link_path = destination.joinpath(*relative)
+                resolved_target = destination.joinpath(*stack)
+                if not resolved_target.exists():
+                    remaining.append((member, relative))
+                    continue
+                if resolved_target.is_dir():
+                    if link_path == resolved_target or resolved_target in link_path.parents:
+                        raise RuntimeError(f"Recursive directory symlink in dependency archive: {member.filename}")
+                    shutil.copytree(resolved_target, link_path)
+                else:
+                    link_path.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(resolved_target, link_path)
+                progressed = True
+            if not progressed and remaining:
+                unresolved = ", ".join(member.filename for member, _ in remaining[:5])
+                raise RuntimeError(f"Unresolved symbolic links in dependency archive: {unresolved}")
+            pending = remaining
 
 def fetch_dependency(name, dependency):
     destination = ROOT / "third_party" / name
