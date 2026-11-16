@@ -33,7 +33,7 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 
 - **Native PC runtime** - C++20, Vulkan rendering, SDL3 input, and a native Windows game runtime.
 - **Game installation** - validation of the game, update, and optional DLC folders supplied by the user.
-- **Controller configuration** - the initial Controls page supports per-device button/axis remapping, stick dead zones, trigger thresholds, and JSON profile saving. Per-player assignment, calibration, profile import, and the full Cemu-style workflow remain in development.
+- **Controller configuration** - the Controls page supports per-device button/axis remapping, per-player slot assignment, per-axis dead zones and stick inversion, trigger thresholds, a live input monitor, and JSON profile saving. Full calibration, profile import, and the complete Cemu-style workflow remain in development.
 - **Cemu profile import** - specified in the controller compatibility document; implementation remains planned.
 - **Graphics settings** - the existing display controls are available; expanded renderer options and hardware-aware quality presets remain planned.
 - **Mod management** - existing archive installation and enable/disable support, with profiles, dependency checks, conflict reporting, and transactional rollback planned.

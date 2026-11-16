@@ -25,9 +25,11 @@
 - [x] Implement press-to-bind buttons and axes, including Escape cancellation and a 10-second timeout.
 - [x] Implement configurable stick dead zones and trigger thresholds.
 - [x] Implement explicit player-slot assignment (automatic, Wii U GamePad, and Pro Controller slots).
-- [ ] Implement full stick/trigger calibration, saturation, and axis inversion.
-- [ ] Implement a live controller test screen.
+- [x] Implement per-axis dead zones and stick-axis inversion.
+- [x] Add a live controller input monitor for all mapped buttons, sticks, and triggers.
+- [ ] Implement full stick/trigger calibration and saturation.
 - [ ] Implement Cemu XML import with explicit mapping translation and preview.
+- [x] Add automated tests for axis normalization, dead zones, inversion, profile persistence, and invalid-save protection.
 - [ ] Add tests for reconnects, ambiguous device identities, and multi-controller setups.
 
 ## Graphics and performance

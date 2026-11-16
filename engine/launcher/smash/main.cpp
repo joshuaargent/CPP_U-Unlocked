@@ -304,7 +304,7 @@ Image load_image(SDL_Renderer* renderer, const fs::path& path) {
 
 // ------------------------------------------------------------------ the launcher
 
-enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay, kControls };
+enum class Screen { kMain, kSettings, kMods, kOnline, kNetplay, kControls, kControlTest };
 
 
 struct Item {
@@ -722,7 +722,7 @@ private:
             const std::string player_slot = control_profile_.player_slot < 0
                 ? "Automatic" : "Player " + std::to_string(static_cast<int>(control_profile_.player_slot) + 1);
             char dead_zone[16]{}, threshold[16]{};
-            std::snprintf(dead_zone, sizeof(dead_zone), "%.2f", control_profile_.dead_zones[0]);
+            std::snprintf(dead_zone, sizeof(dead_zone), "%.2f", control_profile_.dead_zones[control_axis_action_]);
             std::snprintf(threshold, sizeof(threshold), "%.2f", control_profile_.trigger_threshold);
             list_ = {{"CONTROLLER", device},
                      {"PLAYER SLOT", player_slot},
@@ -730,10 +730,57 @@ private:
                      {"BIND BUTTON", capture_binding_ && !capture_axis_ ? "Waiting..." : (button_name ? button_name : "Unbound")},
                      {"STICK AXIS", control_axis_names()[control_axis_action_]},
                      {"BIND AXIS", capture_binding_ && capture_axis_ ? "Waiting..." : (axis_name ? axis_name : "Unbound")},
-                     {"STICK DEAD ZONE", dead_zone},
+                     {"AXIS DEAD ZONE", dead_zone},
+                     {"INVERT AXIS", control_axis_action_ >= static_cast<size_t>(controller_profiles::AxisAction::kLeftTrigger)
+                         ? "N/A" : (control_profile_.axis_inverted[control_axis_action_] ? "On" : "Off")},
                      {"TRIGGER THRESHOLD", threshold},
+                     {"LIVE TEST", "Open"},
                      {"SAVE PROFILE", "Save"},
                      {"RESET PROFILE", "Defaults"},
+                     {"BACK"}};
+            break;
+        }
+        case Screen::kControlTest: {
+            SDL_Gamepad* pad = selected_control_gamepad();
+            list_.clear();
+            list_.push_back({"CONTROLLER", pad && SDL_GetGamepadName(pad) ? SDL_GetGamepadName(pad) : "No controller connected"});
+            static constexpr std::array<controller_profiles::ButtonAction, controller_profiles::kButtonCount> actions = {
+                controller_profiles::ButtonAction::kA, controller_profiles::ButtonAction::kB,
+                controller_profiles::ButtonAction::kX, controller_profiles::ButtonAction::kY,
+                controller_profiles::ButtonAction::kDpadUp, controller_profiles::ButtonAction::kDpadDown,
+                controller_profiles::ButtonAction::kDpadLeft, controller_profiles::ButtonAction::kDpadRight,
+                controller_profiles::ButtonAction::kL, controller_profiles::ButtonAction::kR,
+                controller_profiles::ButtonAction::kZL, controller_profiles::ButtonAction::kZR,
+                controller_profiles::ButtonAction::kPlus, controller_profiles::ButtonAction::kMinus,
+                controller_profiles::ButtonAction::kHome, controller_profiles::ButtonAction::kLeftStick,
+                controller_profiles::ButtonAction::kRightStick
+            };
+            static constexpr std::array<const char*, controller_profiles::kButtonCount> names = {
+                "A", "B", "X", "Y", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "ZL", "ZR",
+                "PLUS", "MINUS", "HOME", "L3", "R3"
+            };
+            std::string pressed;
+            for (size_t i = 0; i < actions.size(); ++i) {
+                if (!pad || !controller_profiles::button_pressed(pad, control_profile_, actions[i])) continue;
+                if (!pressed.empty()) pressed += ", ";
+                pressed += names[i];
+            }
+            if (pressed.empty()) pressed = "None";
+            char left_stick[40]{}, right_stick[40]{}, triggers[40]{};
+            const float lx = pad ? controller_profiles::axis_value(pad, control_profile_, controller_profiles::AxisAction::kLeftX) : 0.0f;
+            const float ly = pad ? controller_profiles::axis_value(pad, control_profile_, controller_profiles::AxisAction::kLeftY) : 0.0f;
+            const float rx = pad ? controller_profiles::axis_value(pad, control_profile_, controller_profiles::AxisAction::kRightX) : 0.0f;
+            const float ry = pad ? controller_profiles::axis_value(pad, control_profile_, controller_profiles::AxisAction::kRightY) : 0.0f;
+            const float lt = pad ? controller_profiles::axis_value(pad, control_profile_, controller_profiles::AxisAction::kLeftTrigger) : 0.0f;
+            const float rt = pad ? controller_profiles::axis_value(pad, control_profile_, controller_profiles::AxisAction::kRightTrigger) : 0.0f;
+            std::snprintf(left_stick, sizeof(left_stick), "X %+.2f   Y %+.2f", lx, ly);
+            std::snprintf(right_stick, sizeof(right_stick), "X %+.2f   Y %+.2f", rx, ry);
+            std::snprintf(triggers, sizeof(triggers), "L %.2f   R %.2f", lt, rt);
+            list_ = {{"CONTROLLER", pad && SDL_GetGamepadName(pad) ? SDL_GetGamepadName(pad) : "No controller connected"},
+                     {"PRESSED BUTTONS", pressed},
+                     {"LEFT STICK", left_stick},
+                     {"RIGHT STICK", right_stick},
+                     {"TRIGGERS", triggers},
                      {"BACK"}};
             break;
         }
@@ -820,6 +867,10 @@ private:
     }
     void back() {
         if (editing_ >= 0) stop_editing();
+        if (screen_ == Screen::kControlTest) {
+            go(Screen::kControls);
+            return;
+        }
         if (screen_ != Screen::kMain) go(Screen::kMain);
     }
 
@@ -843,9 +894,15 @@ private:
             } else if (selected_ == 4) {
                 control_axis_action_ = (control_axis_action_ + d + controller_profiles::kAxisCount) % controller_profiles::kAxisCount;
             } else if (selected_ == 6) {
-                const float next = std::clamp(control_profile_.dead_zones[0] + d * 0.05f, 0.0f, 0.9f);
-                for (size_t i = 0; i < 4; ++i) control_profile_.dead_zones[i] = next;
+                const size_t axis = control_axis_action_;
+                control_profile_.dead_zones[axis] = std::clamp(control_profile_.dead_zones[axis] + d * 0.025f, 0.0f, 0.9f);
             } else if (selected_ == 7) {
+                if (control_axis_action_ >= static_cast<size_t>(controller_profiles::AxisAction::kLeftTrigger)) {
+                    controls_status_ = "Trigger axes do not use stick inversion. Adjust the trigger threshold instead.";
+                } else {
+                    control_profile_.axis_inverted[control_axis_action_] = !control_profile_.axis_inverted[control_axis_action_];
+                }
+            } else if (selected_ == 8) {
                 control_profile_.trigger_threshold = std::clamp(control_profile_.trigger_threshold + d * 0.05f, 0.05f, 0.95f);
             }
             return;
@@ -920,7 +977,11 @@ private:
                     controls_status_ = "Move the desired stick or trigger axis within 10 seconds. Escape cancels.";
                 } else controls_status_ = "Connect a controller before binding inputs.";
                 break;
-            case 8: {
+            case 9:
+                go(Screen::kControlTest);
+                controls_status_ = "Move the sticks and press buttons to verify the selected mapping.";
+                break;
+            case 10: {
                 std::string error;
                 if (SDL_Gamepad* pad = selected_control_gamepad()) {
                     if (controller_profiles::save_for_device(pad, control_profile_, &error)) controls_status_ = "Controller profile saved.";
@@ -928,14 +989,17 @@ private:
                 } else controls_status_ = "Connect a controller before saving its profile.";
                 break;
             }
-            case 9:
+            case 11:
                 control_profile_ = controller_profiles::default_profile();
                 if (SDL_Gamepad* pad = selected_control_gamepad()) control_profile_.device_guid = controller_profiles::device_info(pad).guid;
                 controls_status_ = "Default bindings restored. Save to keep them.";
                 break;
-            case 10: back(); break;
+            case 12: back(); break;
             default: change(1); break;
             }
+            break;
+        case Screen::kControlTest:
+            if (selected_ + 1 == static_cast<int>(items().size())) back();
             break;
         case Screen::kNetplay:
             switch (selected_) {
@@ -1252,11 +1316,13 @@ private:
             draw_online_status();
             return;
         }
-        if (screen_ == Screen::kControls) {
+        if (screen_ == Screen::kControls || screen_ == Screen::kControlTest) {
             const float H = layout_.h, x = layout_.text_x, y = H * 0.86f, px = H * 0.032f;
-            const std::string line = controls_status_.empty()
-                ? "Select a control, bind a physical input, then save the profile."
-                : controls_status_;
+            const std::string line = screen_ == Screen::kControlTest
+                ? "Live input monitor: press each button and move each stick; Back returns to Controls."
+                : (controls_status_.empty()
+                    ? "Select a control, bind a physical input, then save the profile."
+                    : controls_status_);
             font_.draw(r_, x, y, fit(line, px * 0.85f, layout_.w * 0.65f), px * 0.85f,
                        capture_binding_ ? kGold : kDim);
             font_.draw(r_, x, y + H * 0.045f,

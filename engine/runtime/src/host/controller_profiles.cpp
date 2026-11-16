@@ -328,22 +328,37 @@ bool button_pressed(SDL_Gamepad* gamepad, const Profile& profile, ButtonAction a
            SDL_GetGamepadButton(gamepad, static_cast<SDL_GamepadButton>(binding));
 }
 
-float axis_value(SDL_Gamepad* gamepad, const Profile& profile, AxisAction action) {
+float normalize_axis_value(float raw_value, const Profile& profile, AxisAction action) {
     const size_t index = static_cast<size_t>(action);
-    const int binding = profile.axes[index];
-    if (!gamepad || binding < 0 || binding >= SDL_GAMEPAD_AXIS_COUNT) return 0.0f;
+    if (index >= kAxisCount || !std::isfinite(raw_value)) return 0.0f;
 
-    float value = static_cast<float>(SDL_GetGamepadAxis(gamepad, static_cast<SDL_GamepadAxis>(binding))) / 32767.0f;
-    if (action == AxisAction::kLeftTrigger || action == AxisAction::kRightTrigger) {
-        return std::clamp(value, 0.0f, 1.0f);
+    float value = std::clamp(raw_value, -1.0f, 1.0f);
+    const bool trigger = action == AxisAction::kLeftTrigger || action == AxisAction::kRightTrigger;
+    if (trigger) {
+        value = std::clamp(value, 0.0f, 1.0f);
+    } else if (profile.axis_inverted[index]) {
+        value = -value;
     }
-    value = std::clamp(value, -1.0f, 1.0f);
-    if (profile.axis_inverted[index]) value = -value;
-    const float dead_zone = profile.dead_zones[index];
+
+    const float dead_zone = std::clamp(profile.dead_zones[index], 0.0f, 0.9f);
+    if (trigger) {
+        if (value <= dead_zone) return 0.0f;
+        return std::clamp((value - dead_zone) / (1.0f - dead_zone), 0.0f, 1.0f);
+    }
+
     const float magnitude = std::fabs(value);
     if (magnitude <= dead_zone) return 0.0f;
     const float scaled = (magnitude - dead_zone) / (1.0f - dead_zone);
     return std::copysign(std::clamp(scaled, 0.0f, 1.0f), value);
+}
+
+float axis_value(SDL_Gamepad* gamepad, const Profile& profile, AxisAction action) {
+    const size_t index = static_cast<size_t>(action);
+    if (!gamepad || index >= kAxisCount) return 0.0f;
+    const int binding = profile.axes[index];
+    if (binding < 0 || binding >= SDL_GAMEPAD_AXIS_COUNT) return 0.0f;
+    const float raw = static_cast<float>(SDL_GetGamepadAxis(gamepad, static_cast<SDL_GamepadAxis>(binding))) / 32767.0f;
+    return normalize_axis_value(raw, profile, action);
 }
 
 bool save_for_device(SDL_Gamepad* gamepad, const Profile& profile, std::string* error) {

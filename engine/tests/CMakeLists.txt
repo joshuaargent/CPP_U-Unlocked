@@ -111,6 +111,15 @@ target_link_libraries(keymap_test PRIVATE SDL3::SDL3)
 target_compile_options(keymap_test PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME keymap_test COMMAND keymap_test ${CMAKE_CURRENT_BINARY_DIR}/keymap_test.d)
 
+# Controller profile persistence and physical-axis calibration math.
+add_executable(controller_profiles_test controller_profiles_test.cpp
+    ${CMAKE_SOURCE_DIR}/runtime/src/host/controller_profiles.cpp)
+target_include_directories(controller_profiles_test PRIVATE ${CMAKE_SOURCE_DIR}/runtime/src)
+target_compile_features(controller_profiles_test PRIVATE cxx_std_20)
+target_link_libraries(controller_profiles_test PRIVATE SDL3::SDL3)
+target_compile_options(controller_profiles_test PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME controller_profiles_test COMMAND controller_profiles_test)
+
 # keyboard.ini as the launcher writes it, read by the game's parser: their
 # inputs, defaults and reserved keys stay the same.
 add_executable(keyboard_file_test keyboard_file_test.cpp ${CMAKE_SOURCE_DIR}/runtime/src/host/keymap.cpp)

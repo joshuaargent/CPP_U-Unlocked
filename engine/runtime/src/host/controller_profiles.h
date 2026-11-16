@@ -53,6 +53,7 @@ const Profile& for_device(SDL_Gamepad* gamepad);
 void clear_cache();
 
 bool button_pressed(SDL_Gamepad* gamepad, const Profile& profile, ButtonAction action);
+float normalize_axis_value(float raw_value, const Profile& profile, AxisAction action);
 float axis_value(SDL_Gamepad* gamepad, const Profile& profile, AxisAction action);
 
 bool save_for_device(SDL_Gamepad* gamepad, const Profile& profile, std::string* error = nullptr);
