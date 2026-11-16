@@ -33,14 +33,14 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 
 - **Native PC runtime** - C++20, Vulkan rendering, SDL3 input, and a native Windows game runtime.
 - **Game installation** - validation of the game, update, and optional DLC folders supplied by the user.
-- **Launcher dashboard** - a feature-rich startup screen with a featured launch panel, game/update/DLC status, and direct navigation to Online, Netplay, Controls, Graphics, Mods, and Quit.
+- **Launcher** - a controller- and mouse-friendly home dashboard with Play, Build, game-update management, Online, Netplay, Controls, Graphics, Mods, and Diagnostics pages. Build manages the user-supplied game/update/DLC folders; Diagnostics reports runtime and system information and can copy a support report.
 - **Controller configuration** - the Controls page supports per-device button/axis remapping, per-player slot assignment, per-axis dead zones and stick inversion, trigger thresholds, a live input monitor, JSON profile saving, and automatic discovery of standard Cemu profile folders.
 - **Cemu profile import** - imports Cemu Wii U GamePad and Pro Controller XML profiles using explicit SDLController mapping translation. Unsupported input APIs and settings are reported; imported mappings remain unsaved until reviewed and saved by the user.
 - **Graphics settings** - the existing display controls are available; expanded renderer options and hardware-aware quality presets remain planned.
 - **Netplay** - host game streaming and direct IP/VPN joining; room discovery remains disabled until a U Unlocked-owned compatible service is deployed.
 - **Mod management** - existing archive installation and enable/disable support, with profiles, dependency checks, conflict reporting, and transactional rollback planned.
 - **Performance profiles** - Low Spec, Balanced, and Quality modes are planned, with Intel Iris Xe integrated graphics included in the initial optimisation target.
-- **Diagnostics** - hardware detection, Vulkan capability reporting, shader-cache information, and actionable troubleshooting are planned.
+- **Diagnostics** - the launcher reports platform, logical CPU cores, system memory, CPU optimisation path, SDL launcher renderer, game/update validation, active mods, shader-cache count, and log location. Vulkan capability reporting and deeper automated troubleshooting remain planned.
 - **Preserved game behaviour** - graphics and performance settings must not change deterministic game simulation or silently alter gameplay timing.
 
 Features described as planned are not represented as already implemented. See the [implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md) and [architecture](docs/ARCHITECTURE.md) for the delivery sequence and engineering requirements.
@@ -53,7 +53,7 @@ Controller setup should be straightforward, settings should explain what they ch
 
 ## Current status
 
-The native runtime and Windows build foundation are now part of this repository. The launcher has a feature-rich home dashboard and a Controls page with physical button and axis capture, player-slot assignment, per-axis calibration, a live input monitor, per-device JSON profile persistence, automatic Cemu profile-folder discovery, and a Cemu XML importer for SDLController profiles. The dashboard and Cemu discovery changes have been committed to the current feature branch; full launcher compilation and runtime testing remain outstanding. The C++ build and controller tests have not yet been run on the target laptop.
+The native runtime and Windows build foundation are now part of this repository. The launcher includes Play, Build, game-update management, Online, Netplay, Controls, Graphics, Mods, and Diagnostics workflows. Controls supports physical button and axis capture, player-slot assignment, per-axis calibration, a live input monitor, per-device JSON profile persistence, automatic Cemu profile-folder discovery, and a Cemu XML importer for SDLController profiles. The launcher also provides direct IP/VPN Netplay joining without requiring a room directory. Full application-update delivery, richer mod management, full runtime linking, and on-device testing remain outstanding.
 
 The initial target machine is an HP EliteBook 640 G9 provisionally identified as an Intel Core i5 model with Intel Iris Xe graphics and 16 GB RAM. The exact CPU model and Vulkan driver capabilities still need to be confirmed on the target machine. Defaults will be based on runtime detection and measured performance rather than the laptop model name.
 
