@@ -28,7 +28,7 @@ struct Handle {
 } // namespace
 
 HttpResponse http_request(const std::string& method, const std::string& url, const std::vector<std::string>& headers,
-                          const std::string& body) {
+                          const std::string& body, int timeout_ms) {
     HttpResponse r;
     const std::wstring wurl = wide(url);
     URL_COMPONENTS parts{sizeof parts};
@@ -47,7 +47,7 @@ HttpResponse http_request(const std::string& method, const std::string& url, con
     Handle session{WinHttpOpen(L"U Unlocked", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME,
                                WINHTTP_NO_PROXY_BYPASS, 0)};
     if (!session.h) session.h = WinHttpOpen(L"U Unlocked", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, nullptr, nullptr, 0);
-    WinHttpSetTimeouts(session.h, 10000, 10000, 30000, 30000);
+    WinHttpSetTimeouts(session.h, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
     Handle connection{WinHttpConnect(session.h, host, parts.nPort, 0)};
     const bool secure = parts.nScheme == INTERNET_SCHEME_HTTPS;
     const std::wstring target = std::wstring(path) + extra;
@@ -86,7 +86,7 @@ HttpResponse http_request(const std::string& method, const std::string& url, con
 }
 #else
 // shortcut: no HTTP client off Windows yet; use libcurl when the Linux build gets online play.
-HttpResponse http_request(const std::string&, const std::string&, const std::vector<std::string>&, const std::string&) {
+HttpResponse http_request(const std::string&, const std::string&, const std::vector<std::string>&, const std::string&, int) {
     return {0, {}, "no HTTP client on this platform"};
 }
 #endif
