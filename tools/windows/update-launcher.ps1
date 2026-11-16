@@ -164,7 +164,78 @@ try {
     foreach($file in $files) {
         $name=[string]$file.name
         $hash=[string]$file.sha256
-        $allowed=$name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|[A-Za-z0-9_.+-]+[.]dll)$'
+        $allowed=$name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|[A-Za-z0-9_.+-]+[.]dll)
+        if(-not $allowed -or $name.Contains('..') -or -not $seen.Add($name) -or $hash -notmatch '^[0-9a-fA-F]{64}$') {
+            throw "Invalid file in update manifest: $name"
+        }
+        if(-not $entries.ContainsKey($name)){throw "Manifest file is missing from archive: $name"}
+        $entry=$entries[$name]
+        if($entry.FullName -ne $name -or $entry.Length -gt 512MB){throw "Invalid binary archive entry: $name"}
+
+        $destination=Join-Path $newFiles $name
+        $input=$entry.Open()
+        $output=[IO.File]::Open($destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try {$input.CopyTo($output);$output.Flush($true)} finally {$output.Dispose();$input.Dispose()}
+
+        $fileHash=(Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+        if($fileHash -ne $hash.ToUpperInvariant()){throw "Package file hash mismatch: $name"}
+        if($name -eq 'U Unlocked.exe'){$hasExe=$true}
+    }
+    if(-not $hasExe){throw 'Manifest does not contain the launcher executable.'}
+    $archive.Dispose()
+    $archive=$null
+
+    $deadline=[DateTime]::UtcNow.AddSeconds(120)
+    while([DateTime]::UtcNow -lt $deadline -and (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue)) {
+        Start-Sleep -Milliseconds 250
+    }
+    if(Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue){throw 'Launcher is still running; close it and retry.'}
+
+    $rollbackRoot=Join-Path $work 'rollback'
+    New-Item -ItemType Directory -Force -Path $rollbackRoot | Out-Null
+    $safeVersion=$CurrentVersion -replace '[^0-9A-Za-z._-]','_'
+    $rollback=Join-Path $rollbackRoot ($safeVersion+'-'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
+    New-Item -ItemType Directory -Force -Path $rollback | Out-Null
+    $changed=[Collections.Generic.List[string]]::new()
+
+    try {
+        foreach($file in $files) {
+            $name=[string]$file.name
+            $target=Join-Path $InstallDirectory $name
+            $backup=Join-Path $rollback $name
+            if(Test-Path -LiteralPath $target -PathType Leaf){Copy-Item -LiteralPath $target -Destination $backup}
+            $changed.Add($name)
+            Move-Item -LiteralPath (Join-Path $newFiles $name) -Destination $target -Force
+        }
+        Start-Process -FilePath (Join-Path $InstallDirectory 'U Unlocked.exe') -WorkingDirectory $InstallDirectory | Out-Null
+    } catch {
+        foreach($name in $changed) {
+            $target=Join-Path $InstallDirectory $name
+            $backup=Join-Path $rollback $name
+            if(Test-Path -LiteralPath $backup -PathType Leaf){Copy-Item -LiteralPath $backup -Destination $target -Force}
+            elseif(Test-Path -LiteralPath $target -PathType Leaf){Remove-Item -LiteralPath $target -Force}
+        }
+        throw
+    }
+
+    Get-ChildItem -LiteralPath $rollbackRoot -Directory | Sort-Object LastWriteTimeUtc -Descending | Select-Object -Skip 3 | Remove-Item -Recurse -Force
+    Write-Log "Updated $CurrentVersion to $version; rollback saved at $rollback."
+    Show-Message "U Unlocked was updated to version $version. Game files, mods, saves and settings were preserved."
+} catch {
+    $message=$_.Exception.Message
+    try {
+        if(-not(Test-Path -LiteralPath $work -PathType Container)){New-Item -ItemType Directory -Force -Path $work | Out-Null}
+        Write-Log "Update failed: $message"
+    } catch {}
+    $text="The launcher could not be updated."+[Environment]::NewLine+[Environment]::NewLine+$message+[Environment]::NewLine+"Log: "+$log
+    Show-Message $text $true
+    exit 1
+} finally {
+    if($archive){$archive.Dispose()}
+    if($stage -and (Test-Path -LiteralPath $stage)){Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue}
+    if($download -and (Test-Path -LiteralPath $download)){Remove-Item -LiteralPath $download -Force -ErrorAction SilentlyContinue}
+}
+
         if(-not $allowed -or $name.Contains('..') -or -not $seen.Add($name) -or $hash -notmatch '^[0-9a-fA-F]{64}$') {
             throw "Invalid file in update manifest: $name"
         }
