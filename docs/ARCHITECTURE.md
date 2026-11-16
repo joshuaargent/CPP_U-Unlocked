@@ -35,6 +35,17 @@ The existing native game runtime and static recompilation implementation are con
 - Show the selected game build, active mod profile, and controller assignments.
 - Launch with a clear progress state and useful failure diagnostics.
 
+### Application updates
+
+- Keep application updates separate from the user's game update dump and generated game runtime.
+- The Windows launcher checks stable releases through the GitHub releases API; the beta channel checks the newest published release, including prereleases.
+- Release packages contain only the launcher executable, its DLL dependencies, the updater helper, documentation, and licence notices. They do not contain game data or user configuration.
+- The package includes a versioned manifest with per-file SHA-256 hashes. The release also publishes a SHA-256 sidecar; the updater verifies the archive and every installed binary before changing the installation.
+- Extract only explicitly allow-listed root-level launcher files. Reject traversal paths, duplicate entries, symlinks, excessive archive size, and manifest entries outside the allow-list.
+- Stage files beside the installation, back up replaced launcher files, preserve game files/mods/saves/settings, and restore the previous binaries if replacement or relaunch fails.
+- Keep recent backups for recovery. A user-facing version history and rollback selector remains future work.
+- SHA-256 detects package corruption and mismatches; it is not a publisher signature. Add signed release verification before treating a compromised release account as an in-scope threat.
+
 ### Controls
 
 - Discover physical devices through SDL3.
