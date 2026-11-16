@@ -11,6 +11,7 @@ $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScript
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $launcher = Join-Path $engineRoot 'build\U Unlocked.exe'
 $wuaExtractor = Join-Path $engineRoot 'build\wua_extract.exe'
+$titleLogo = Join-Path $engineRoot 'runtime\res\title-logo.png'
 $prefix = Join-Path $engineRoot 'build-deps\prefix'
 $updater = Join-Path $repoRoot 'tools\windows\update-launcher.ps1'
 if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
@@ -21,6 +22,9 @@ if (-not (Test-Path -LiteralPath $updater -PathType Leaf)) {
 }
 if (-not (Test-Path -LiteralPath $wuaExtractor -PathType Leaf)) {
     throw "The bounded WUA extractor is missing: $wuaExtractor"
+}
+if (-not (Test-Path -LiteralPath $titleLogo -PathType Leaf)) {
+    throw "The original U Unlocked title logo is missing: $titleLogo"
 }
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -43,6 +47,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $stage 'licenses') | Out-Nu
 Copy-Item -LiteralPath $launcher -Destination $stage
 Copy-Item -LiteralPath $updater -Destination $stage
 Copy-Item -LiteralPath $wuaExtractor -Destination $stage
+Copy-Item -LiteralPath $titleLogo -Destination $stage
 $dllDirectory = Join-Path $prefix 'bin'
 if (-not (Test-Path -LiteralPath $dllDirectory -PathType Container)) {
     throw "Launcher dependency directory is missing: $dllDirectory"
@@ -55,7 +60,7 @@ foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $sta
 # infers install targets from arbitrary archive paths.
 $packageFiles = @(
     Get-ChildItem -LiteralPath $stage -File |
-        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Extension -eq '.dll' } |
+        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Extension -eq '.dll' } |
         Sort-Object Name
 )
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'U Unlocked.exe' })) {
