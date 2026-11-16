@@ -1264,12 +1264,14 @@ private:
             settings_.fullscreen = !settings_.fullscreen;
         } else if (selected_ == 3) {
             // This controls extra presentation frames, not the game's simulation tick.
-            static constexpr uint32_t kRates[] = {0, 60, 120, display::kUncapped};
+            static constexpr uint32_t kRates[] = {0, 60, 120, 180, 240, display::kUncapped};
             int current = 0;
             if (!settings_.interpolation) current = 1;
             else if (settings_.frame_rate == 120) current = 2;
-            else if (settings_.frame_rate == display::kUncapped) current = 3;
-            const int next = (current + d + 4) % 4;
+            else if (settings_.frame_rate == 180) current = 3;
+            else if (settings_.frame_rate == 240) current = 4;
+            else if (settings_.frame_rate == display::kUncapped) current = 5;
+            const int next = (current + d + 6) % 6;
             settings_.interpolation = next != 1;
             settings_.frame_rate = next == 1 ? 0 : kRates[next];
         } else {
