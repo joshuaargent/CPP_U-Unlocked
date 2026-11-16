@@ -43,7 +43,7 @@ function Build-Game([string]$rpx, [string]$generated, [string]$dir, [string[]]$t
 }
 Build-Game $Rpx (Join-Path $root 'generated\smash') $build @('smash', 'smash-launcher', 'wua_extract')
 New-Item -ItemType Directory -Force $play | Out-Null
-Copy-Item (Join-Path $build 'smash.exe'), (Join-Path $build 'U Unlocked.exe') $play
+Copy-Item (Join-Path $build 'smash.exe'), (Join-Path $build 'U Unlocked.exe'), (Join-Path $build 'wua_extract.exe') $play
 # The same code for processors without AVX2/FMA (x86-64-v2); the launcher picks it on those.
 $compatBuild = Join-Path $engineRoot 'build-compat'
 Build-Game $Rpx (Join-Path $root 'generated\smash') $compatBuild @('smash') @('-DSMASH_COMPAT=ON')
