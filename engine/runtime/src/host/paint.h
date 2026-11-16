@@ -18,6 +18,7 @@
 #include <iterator>
 #include <map>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -81,7 +82,7 @@ public:
             std::array<SDL_FPoint, kRingVertices> points{};
             for (int corner = 0; corner < 4; ++corner) {
                 for (int step = 0; step <= kSteps; ++step) {
-                    const float angle = (corner * 90.0f + step * 90.0f / kSteps) * float(M_PI) / 180.0f;
+                    const float angle = (corner * 90.0f + step * 90.0f / kSteps) * std::numbers::pi_v<float> / 180.0f;
                     points[corner * (kSteps + 1) + step] = {std::cos(angle), -std::sin(angle)};
                 }
             }
