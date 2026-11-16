@@ -719,9 +719,10 @@ public:
                 building_runtime_ = false;
                 refresh();
                 std::error_code build_ec;
+                const fs::path built_runtime = dir_ / "runtime";
                 const auto output_exists = [&](const char* name) {
                     build_ec.clear();
-                    return fs::is_regular_file(dir_ / name, build_ec) && !build_ec;
+                    return fs::is_regular_file(built_runtime / name, build_ec) && !build_ec;
                 };
                 const bool all_runtimes = output_exists("smash.exe") && output_exists("smash-compat.exe") &&
                     output_exists("smash-base.exe") && output_exists("smash-base-compat.exe");
@@ -1598,10 +1599,12 @@ private:
     // The game's program: smash.exe is the update's (v304), smash-base.exe the game's own (v1.0);
     // smash-compat.exe is the update's for processors without AVX2/FMA.
     fs::path game_exe() const {
+        std::error_code ec;
+        const fs::path runtime_dir = fs::is_directory(dir_ / "runtime", ec) && !ec ? dir_ / "runtime" : dir_;
         if (!valid_[kUpdate]) {
-            return dir_ / (cafe::host::cpu_has_x86_64_v3() ? "smash-base.exe" : "smash-base-compat.exe");
+            return runtime_dir / (cafe::host::cpu_has_x86_64_v3() ? "smash-base.exe" : "smash-base-compat.exe");
         }
-        return dir_ / (cafe::host::cpu_has_x86_64_v3() ? "smash.exe" : "smash-compat.exe");
+        return runtime_dir / (cafe::host::cpu_has_x86_64_v3() ? "smash.exe" : "smash-compat.exe");
     }
 
     void build_runtime() {
