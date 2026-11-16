@@ -133,15 +133,15 @@ Keep game data, console files, keys, and saves out of Git, issue attachments, an
 
 ### Build U Unlocked
 
-Run the project build wrapper from the repository root:
+Run the library build entry point from the repository root, using the same separate base-game and update folders selected in the launcher:
 
 ```powershell
-.\tools\windows\build-u-unlocked.ps1 -Rpx '<update>\code\cross_f.rpx' -BaseRpx '<game>\code\cross_f.rpx'
+.\tools\windows\build-from-library.ps1 -GameDirectory '<extracted base-game folder>' -UpdateDirectory '<extracted update folder>'
 ```
 
-The build uses the source in `engine\`, the local toolchain in `toolchain\`, and writes build output to ignored working directories. The launcher and game runtime are written to `Play\`; the launcher is named `U Unlocked.exe`.
+The script validates each folder's `code\app.xml` title ID and `code\cross_f.rpx` before starting. It records a timestamped build log under `%LOCALAPPDATA%\U Unlocked\BuildLogs`, verifies the four resulting game executables and launcher, and writes the completed build to `Play\`. The lower-level `build-u-unlocked.ps1` entry point remains available when RPX file paths are already known.
 
-A first build requires the user's game/update RPX files and the toolchain described above. Do not distribute generated game code or executables built from it. They contain code translated from the user's game files.
+This workflow currently requires a complete source checkout and the Windows toolchain described above. The launcher-only ZIP does not yet contain that source/toolchain or run this workflow itself; integrating the build kit and first-run launcher handoff is still a release blocker. Do not distribute generated game code or executables built from user game files.
 
 ### Package the launcher for a release
 
