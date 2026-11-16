@@ -55,6 +55,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $buildKitArchive -PathT
     throw 'Unable to create the clean source build kit from the release commit.'
 }
 Expand-Archive -LiteralPath $buildKitArchive -DestinationPath $buildKit -Force
+Copy-Item -LiteralPath $buildKitArchive -Destination (Join-Path $stage 'build-kit.zip')
 Remove-Item -LiteralPath $buildKitArchive -Force
 foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
@@ -78,7 +79,7 @@ foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $sta
 # infers install targets from arbitrary archive paths.
 $packageFiles = @(
     Get-ChildItem -LiteralPath $stage -File |
-        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Extension -eq '.dll' } |
+        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Name -eq 'build-kit.zip' -or $_.Extension -eq '.dll' } |
         Sort-Object Name
 )
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'U Unlocked.exe' })) {
