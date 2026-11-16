@@ -4,7 +4,7 @@
 
 #if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
 #include <intrin.h>
-#include <immintrin.h>
+extern "C" __declspec(dllimport) unsigned long long __stdcall GetEnabledXStateFeatures(void);
 #elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
 #endif
 
@@ -48,7 +48,7 @@ inline bool cpu_has_x86_64_v3() {
     if ((extended_ecx & required_extended_ecx) != required_extended_ecx) return false;
 
     // AVX state must be enabled by the OS (XMM and YMM state components).
-    return (_xgetbv(0) & 0x6u) == 0x6u;
+    return (GetEnabledXStateFeatures() & 0x6ull) == 0x6ull;
 #elif defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
     __builtin_cpu_init();
     return __builtin_cpu_supports("x86-64-v3");
