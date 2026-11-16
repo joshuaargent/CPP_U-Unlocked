@@ -20,6 +20,10 @@
 namespace fs = std::filesystem;
 
 namespace {
+constexpr size_t kMaximumEntries = 100000;
+constexpr unsigned kMaximumDepth = 128;
+constexpr uint64_t kMaximumExpandedBytes = 64ULL * 1024 * 1024 * 1024;
+
 class Fd {
 public:
     explicit Fd(int value = -1) : value_(value) {}
@@ -70,14 +74,18 @@ std::vector<Entry> inventory(ZArchiveReader& reader) {
     std::unordered_set<ZArchiveNodeHandle> visited;
     std::unordered_set<std::string> paths;
     std::vector<Entry> files;
+    size_t visited_entries = 0;
+    uint64_t expanded_bytes = 0;
     while (!pending.empty()) {
         auto dir = std::move(pending.back());
         pending.pop_back();
-        if (dir.depth > 256 || !visited.insert(dir.node).second)
+        if (dir.depth > kMaximumDepth || !visited.insert(dir.node).second)
             throw std::runtime_error("Archive has cyclic or excessively deep directories");
         const auto count = reader.GetDirEntryCount(dir.node);
         for (uint32_t i = 0; i < count; ++i) {
             ZArchiveReader::DirEntry entry{};
+            if (++visited_entries > kMaximumEntries)
+                throw std::runtime_error("Archive exceeds the 100,000-entry safety limit");
             if (!reader.GetDirEntry(dir.node, i, entry) || entry.isFile == entry.isDirectory)
                 throw std::runtime_error("Invalid archive directory entry");
             validate_component(entry.name);
@@ -90,8 +98,13 @@ std::vector<Entry> inventory(ZArchiveReader& reader) {
                 throw std::runtime_error("Cannot look up archive entry: " + path);
             if (entry.isDirectory)
                 pending.push_back({std::move(path), node, dir.depth + 1});
-            else
-                files.push_back({std::move(path), node, reader.GetFileSize(node)});
+            else {
+                const uint64_t size = reader.GetFileSize(node);
+                if (size > kMaximumExpandedBytes - expanded_bytes)
+                    throw std::runtime_error("Archive exceeds the 64 GiB expanded-size safety limit");
+                expanded_bytes += size;
+                files.push_back({std::move(path), node, size});
+            }
         }
     }
     std::sort(files.begin(), files.end(), [](const Entry& a, const Entry& b) { return a.path < b.path; });
