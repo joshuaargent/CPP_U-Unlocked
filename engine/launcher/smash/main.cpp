@@ -1108,17 +1108,17 @@ private:
                 const char* platform = SDL_GetPlatform();
                 const char* renderer = SDL_GetRendererName(r_);
                 std::ostringstream report;
-                report << "U Unlocked diagnostics\\n"
-                       << "Platform: " << (platform ? platform : "Unknown") << "\\n"
-                       << "Logical CPU cores: " << SDL_GetNumLogicalCPUCores() << "\\n"
-                       << "System memory: " << SDL_GetSystemRAM() << " MB\\n"
-                       << "CPU optimisation: " << (cafe::host::cpu_has_x86_64_v3() ? "x86-64-v3" : "compatibility") << "\\n"
-                       << "Launcher renderer: " << (renderer ? renderer : "Unknown") << "\\n"
-                       << "Base game: " << (valid_[kGame] ? "verified" : "missing/invalid") << "\\n"
-                       << "Update: " << (valid_[kUpdate] ? std::to_string(update_version_) : "not installed") << "\\n"
-                       << "Active mods: " << std::count_if(mods_.begin(), mods_.end(), [](const Mod& m) { return m.on; }) << "\\n"
-                       << "Shader cache files: " << shaders_ << "\\n"
-                       << "Launcher directory: " << dir_.string() << "\\n"
+                report << "U Unlocked diagnostics\n"
+                       << "Platform: " << (platform ? platform : "Unknown") << "\n"
+                       << "Logical CPU cores: " << SDL_GetNumLogicalCPUCores() << "\n"
+                       << "System memory: " << SDL_GetSystemRAM() << " MB\n"
+                       << "CPU optimisation: " << (cafe::host::cpu_has_x86_64_v3() ? "x86-64-v3" : "compatibility") << "\n"
+                       << "Launcher renderer: " << (renderer ? renderer : "Unknown") << "\n"
+                       << "Base game: " << (valid_[kGame] ? "verified" : "missing/invalid") << "\n"
+                       << "Update: " << (valid_[kUpdate] ? std::to_string(update_version_) : "not installed") << "\n"
+                       << "Active mods: " << std::count_if(mods_.begin(), mods_.end(), [](const Mod& m) { return m.on; }) << "\n"
+                       << "Shader cache files: " << shaders_ << "\n"
+                       << "Launcher directory: " << dir_.string() << "\n"
                        << "Game log: " << (dir_ / "smash.log").string();
                 if (SDL_SetClipboardText(report.str().c_str())) diagnostics_status_ = "Copied to clipboard";
                 else diagnostics_status_ = std::string("Copy failed: ") + SDL_GetError();
