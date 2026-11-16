@@ -27,7 +27,7 @@ The existing native game runtime and static recompilation implementation are con
 
 ### Home and Play
 
-- Present a dashboard with a featured launch action, game/update/DLC validation, and direct cards for Online, Netplay, Controls, Graphics, Mods, and Quit.
+- Present a dashboard with a featured launch action, game/update/DLC validation, and direct destinations for Online, Netplay, Controls, Graphics, Mods, Build, game-update management, and Diagnostics.
 - Keep dashboard hit regions shared between mouse and pointer navigation; keyboard and gamepad selection must remain available.
 
 - Detect game, update, and optional DLC folders.
@@ -64,8 +64,9 @@ The existing native game runtime and static recompilation implementation are con
 ### Netplay
 
 - Host streaming is opt-in from the launcher and uses Windows Media Foundation H.264 encoding.
-- Guests can join directly with a host IPv4 address / hostname and UDP port; LAN and private VPN addresses are supported.
-- Internet direct joins require a reachable UDP port (normally port forwarding) unless a private VPN provides connectivity.
+- Guests can join directly with a host IPv4 address / hostname and UDP port; trusted LAN and private VPN addresses are supported.
+- The current UDP protocol has no app-level authentication, encryption, replay protection, or abuse controls. It is for trusted LAN/private-VPN testing only; do not expose the host port to the public internet.
+- Before public use, implement authenticated handshakes, encrypted and integrity-protected datagrams, replay/sequence validation, rate limits, abuse controls, and explicit guest approval.
 - Room discovery is disabled by default. It may be enabled only with an explicitly deployed compatible service configured through `U_UNLOCKED_ROOM_SERVER`; never contact an inherited third-party endpoint or transmit room metadata to an unrelated service.
 
 ### Settings and diagnostics
