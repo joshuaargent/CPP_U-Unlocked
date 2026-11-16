@@ -8,7 +8,9 @@
 // Guests can join directly using a host IP / hostname and UDP port. Optional room discovery and NAT introduction
 // are available only when U_UNLOCKED_ROOM_SERVER points to a separately deployed, compatible U Unlocked service.
 // No third-party room service is contacted by default. Direct internet joins generally require UDP port forwarding;
-// a private VPN such as Tailscale can provide a simpler route. Once connected, game traffic travels directly over UDP.
+// a private VPN such as Tailscale can provide a simpler route. The current protocol has no app-level authentication or
+// encryption: use trusted LAN/VPN peers only, and do not expose the UDP port to the public internet until that is fixed.
+// Once connected, game traffic travels directly over UDP.
 
 #include "cafe/input.h"
 #include "host/rooms.h"
