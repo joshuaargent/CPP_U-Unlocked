@@ -717,13 +717,15 @@ public:
                 SDL_DestroyProcess(build_process_);
                 build_process_ = nullptr;
                 building_runtime_ = false;
-                build_exit_code_ = code;
                 refresh();
                 std::error_code build_ec;
-                const bool update_runtime = fs::is_regular_file(dir_ / "smash.exe", build_ec) && !build_ec;
-                build_ec.clear();
-                const bool base_runtime = fs::is_regular_file(dir_ / "smash-base.exe", build_ec) && !build_ec;
-                if (code == 0 && update_runtime && base_runtime) {
+                const auto output_exists = [&](const char* name) {
+                    build_ec.clear();
+                    return fs::is_regular_file(dir_ / name, build_ec) && !build_ec;
+                };
+                const bool all_runtimes = output_exists("smash.exe") && output_exists("smash-compat.exe") &&
+                    output_exists("smash-base.exe") && output_exists("smash-base-compat.exe");
+                if (code == 0 && all_runtimes) {
                     build_status_ = "Runtime built. Select Play.";
                     launch_error_.clear();
                 } else {
@@ -2985,7 +2987,6 @@ private:
     SDL_Process* build_process_ = nullptr;
     bool building_runtime_ = false;
     std::string build_status_ = "Not built";
-    int build_exit_code_ = 0;
     int exit_code_ = 0;
     std::string launch_error_;
     std::mutex dialog_mutex_;
