@@ -1589,7 +1589,7 @@ private:
             return;
         }
         if (!valid_[kUpdate] && !cafe::host::cpu_has_x86_64_v3()) {
-            launch_error_ = "this processor lacks AVX2: add the update to play (smash-compat.exe)";
+            launch_error_ = "base-game-only play requires an x86-64-v3 CPU; use the update build and smash-compat.exe on this processor";
             return;
         }
         launch_error_.clear();
