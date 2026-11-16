@@ -2362,8 +2362,15 @@ private:
             paint_.cross(ix, y - px * 0.7f, icon * 0.8f, H * 0.0035f, c);
             line = "The game closed with an error (" + std::to_string(exit_code_) + "). Details: smash.log";
         } else if (ready()) {
-            paint_.check(ix, y - px * 0.78f, icon, H * 0.0035f, c);
-            line = "Game ready.";
+            std::error_code runtime_ec;
+            if (fs::is_regular_file(game_exe(), runtime_ec) && !runtime_ec) {
+                paint_.check(ix, y - px * 0.78f, icon, H * 0.0035f, c);
+                line = "Game runtime ready.";
+            } else {
+                c = kGold;
+                paint_.cross(ix, y - px * 0.7f, icon * 0.8f, H * 0.0035f, c);
+                line = "Game files verified; local Vulkan runtime build required.";
+            }
         } else {
             c = kBad;
             paint_.cross(ix, y - px * 0.7f, icon * 0.8f, H * 0.0035f, c);
