@@ -27,6 +27,9 @@ The existing native game runtime and static recompilation implementation are con
 
 ### Home and Play
 
+- Present a dashboard with a featured launch action, game/update/DLC validation, and direct cards for Online, Netplay, Controls, Graphics, Mods, and Quit.
+- Keep dashboard hit regions shared between mouse and pointer navigation; keyboard and gamepad selection must remain available.
+
 - Detect game, update, and optional DLC folders.
 - Validate required files before launch and explain missing or incompatible files.
 - Show the selected game build, active mod profile, and controller assignments.
@@ -85,6 +88,14 @@ Profile writes must be atomic. Validate all enum values and numeric ranges, reta
 Cemu profiles use XML and API-specific identifiers. Cemu numeric mapping values are not SDL enum values. The importer must parse XML safely, translate only mapping identifiers with tested mappings, request device selection when identity matching is ambiguous, preview every binding, and save a new U Unlocked profile without modifying the source file.
 
 See [controller compatibility](CONTROLLER_COMPATIBILITY.md) for the XML structure and import rules.
+
+## Graphics backend and resolution policy
+
+The game runtime currently uses its Vulkan 1.3 backend. The launcher uses SDL3's renderer abstraction and lets SDL select an available native renderer. These are separate rendering paths: changing the launcher's SDL renderer does not change the game's Vulkan backend.
+
+Do not add a second game renderer merely to increase a backend count. A Direct3D or OpenGL implementation is only worthwhile after it can implement the full GX2/Latte rendering contract and pass the same correctness tests. A partial backend risks rendering differences and maintenance overhead without a demonstrated performance gain. Keep Vulkan as the game backend until profiling on representative Intel, AMD, and NVIDIA hardware identifies a concrete compatibility or performance reason to add another.
+
+The existing display configuration supports automatic scaling and 720p, 1080p, 1440p, 4K, and 5K render scales, plus fullscreen/windowed presentation and configurable frame pacing. Preserve these options and validate them against each display's available modes and the GPU's memory budget before adding more presets.
 
 ## Hardware target
 
