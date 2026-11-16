@@ -7,9 +7,8 @@ $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot
 $toolchain = Join-Path $root 'toolchain'
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $python = (Get-Command python).Source
-$git = Split-Path -Parent (Get-Command git).Source # setup_deps.py runs git
 $env:PATH = @((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $toolchain 'Ninja'), (Join-Path $toolchain 'CMake\bin'),
-    $git, "$env:SystemRoot\System32") -join ';'
+    "$env:SystemRoot\System32") -join ';'
 
 & $python (Join-Path $engineRoot 'tools\setup_deps.py')
 if ($LASTEXITCODE) { throw 'setup_deps.py failed' }
