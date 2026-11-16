@@ -419,7 +419,7 @@ Controller active_controller() { return g_controller; }
 
 void on_controller_change(std::function<void(Controller)> callback) {
     g_controller_callback = std::move(callback);
-    if (const char* forced = std::getenv("TTT2_CONTROLLER")) {
+    if (const char* forced = std::getenv("U_UNLOCKED_CONTROLLER")) {
         const std::string kind = forced;
         g_controller = kind == "playstation" ? Controller::kPlayStation
                        : kind == "nintendo"  ? Controller::kNintendo
@@ -509,10 +509,10 @@ VkSurfaceKHR create_vulkan_surface(VkInstance instance) {
 
 float display_refresh_rate() { return g_display_refresh; }
 float window_refresh_rate() {
-    // TTT2_DISPLAY_HZ: report another rate (testing how presentation copes
+    // U_UNLOCKED_DISPLAY_HZ: report another rate (testing how presentation copes
     // with a display that refreshes otherwise than reported).
     static const float assumed = [] {
-        const char* v = std::getenv("TTT2_DISPLAY_HZ");
+        const char* v = std::getenv("U_UNLOCKED_DISPLAY_HZ");
         return v ? static_cast<float>(std::atof(v)) : 0.0f;
     }();
     return assumed > 0.0f ? assumed : g_window_refresh.load();

@@ -12,8 +12,13 @@ $requiredSource = @(
     (Join-Path $enginePath 'CMakeLists.txt'),
     (Join-Path $enginePath 'runtime\src\smash_main.cpp'),
     (Join-Path $enginePath 'runtime\src\host\window.cpp'),
+    (Join-Path $enginePath 'runtime\src\host\controller_profiles.cpp'),
+    (Join-Path $enginePath 'runtime\src\host\controller_profiles.h'),
+    (Join-Path $enginePath 'launcher\smash\main.cpp'),
     (Join-Path $enginePath 'recomp\src\recompile_main.cpp'),
+    (Join-Path $enginePath 'tools\setup_deps.py'),
     (Join-Path $enginePath 'tools\windows\build-smash.ps1'),
+    (Join-Path $enginePath 'tools\windows\package-release.ps1'),
     (Join-Path $enginePath 'third_party\cemu_nex\LICENSE.txt'),
     (Join-Path $repoRoot 'LICENSES\RECOMPILATION-MIT-LICENSE.txt')
 )

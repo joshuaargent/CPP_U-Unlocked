@@ -33,12 +33,12 @@ The launcher takes design inspiration from Melee Unlocked. That inspiration is l
 
 - **Native PC runtime** - C++20, Vulkan rendering, SDL3 input, and a native Windows game runtime.
 - **Game installation** - validation of the game, update, and optional DLC folders supplied by the user.
-- **Controller configuration** - per-player device assignment, press-to-bind remapping, calibration, dead zones, controller layouts, and portable profiles.
-- **Cemu profile import** - a validated importer with explicit mapping translation and a preview before saving.
-- **Graphics settings** - resolution, display mode, VSync, frame pacing, scaling, and hardware-aware quality presets.
-- **Mod management** - install, enable, disable, profile, and inspect mods with dependency and conflict reporting.
-- **Performance profiles** - Low Spec, Balanced, and Quality modes, with Intel Iris Xe integrated graphics included in the initial optimisation target.
-- **Diagnostics** - hardware detection, Vulkan capability reporting, shader-cache information, logs, and actionable troubleshooting.
+- **Controller configuration** - the initial Controls page supports per-device button/axis remapping, stick dead zones, trigger thresholds, and JSON profile saving. Per-player assignment, calibration, profile import, and the full Cemu-style workflow remain in development.
+- **Cemu profile import** - specified in the controller compatibility document; implementation remains planned.
+- **Graphics settings** - the existing display controls are available; expanded renderer options and hardware-aware quality presets remain planned.
+- **Mod management** - existing archive installation and enable/disable support, with profiles, dependency checks, conflict reporting, and transactional rollback planned.
+- **Performance profiles** - Low Spec, Balanced, and Quality modes are planned, with Intel Iris Xe integrated graphics included in the initial optimisation target.
+- **Diagnostics** - hardware detection, Vulkan capability reporting, shader-cache information, and actionable troubleshooting are planned.
 - **Preserved game behaviour** - graphics and performance settings must not change deterministic game simulation or silently alter gameplay timing.
 
 Features described as planned are not represented as already implemented. See the [implementation roadmap](docs/IMPLEMENTATION_ROADMAP.md) and [architecture](docs/ARCHITECTURE.md) for the delivery sequence and engineering requirements.
@@ -51,7 +51,7 @@ Controller setup should be straightforward, settings should explain what they ch
 
 ## Current status
 
-The native runtime and Windows build foundation are now part of this repository. The project is moving into the launcher, controller, settings, and mod-management implementation.
+The native runtime and Windows build foundation are now part of this repository. The launcher has an initial Controls page with physical button and axis capture and per-device JSON profile persistence. This code has not yet been compiled or tested on the target laptop.
 
 The initial target machine is an HP EliteBook 640 G9 provisionally identified as an Intel Core i5 model with Intel Iris Xe graphics and 16 GB RAM. The exact CPU model and Vulkan driver capabilities still need to be confirmed on the target machine. Defaults will be based on runtime detection and measured performance rather than the laptop model name.
 

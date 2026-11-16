@@ -37,7 +37,8 @@ jobs:
         shell: pwsh
         run: |
           $root = (Resolve-Path '.').Path
-          $files = Get-ChildItem -Path (Join-Path $root 'tools') -Filter '*.ps1' -Recurse -File
+          $scriptRoots = @((Join-Path $root 'tools'), (Join-Path $root 'engine/tools'))
+          $files = @($scriptRoots | ForEach-Object { Get-ChildItem -Path $_ -Filter '*.ps1' -Recurse -File })
           foreach ($file in $files) {
             $tokens = $null
             $parseErrors = $null
