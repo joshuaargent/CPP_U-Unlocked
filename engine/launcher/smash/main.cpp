@@ -2000,7 +2000,7 @@ private:
         std::string password = std::move(password_);
         password_.clear();
         try {
-            sign_in_thread_ = std::thread([this, user, password = std::move(password)] {
+            sign_in_thread_ = std::thread([this, user, password = std::move(password)]() mutable {
                 act_server::SignIn result;
                 try {
                     result = act_server::sign_in(user, password);
@@ -2009,17 +2009,19 @@ private:
                 } catch (...) {
                     result.message = "Sign-in failed because of an unknown error.";
                 }
+                std::fill(password.begin(), password.end(), '\0');
+                password.clear();
                 std::lock_guard lock(sign_in_mutex_);
                 sign_in_result_ = std::move(result);
                 sign_in_done_ = true;
             });
         } catch (const std::exception& error) {
+            std::fill(password.begin(), password.end(), '\0');
+            password.clear();
             std::lock_guard lock(sign_in_mutex_);
             sign_in_result_.message = std::string("Could not start sign-in: ") + error.what();
             sign_in_done_ = true;
         }
-        password.assign(password.size(), '\0');
-        password.clear();
     }
 
     // The sign-in's result, on the launcher's thread: account.dat, or why not.
