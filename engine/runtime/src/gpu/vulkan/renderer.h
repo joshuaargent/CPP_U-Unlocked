@@ -550,6 +550,9 @@ private:
     std::unordered_map<uint64_t, VkPipelineLayout> layouts_;
     std::unordered_map<uint64_t, std::unique_ptr<Pipeline>> pipelines_;
     VkPipelineCache pipeline_cache_ = VK_NULL_HANDLE;
+    // VkPipelineCache is externally synchronized by Vulkan. Runtime compilation
+    // shares the persistent cache; startup precompilation uses one cache per worker.
+    std::mutex pipeline_cache_mutex_;
     std::atomic<uint32_t> new_pipelines_{0};
 
     // Netplay hosting (stream.cpp): each frame's TV image, scaled to the stream's size and read back for the
