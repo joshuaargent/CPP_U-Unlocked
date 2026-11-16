@@ -14,7 +14,8 @@ if (-not (Test-Path -LiteralPath $resourceDirectory -PathType Container)) {
 }
 
 Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition @'
+if (-not ("UUnlockedIconNativeMethods" -as [type])) {
+    Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class UUnlockedIconNativeMethods
@@ -23,6 +24,7 @@ public static class UUnlockedIconNativeMethods
     public static extern bool DestroyIcon(IntPtr handle);
 }
 '@
+}
 
 $bitmap = [System.Drawing.Bitmap]::new(64, 64, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
