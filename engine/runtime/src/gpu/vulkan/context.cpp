@@ -155,7 +155,32 @@ void Context::init(const std::vector<const char*>& instance_extensions) {
     }
     physical = devices[best];
     vkGetPhysicalDeviceMemoryProperties(physical, &memory);
-    std::fprintf(stderr, "ttt2: GPU: %s\n", properties.deviceName);
+
+    VkPhysicalDeviceDriverProperties driver{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+    VkPhysicalDeviceProperties2 detailed_properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    detailed_properties.pNext = &driver;
+    vkGetPhysicalDeviceProperties2(physical, &detailed_properties);
+
+    uint64_t device_local_bytes = 0;
+    uint64_t total_heap_bytes = 0;
+    for (uint32_t i = 0; i < memory.memoryHeapCount; ++i) {
+        const VkMemoryHeap& heap = memory.memoryHeaps[i];
+        total_heap_bytes += heap.size;
+        if (heap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) device_local_bytes += heap.size;
+    }
+    const char* device_type = properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? "discrete"
+                              : properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? "integrated"
+                              : properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU ? "virtual"
+                              : properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU ? "CPU"
+                                                                                     : "other";
+    std::fprintf(stderr,
+                 "ttt2: GPU: %s (%s), Vulkan %u.%u.%u, driver %s (%s, 0x%08X), vendor/device 0x%04X/0x%04X\n",
+                 properties.deviceName, device_type, VK_API_VERSION_MAJOR(properties.apiVersion),
+                 VK_API_VERSION_MINOR(properties.apiVersion), VK_API_VERSION_PATCH(properties.apiVersion),
+                 driver.driverName, driver.driverInfo, properties.driverVersion, properties.vendorID, properties.deviceID);
+    std::fprintf(stderr, "ttt2: GPU: memory heaps: %.0f MiB device-local, %.0f MiB total\n",
+                 static_cast<double>(device_local_bytes) / (1024.0 * 1024.0),
+                 static_cast<double>(total_heap_bytes) / (1024.0 * 1024.0));
 
     uint32_t family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical, &family_count, nullptr);
@@ -291,6 +316,11 @@ void Context::init(const std::vector<const char*>& instance_extensions) {
         g_get_fault_info = reinterpret_cast<PFN_vkGetDeviceFaultInfoEXT>(vkGetDeviceProcAddr(device, "vkGetDeviceFaultInfoEXT"));
     }
     std::fprintf(stderr, "ttt2: GPU: fault reports %s\n", g_get_fault_info ? "on" : "not available");
+    std::fprintf(stderr,
+                 "ttt2: GPU: enabled capabilities: timeline semaphores=%s, buffer device address=yes, dynamic rendering=yes, "
+                 "synchronization2=yes, custom border color=%s, present wait=%s, anisotropy=%s\n",
+                 f12.timelineSemaphore ? "yes" : "no", custom_border_color ? "yes" : "no",
+                 present_wait ? "yes" : "no", af.samplerAnisotropy ? "yes" : "no");
     vkGetDeviceQueue(device, queue_family, 0, &queue);
     if (present_family != UINT32_MAX) vkGetDeviceQueue(device, present_family, 0, &present_queue);
     get_memory_host_pointer_properties = reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(
