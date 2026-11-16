@@ -24,8 +24,10 @@
 - [x] Make Netplay status explain the actual direct IP/VPN connection requirements instead of implying that an unconfigured room directory is active.
 - [ ] Rework the launcher into a consistent Melee Unlocked-inspired product flow: Build, Play, Updates, Mods, and Online as primary destinations, with configuration and diagnostics grouped cleanly.
 - [ ] Complete responsive layouts, high-DPI scaling, focus states, keyboard/controller navigation, and accessibility.
-- [x] Add an on-demand Windows application update check with stable/beta channels, GitHub release links, SHA-256 package verification, per-file manifest verification, staged replacement, backups, and automatic rollback if replacement or relaunch fails. This is separate from managing the game's update dump.
+- [x] Check for application updates automatically in a background worker at launcher startup; retain stable/beta channels, GitHub release links, SHA-256 package verification, per-file manifest verification, staged replacement, backups, and automatic rollback if replacement or relaunch fails. Installing an update remains an explicit user action. This is separate from managing the game's update dump.
 - [x] Add launcher release packaging with a versioned ZIP, per-file manifest, and SHA-256 sidecar asset.
+- [x] Add a tag-triggered Windows release workflow that builds and links the launcher, builds the bounded WUA extractor, creates and verifies the package, and publishes the ZIP and checksum as GitHub release assets.
+- [ ] Run the release workflow against a version-matched prerelease tag, then verify the published assets through both stable/beta update discovery paths.
 - [ ] Add a user-facing version history and rollback selector for previously installed U Unlocked releases.
 - [ ] Exercise clean install, stable/beta upgrade, interrupted update, rollback, and user-data preservation on Windows.
 - [ ] Add an in-game settings overlay with keyboard and controller access.
