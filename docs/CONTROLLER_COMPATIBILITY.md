@@ -21,6 +21,12 @@ References:
 - Cemu controller profile loader/saver: https://github.com/cemu-project/Cemu/blob/main/src/input/InputManager.cpp
 - Cemu controller setup guide: https://cemu.cfw.guide/controller-configuration.html
 
+## Automatic Cemu profile discovery
+
+On Windows, the launcher checks the standard Cemu configuration directory at `%APPDATA%/Cemu/controllerProfiles` and opens the import dialog there when it exists. On Linux it checks `$XDG_CONFIG_HOME/Cemu/controllerProfiles`, falling back to `~/.config/Cemu/controllerProfiles`; on macOS it checks `~/Library/Application Support/Cemu/controllerProfiles`.
+
+The Controls page reports how many XML profiles were found. The import dialog starts in that directory, so an existing profile can be selected without manually navigating to it. Set `CEMU_CONFIG_DIR` to a Cemu configuration directory (or directly to its `controllerProfiles` directory) to use a custom or portable installation. Portable installations that are not in the standard location can also be selected through the file dialog. Discovery is read-only: it never edits Cemu's files.
+
 ## Implemented import scope
 
 The importer is deliberately limited to Cemu profiles containing an `SDLController` entry and an emulated type of `Wii U GamePad` or `Wii U Pro Controller`.
