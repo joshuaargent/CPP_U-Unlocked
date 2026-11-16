@@ -66,7 +66,7 @@ The existing native game runtime and static recompilation implementation are con
 
 ### Mods
 
-- Install supported archives and folders without overwriting unrelated user files.
+- Install extracted mod folders only until a bounded archive reader is integrated. Folder installation rejects symbolic links, Windows reparse points, special files, and trees above 20,000 entries / 4 GiB; it copies into a staging directory before activation. Do not invoke a system archive utility on untrusted mod files.
 - Track manifests, version, author, dependencies, conflicts, and file ownership.
 - Provide named mod profiles and reversible enable/disable operations.
 - Back up affected files and support rollback.
