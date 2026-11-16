@@ -14,6 +14,15 @@ $build = Join-Path $engineRoot 'build'
 $prefix = Join-Path $engineRoot 'build-deps\prefix'
 $play = Join-Path $root 'Play'
 
+# stb is header-only and is not installed into the dependency prefix. Ensure its
+# pinned checkout exists even when the compiled dependency prefix is already cached.
+$stbHeader = Join-Path $engineRoot 'third_party\stb\stb_truetype.h'
+if (-not (Test-Path -LiteralPath $stbHeader -PathType Leaf)) {
+    $python = (Get-Command python).Source
+    & $python (Join-Path $engineRoot 'tools\setup_deps.py') stb
+    if ($LASTEXITCODE) { throw 'Fetching the pinned stb headers failed.' }
+}
+
 if (-not (Test-Path (Join-Path $prefix 'lib\libvulkan-1.a'))) {
     & (Join-Path $PSScriptRoot 'build-deps.ps1')
 }
