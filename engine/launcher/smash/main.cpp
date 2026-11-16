@@ -77,6 +77,11 @@ constexpr const char* kGameId = "0005000010144F00";   // USA
 
 fs::path exe_dir() { return fs::path(SDL_GetBasePath()); }
 
+std::string path_utf8(const fs::path& path) {
+    const std::u8string encoded = path.u8string();
+    return std::string(reinterpret_cast<const char*>(encoded.data()), encoded.size());
+}
+
 std::optional<std::string> read_text(const fs::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) return std::nullopt;
@@ -400,6 +405,14 @@ void secure_erase(std::string& value) {
     value.clear();
 }
 
+struct WuaImportResult {
+    bool ok = false;
+    std::string message;
+    fs::path stage;
+    fs::path extracted;
+    fs::path slots[kSlots];
+};
+
 struct AppUpdateCheck {
     bool ok = false;
     bool available = false;
@@ -547,6 +560,11 @@ public:
         if (install_thread_.joinable()) install_thread_.join();
         if (sign_in_thread_.joinable()) sign_in_thread_.join();
         if (update_check_thread_.joinable()) update_check_thread_.join();
+        if (wua_thread_.joinable()) wua_thread_.join();
+        if (!wua_stage_path_.empty()) {
+            std::error_code cleanup_error;
+            fs::remove_all(wua_stage_path_, cleanup_error);
+        }
     }
 
     void event(SDL_Event& e) {
@@ -692,9 +710,16 @@ public:
         }
         finish_sign_in();
         finish_install();
+        finish_wua_import();
         finish_launcher_update_check();
         if (!done) return;
         SDL_SetWindowTitle(window_, "U Unlocked");
+        if (wua_dialog_) {
+            wua_dialog_ = false;
+            if (!chosen.empty()) start_wua_import(fs::u8path(chosen));
+            else wua_status_ = "WUA import cancelled.";
+            return;
+        }
         if (cemu_dialog_) {
             cemu_dialog_ = false;
             if (!chosen.empty()) import_cemu_profile_file(chosen);
@@ -908,6 +933,7 @@ private:
             list_ = {{"BASE GAME", folder_value(kGame)},
                      {"GAME UPDATE", folder_value(kUpdate)},
                      {"DLC CONTENT", folder_value(kDlc)},
+                     {"IMPORT WUA ARCHIVE", wua_importing_ ? "Extracting and validating..." : wua_status_},
                      {"OPEN GAME DIRECTORY", paths_[kGame].empty() ? "Not configured" : paths_[kGame].string()},
                      {"OPEN UPDATE DIRECTORY", paths_[kUpdate].empty() ? "Not configured" : paths_[kUpdate].string()},
                      {"OPEN DLC DIRECTORY", paths_[kDlc].empty() ? "Not configured" : paths_[kDlc].string()},
@@ -1299,9 +1325,10 @@ private:
             if (selected_ == 0) choose_folder(kGame);
             else if (selected_ == 1) choose_folder(kUpdate);
             else if (selected_ == 2) choose_folder(kDlc);
-            else if (selected_ >= 3 && selected_ <= 5) {
-                const Slot slot = static_cast<Slot>(selected_ - 3);
-                if (paths_[slot].empty()) controls_status_ = "Choose this folder first.";
+            else if (selected_ == 3) choose_wua_archive();
+            else if (selected_ >= 4 && selected_ <= 6) {
+                const Slot slot = static_cast<Slot>(selected_ - 4);
+                if (paths_[slot].empty()) wua_status_ = "Choose this folder first.";
                 else SDL_OpenURL((std::string("file:///") + paths_[slot].generic_string()).c_str());
             } else back();
             break;
@@ -1656,6 +1683,189 @@ private:
             target = id;
         }
         launch_guest(target);
+    }
+
+    void choose_wua_archive() {
+#ifdef _WIN32
+        if (wua_importing_) {
+            wua_status_ = "A WUA import is already running.";
+            return;
+        }
+        static constexpr SDL_DialogFileFilter filters[] = {
+            {"Wii U archive", "wua"}
+        };
+        {
+            std::lock_guard lock(dialog_mutex_);
+            dialog_result_.clear();
+            dialog_done_ = false;
+        }
+        wua_dialog_ = true;
+        SDL_SetWindowTitle(window_, "Select a Wii U WUA archive");
+        SDL_ShowOpenFileDialog([](void* self, const char* const* files, int) {
+            auto* launcher = static_cast<Launcher*>(self);
+            std::lock_guard lock(launcher->dialog_mutex_);
+            if (files && files[0]) launcher->dialog_result_ = files[0];
+            launcher->dialog_done_ = true;
+        }, this, window_, filters, 1, nullptr, false);
+#else
+        wua_status_ = "WUA import is currently supported on Windows only.";
+#endif
+    }
+
+    // Extract into a private staging directory. The original WUA is read-only
+    // and is never moved, overwritten, or deleted.
+    void start_wua_import(const fs::path& archive) {
+#ifdef _WIN32
+        if (wua_importing_) return;
+        const fs::path extractor = dir_ / "wua_extract.exe";
+        std::error_code ec;
+        if (!fs::is_regular_file(extractor, ec) || ec) {
+            wua_status_ = "WUA extractor is missing. Reinstall the launcher package.";
+            return;
+        }
+        if (!fs::is_regular_file(archive, ec) || ec || is_reparse_point(archive)) {
+            wua_status_ = "Select a normal, accessible WUA file (not a link or reparse point).";
+            return;
+        }
+        const uint64_t archive_size = fs::file_size(archive, ec);
+        if (ec || archive_size == 0) {
+            wua_status_ = "The selected WUA archive is empty or cannot be read.";
+            return;
+        }
+        const fs::path imports = dir_ / "imports";
+        fs::create_directories(imports, ec);
+        if (ec) {
+            wua_status_ = "Cannot create the private import staging directory: " + ec.message();
+            return;
+        }
+        static std::atomic<uint64_t> sequence{0};
+        const std::string token = std::to_string(SDL_GetTicksNS()) + "-" +
+                                  std::to_string(sequence.fetch_add(1, std::memory_order_relaxed));
+        const fs::path stage = imports / (".wua-stage-" + token);
+        fs::create_directory(stage, ec);
+        if (ec) {
+            wua_status_ = "Cannot create the WUA staging directory: " + ec.message();
+            return;
+        }
+        const fs::path extracted = stage / "extracted";
+        const std::string executable_arg = path_utf8(extractor);
+        const std::string archive_arg = path_utf8(archive);
+        const std::string output_arg = path_utf8(extracted);
+        wua_stage_path_ = stage;
+        wua_importing_ = true;
+        wua_status_ = "Extracting archive and validating Smash title folders...";
+        try {
+            wua_thread_ = std::thread([this, stage, extracted, executable_arg, archive_arg, output_arg] {
+                WuaImportResult result;
+                result.stage = stage;
+                result.extracted = extracted;
+                try {
+                    const char* arguments[] = {
+                        executable_arg.c_str(), "extract-all", archive_arg.c_str(), output_arg.c_str(), nullptr
+                    };
+                    SDL_Process* process = SDL_CreateProcess(arguments, false);
+                    if (!process) {
+                        throw std::runtime_error(std::string("Could not start the WUA extractor: ") + SDL_GetError());
+                    }
+                    int exit_code = -1;
+                    const bool waited = SDL_WaitProcess(process, true, &exit_code);
+                    SDL_DestroyProcess(process);
+                    if (!waited) throw std::runtime_error(std::string("Could not wait for the WUA extractor: ") + SDL_GetError());
+                    if (exit_code != 0) {
+                        throw std::runtime_error("WUA extraction failed (exit code " + std::to_string(exit_code) +
+                                                 "). The archive may be damaged or unsupported.");
+                    }
+                    find_titles(extracted, result.slots);
+                    if (result.slots[kGame].empty()) {
+                        throw std::runtime_error("The archive did not contain a valid Super Smash Bros. for Wii U base-game folder.");
+                    }
+                    result.ok = true;
+                    result.message = "Archive extracted; game folder verified";
+                    if (!result.slots[kUpdate].empty()) result.message += ", update found";
+                    if (!result.slots[kDlc].empty()) result.message += ", DLC found";
+                } catch (const std::exception& error) {
+                    result.message = error.what();
+                    std::error_code cleanup_error;
+                    fs::remove_all(stage, cleanup_error);
+                } catch (...) {
+                    result.message = "WUA import failed because of an unknown error.";
+                    std::error_code cleanup_error;
+                    fs::remove_all(stage, cleanup_error);
+                }
+                std::lock_guard lock(wua_mutex_);
+                wua_result_ = std::move(result);
+                wua_done_ = true;
+            });
+        } catch (const std::exception& error) {
+            wua_importing_ = false;
+            wua_stage_path_.clear();
+            fs::remove_all(stage, ec);
+            wua_status_ = std::string("Could not start WUA import: ") + error.what();
+        }
+#else
+        (void)archive;
+        wua_status_ = "WUA import is currently supported on Windows only.";
+#endif
+    }
+
+    void finish_wua_import() {
+        {
+            std::lock_guard lock(wua_mutex_);
+            if (!wua_done_) return;
+        }
+        if (wua_thread_.joinable()) wua_thread_.join();
+        WuaImportResult result;
+        {
+            std::lock_guard lock(wua_mutex_);
+            wua_done_ = false;
+            result = std::move(wua_result_);
+        }
+        wua_importing_ = false;
+        if (!result.ok) {
+            wua_status_ = result.message.empty() ? "WUA import failed." : result.message;
+            wua_stage_path_.clear();
+            return;
+        }
+
+        std::error_code ec;
+        const fs::path library = dir_ / "library";
+        fs::create_directories(library, ec);
+        if (ec) {
+            fs::remove_all(result.stage, ec);
+            wua_stage_path_.clear();
+            wua_status_ = "Cannot create the game library directory: " + ec.message();
+            return;
+        }
+        const fs::path destination = library / ("wua-" + result.stage.filename().string().substr(11));
+        if (fs::exists(destination, ec)) {
+            fs::remove_all(result.stage, ec);
+            wua_stage_path_.clear();
+            wua_status_ = "An import with this identifier already exists. Retry the import.";
+            return;
+        }
+        fs::rename(result.stage, destination, ec);
+        if (ec) {
+            fs::remove_all(result.stage, ec);
+            wua_stage_path_.clear();
+            wua_status_ = "Could not activate the extracted game library: " + ec.message();
+            return;
+        }
+
+        const fs::path final_extracted = destination / "extracted";
+        for (int slot = 0; slot < kSlots; ++slot) {
+            if (result.slots[slot].empty()) continue;
+            const fs::path relative = result.slots[slot].lexically_relative(result.extracted);
+            if (relative.empty() || relative.is_absolute()) continue;
+            bool unsafe = false;
+            for (const auto& component : relative) {
+                if (component == "." || component == "..") unsafe = true;
+            }
+            if (!unsafe) paths_[slot] = final_extracted / relative;
+        }
+        wua_stage_path_.clear();
+        save_launcher_ini();
+        refresh();
+        wua_status_ = "Imported successfully. Original WUA preserved.";
     }
 
     void choose_folder(Slot slot) {
@@ -2668,6 +2878,12 @@ private:
     bool sign_in_done_ = false;
     act_server::SignIn sign_in_result_;
     std::thread update_check_thread_;
+    std::mutex wua_mutex_;
+    std::thread wua_thread_;
+    WuaImportResult wua_result_;
+    bool wua_dialog_ = false, wua_importing_ = false, wua_done_ = false;
+    fs::path wua_stage_path_;
+    std::string wua_status_ = "Select a .wua archive";
     std::mutex update_check_mutex_;
     bool update_check_done_ = false;
     bool update_checking_ = false;
