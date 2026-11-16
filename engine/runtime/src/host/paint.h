@@ -70,9 +70,23 @@ public:
     void round_rect(float x, float y, float w, float h, float radius, Color c) {
         if (w <= 0.0f || h <= 0.0f) return;
         radius = std::clamp(radius, 0.0f, std::min(w / 2.0f, h / 2.0f));
+        if (radius <= 0.0f) {
+            rect(x, y, w, h, c);
+            return;
+        }
         constexpr int kSteps = 8;
         constexpr int kRingVertices = 4 * (kSteps + 1);
         constexpr int kIndexCount = kRingVertices * 3;
+        static const std::array<SDL_FPoint, kRingVertices> kArc = [] {
+            std::array<SDL_FPoint, kRingVertices> points{};
+            for (int corner = 0; corner < 4; ++corner) {
+                for (int step = 0; step <= kSteps; ++step) {
+                    const float angle = (corner * 90.0f + step * 90.0f / kSteps) * float(M_PI) / 180.0f;
+                    points[corner * (kSteps + 1) + step] = {std::cos(angle), -std::sin(angle)};
+                }
+            }
+            return points;
+        }();
         std::array<SDL_Vertex, kRingVertices + 1> vertices{};
         std::array<int, kIndexCount> indices{};
         const SDL_FColor fc{c.r, c.g, c.b, c.a};
@@ -81,10 +95,10 @@ public:
         const float cy[4] = {y + radius, y + radius, y + h - radius, y + h - radius};
         for (int corner = 0; corner < 4; ++corner) {
             for (int step = 0; step <= kSteps; ++step) {
-                const float angle = (corner * 90.0f + step * 90.0f / kSteps) * float(M_PI) / 180.0f;
-                const int vertex = 1 + corner * (kSteps + 1) + step;
+                const int arc_index = corner * (kSteps + 1) + step;
+                const int vertex = arc_index + 1;
                 vertices[vertex] = {
-                    {cx[corner] + std::cos(angle) * radius, cy[corner] - std::sin(angle) * radius},
+                    {cx[corner] + kArc[arc_index].x * radius, cy[corner] + kArc[arc_index].y * radius},
                     fc,
                     {0, 0}
                 };
