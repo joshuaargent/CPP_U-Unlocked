@@ -40,6 +40,17 @@
 - [x] Add automated tests for axis normalization, dead zones, inversion, profile persistence, and invalid-save protection.
 - [ ] Add tests for reconnects, ambiguous device identities, and multi-controller setups.
 
+## Netplay
+
+- [x] Remove the inherited third-party room-discovery endpoint and disable room discovery by default.
+- [x] Add direct IPv4/hostname joining and persist the host address in launcher settings.
+- [x] Correct launcher guidance to explain the direct host connection and current security boundary.
+- [ ] Add authenticated guest pairing and explicit host approval.
+- [ ] Add encryption and message integrity protection for video, audio, and controller datagrams.
+- [ ] Add replay protection, strict packet validation, connection limits, and rate limiting.
+- [ ] Add secure public-internet connectivity only after the authentication and transport security work is complete.
+- [ ] Add an optional U Unlocked-owned room directory and NAT traversal service, with no third-party room-service dependency.
+
 ## Graphics and performance
 
 - [x] Expose the existing resolution, fullscreen/windowed, and frame-pacing controls in the launcher.
