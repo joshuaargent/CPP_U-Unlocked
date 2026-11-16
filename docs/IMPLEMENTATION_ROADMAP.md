@@ -15,6 +15,7 @@
 - [x] Replace the single-column startup menu with a feature-rich home dashboard and featured game launch panel.
 - [x] Add direct home-screen navigation to Play, Build, game-update management, Online, Netplay, Controls, Graphics, Mods, and Diagnostics.
 - [x] Add a Build/library workflow for selecting and validating the user's game, update, and DLC folders.
+- [ ] Add Windows WUA archive selection and safe extraction into the Build workflow, with strict path, link, file-count, and expanded-size validation. Preserve the original archive and stage extraction before activating the resulting folder.
 - [x] Add a game-update management page for selecting and removing the locally installed update dump.
 - [x] Add a Diagnostics page for platform, CPU core count, system memory, CPU optimisation path, SDL renderer, game/update validation, active mods, shader-cache count, log path, and clipboard export.
 - [x] Make Netplay status explain the actual direct IP/VPN connection requirements instead of implying that an unconfigured room directory is active.
