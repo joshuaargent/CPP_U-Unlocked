@@ -1567,7 +1567,9 @@ private:
     // The game's program: smash.exe is the update's (v304), smash-base.exe the game's own (v1.0);
     // smash-compat.exe is the update's for processors without AVX2/FMA.
     fs::path game_exe() const {
-        if (!valid_[kUpdate]) return dir_ / "smash-base.exe";
+        if (!valid_[kUpdate]) {
+            return dir_ / (cafe::host::cpu_has_x86_64_v3() ? "smash-base.exe" : "smash-base-compat.exe");
+        }
         return dir_ / (cafe::host::cpu_has_x86_64_v3() ? "smash.exe" : "smash-compat.exe");
     }
 
@@ -1586,10 +1588,6 @@ private:
         std::error_code ec;
         if (!fs::exists(game_exe(), ec)) {
             launch_error_ = "missing " + game_exe().filename().string();
-            return;
-        }
-        if (!valid_[kUpdate] && !cafe::host::cpu_has_x86_64_v3()) {
-            launch_error_ = "base-game-only play requires an x86-64-v3 CPU; use the update build and smash-compat.exe on this processor";
             return;
         }
         launch_error_.clear();
