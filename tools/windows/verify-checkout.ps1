@@ -54,7 +54,7 @@ if ($gitCommand -and (Test-Path -LiteralPath (Join-Path $repoRoot '.git'))) {
     # source tree while excluding generated build outputs and downloaded toolchains.
     $excludedRoots = @('toolchain', 'generated', 'Play', 'dist', 'engine/build', 'engine/build-deps')
     $trackedFiles = @(Get-ChildItem -LiteralPath $repoRoot -File -Recurse -Force | Where-Object {
-        $relative = [System.IO.Path]::GetRelativePath($repoRoot, $_.FullName).Replace('\', '/')
+        $relative = $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
         $parts = $relative.Split('/')
         ($parts -notcontains '.git') -and
         -not ($excludedRoots | Where-Object { $relative.StartsWith($_ + '/', [System.StringComparison]::OrdinalIgnoreCase) })
@@ -86,15 +86,12 @@ if ($legacyMatches.Count -gt 0) {
 }
 
 if (-not $SkipToolchainCheck) {
-    $requiredToolchain = @(
-        (Join-Path $repoRoot 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'),
-        (Join-Path $repoRoot 'toolchain\Ninja\ninja.exe'),
-        (Join-Path $repoRoot 'toolchain\CMake\bin\cmake.exe')
-    )
-    $missingToolchain = @($requiredToolchain | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
-    if ($missingToolchain.Count -gt 0) {
-        $missingToolchain | ForEach-Object { Write-Host "Missing tool: $_" -ForegroundColor Yellow }
-        throw 'The Windows toolchain is incomplete. See the README build requirements.'
+    $compiler = Join-Path $repoRoot 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
+    $missingCommands = @('cmake', 'ninja', 'python') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) }
+    if (-not (Test-Path -LiteralPath $compiler -PathType Leaf) -or $missingCommands.Count -gt 0) {
+        if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { Write-Host "Missing compiler: $compiler" -ForegroundColor Yellow }
+        if ($missingCommands.Count -gt 0) { Write-Host "Missing commands: $($missingCommands -join ', ')" -ForegroundColor Yellow }
+        throw 'The Windows build environment is incomplete. Run setup-build-environment.ps1.'
     }
 }
 
