@@ -1,7 +1,7 @@
 # Install the pinned Windows cross-toolchain and deterministic build utilities.
 # This does not install or modify any game files.
 [CmdletBinding()]
-param()
+param([switch]$UseSystemTools)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -41,31 +41,54 @@ function Find-Executable {
     return $null
 }
 
-$cmake = Find-Executable 'cmake.exe'
-$cmakeVersionLine = if ($cmake) { (& $cmake --version | Select-Object -First 1) } else { '' }
-if ($cmakeVersionLine -notmatch '3\.31\.6') {
-    Invoke-WingetInstall -Id 'Kitware.CMake' -Version '3.31.6'
-    $cmake = Find-Executable 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
-}
-if (-not $cmake) { throw 'CMake 3.31.6 was installed but cmake.exe could not be located.' }
+if ($UseSystemTools) {
+    $cmake = Find-Executable 'cmake.exe'
+    $ninja = Find-Executable 'ninja.exe'
+    $python = Find-Executable 'python.exe'
+    if (-not $cmake -or -not $ninja -or -not $python) {
+        throw 'The CI runner must provide CMake, Ninja, and Python when -UseSystemTools is selected.'
+    }
+    $cmakeVersionLine = (& $cmake --version | Select-Object -First 1)
+    $cmakeMatch = [regex]::Match($cmakeVersionLine, '(\d+\.\d+\.\d+)')
+    if (-not $cmakeMatch.Success -or [version]$cmakeMatch.Groups[1].Value -lt [version]'3.20.0') {
+        throw "CMake 3.20 or newer is required; found '$cmakeVersionLine'."
+    }
+    $ninjaVersion = (& $ninja --version | Out-String).Trim()
+    if ([version]$ninjaVersion -lt [version]'1.10.0') {
+        throw "Ninja 1.10 or newer is required; found '$ninjaVersion'."
+    }
+    $pythonVersion = (& $python --version 2>&1 | Out-String).Trim()
+    $pythonMatch = [regex]::Match($pythonVersion, 'Python (\d+\.\d+)')
+    if (-not $pythonMatch.Success -or [version]$pythonMatch.Groups[1].Value -lt [version]'3.9') {
+        throw "Python 3.9 or newer is required; found '$pythonVersion'."
+    }
+} else {
+    $cmake = Find-Executable 'cmake.exe'
+    $cmakeVersionLine = if ($cmake) { (& $cmake --version | Select-Object -First 1) } else { '' }
+    if ($cmakeVersionLine -notmatch '3\.31\.6') {
+        Invoke-WingetInstall -Id 'Kitware.CMake' -Version '3.31.6'
+        $cmake = Find-Executable 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
+    }
+    if (-not $cmake) { throw 'CMake 3.31.6 was installed but cmake.exe could not be located.' }
 
-$ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
-$ninjaVersionLine = if ($ninja) { (& $ninja --version | Out-String).Trim() } else { '' }
-if ($ninjaVersionLine -ne '1.12.1') {
-    Invoke-WingetInstall -Id 'Ninja-build.Ninja' -Version '1.12.1'
     $ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
-}
-if (-not $ninja) { throw 'Ninja 1.12.1 was installed but ninja.exe could not be located.' }
+    $ninjaVersionLine = if ($ninja) { (& $ninja --version | Out-String).Trim() } else { '' }
+    if ($ninjaVersionLine -ne '1.12.1') {
+        Invoke-WingetInstall -Id 'Ninja-build.Ninja' -Version '1.12.1'
+        $ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
+    }
+    if (-not $ninja) { throw 'Ninja 1.12.1 was installed but ninja.exe could not be located.' }
 
-$python = Find-Executable 'python.exe'
-$pythonVersion = if ($python) { (& $python --version 2>&1 | Out-String).Trim() } else { '' }
-if ($pythonVersion -notmatch '^Python 3\.12\.') {
-    Invoke-WingetInstall -Id 'Python.Python.3.12' -Version '3.12.10'
-    $python = Find-Executable 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
+    $python = Find-Executable 'python.exe'
+    $pythonVersion = if ($python) { (& $python --version 2>&1 | Out-String).Trim() } else { '' }
+    if ($pythonVersion -notmatch '^Python 3\.12\.') {
+        Invoke-WingetInstall -Id 'Python.Python.3.12' -Version '3.12.10'
+        $python = Find-Executable 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
+    }
+    if (-not $python) { throw 'Python 3.12.10 was installed but python.exe could not be located.' }
+    $pythonVersion = (& $python --version 2>&1 | Out-String).Trim()
+    if ($pythonVersion -notmatch '^Python 3\.12\.') { throw "Expected Python 3.12; found '$pythonVersion'." }
 }
-if (-not $python) { throw 'Python 3.12.10 was installed but python.exe could not be located.' }
-$pythonVersion = (& $python --version 2>&1 | Out-String).Trim()
-if ($pythonVersion -notmatch '^Python 3\.12\.') { throw "Expected Python 3.12; found '$pythonVersion'." }
 
 $llvmVersion = '20260616'
 $llvmArchiveName = "llvm-mingw-$llvmVersion-ucrt-x86_64.zip"
@@ -104,7 +127,7 @@ if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { throw 'The llvm-mi
 
 $cmakeVersion = (& $cmake --version | Select-Object -First 1)
 $ninjaVersion = (& $ninja --version | Out-String).Trim()
-if ($cmakeVersion -notmatch '3\.31\.6' -or $ninjaVersion -ne '1.12.1') {
+if (-not $UseSystemTools -and ($cmakeVersion -notmatch '3\.31\.6' -or $ninjaVersion -ne '1.12.1')) {
     throw "Unexpected build tool versions: $cmakeVersion; Ninja $ninjaVersion. Expected CMake 3.31.6 and Ninja 1.12.1."
 }
 Write-Host "Build tools ready: $cmakeVersion; Ninja $ninjaVersion; $pythonVersion; llvm-mingw $llvmVersion." -ForegroundColor Green
