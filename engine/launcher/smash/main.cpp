@@ -19,6 +19,9 @@
 #include <SDL3/SDL_main.h>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
@@ -55,6 +58,7 @@ namespace fs = std::filesystem;
 namespace display = cafe::host::display;
 namespace online = cafe::os::online;
 namespace act_server = cafe::os::act_server;
+namespace controller_profiles = cafe::host::controller_profiles;
 using namespace cafe::host::paint;
 
 namespace {
