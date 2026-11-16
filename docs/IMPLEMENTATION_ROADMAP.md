@@ -81,6 +81,7 @@
 - [x] Report the selected Vulkan device, driver, API version, vendor/device IDs, memory heaps, and enabled optional capabilities in the runtime log.
 - [x] Filter Vulkan adapters by the renderer's required Vulkan 1.3 features and a combined graphics/compute queue before preferring a discrete GPU, allowing fallback to a compatible integrated GPU.
 - [ ] Capture and compare repeatable GPU/CPU frame-time baselines on the Intel Iris Xe target and a discrete GPU.
+- [ ] Benchmark Vulkan against D3D11 and D3D12 on identical deterministic scenes before deciding whether either alternative backend is worth implementing.
 - [ ] Profile and remove unintended GPU-completion back-pressure from guest simulation without weakening guest-memory/resource lifetime guarantees.
 - [ ] Design a bounded frames-in-flight queue so the guest can continue at the title's 59.94 Hz cadence when rendering is slower, with explicit input/audio/netplay timing and deterministic replay tests.
 - [ ] Add stress tests that deliberately limit rendering below 60 FPS and verify guest simulation ticks, input sampling, audio timing, and frame queue bounds independently.
