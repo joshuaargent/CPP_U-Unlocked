@@ -536,7 +536,7 @@ public:
         if (!logo_.texture) {
             std::fprintf(stderr, "launcher: project title logo is missing; using the text fallback\\n");
         }
-        display::set_file(dir_ / "display.ini", "U Unlocked");
+        display::set_file(data_dir() / "display.ini", "U Unlocked");
         settings_ = display::load(display::file_path()).settings;
         const auto ini = read_ini(dir_ / "launcher.ini");
         for (int s = 0; s < kSlots; ++s) {
@@ -547,9 +547,9 @@ public:
         if (auto it = ini.find("netplay_name"); it != ini.end()) netplay_name_ = it->second;
         if (auto it = ini.find("netplay_address"); it != ini.end()) netplay_address_ = it->second;
         if (auto it = ini.find("update_channel"); it != ini.end() && it->second == "beta") update_channel_ = "beta";
-        online::load(dir_ / "online");
+        online::load(data_dir() / "online");
         refresh();
-        font_.open({dir_ / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/segoeui.ttf",
+        font_.open({data_dir() / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/segoeui.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf"});
 
         // Check in the background on startup; installation remains an explicit user action.
@@ -727,6 +727,7 @@ public:
                 const bool all_runtimes = output_exists("smash.exe") && output_exists("smash-compat.exe") &&
                     output_exists("smash-base.exe") && output_exists("smash-base-compat.exe");
                 if (code == 0 && all_runtimes) {
+                    reload_runtime_data_paths();
                     build_status_ = "Runtime built. Select Play.";
                     launch_error_.clear();
                 } else {
@@ -1599,11 +1600,31 @@ private:
         return std::nullopt;
     }
 
+    // The local game runtime is isolated from the launcher so its MinGW DLLs
+    // cannot replace the launcher's own SDL runtime. Keep game data beside it.
+    fs::path data_dir() const {
+        const fs::path runtime_dir = dir_ / "runtime";
+        std::error_code ec;
+        for (const char* name : {"smash.exe", "smash-compat.exe", "smash-base.exe", "smash-base-compat.exe"}) {
+            ec.clear();
+            if (fs::is_regular_file(runtime_dir / name, ec) && !ec) return runtime_dir;
+        }
+        return dir_;
+    }
+
+    void reload_runtime_data_paths() {
+        const fs::path data = data_dir();
+        display::set_file(data / "display.ini", "U Unlocked");
+        settings_ = display::load(display::file_path()).settings;
+        online::load(data / "online");
+        font_.open({data / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf",
+                    "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf"});
+    }
+
     // The game's program: smash.exe is the update's (v304), smash-base.exe the game's own (v1.0);
     // smash-compat.exe is the update's for processors without AVX2/FMA.
     fs::path game_exe() const {
-        std::error_code ec;
-        const fs::path runtime_dir = fs::is_directory(dir_ / "runtime", ec) && !ec ? dir_ / "runtime" : dir_;
+        const fs::path runtime_dir = data_dir();
         if (!valid_[kUpdate]) {
             return runtime_dir / (cafe::host::cpu_has_x86_64_v3() ? "smash-base.exe" : "smash-base-compat.exe");
         }
@@ -1731,13 +1752,23 @@ private:
     }
 
     void launch_guest(const std::string& target) {
-        if (process_) return;
+        if (process_ || building_runtime_) return;
         if (target.empty()) {
             launch_error_ = "Enter a host IP address or select an open room.";
             return;
         }
+        if (!valid_[kGame] || !valid_[kUpdate]) {
+            launch_error_ = "Select valid base-game and update folders before joining Netplay.";
+            return;
+        }
+        std::error_code runtime_ec;
+        const fs::path executable = game_exe();
+        if (!fs::is_regular_file(executable, runtime_ec) || runtime_ec) {
+            build_runtime();
+            return;
+        }
         save_launcher_ini();
-        const std::string exe = (dir_ / "smash.exe").string();
+        const std::string exe = executable.string();
         const std::string name = netplay_name_.empty() ? "Player" : netplay_name_;
         const char* args[] = {exe.c_str(), "--join", target.c_str(), name.c_str(), nullptr};
         SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SMASH_LOG", (dir_ / "smash.log").string().c_str(), true);
@@ -2025,7 +2056,7 @@ private:
         load_mods();
         std::error_code ec;
         shaders_ = 0;
-        for (const auto& entry : fs::directory_iterator(dir_ / "cache" / "spirv", ec)) shaders_ += entry.is_regular_file(ec);
+        for (const auto& entry : fs::directory_iterator(data_dir() / "cache" / "spirv", ec)) shaders_ += entry.is_regular_file(ec);
     }
     void save_display() {
         std::ofstream(display::file_path(), std::ios::binary) << display::format(settings_);
@@ -2648,7 +2679,7 @@ private:
             online_ok_ = false;
             return;
         }
-        const fs::path dir = dir_ / "online";
+        const fs::path dir = data_dir() / "online";
         fs::create_directories(dir, ec);
         fs::copy_file(otp, dir / "otp.bin", fs::copy_options::overwrite_existing, ec);
         fs::copy_file(seeprom, dir / "seeprom.bin", fs::copy_options::overwrite_existing, ec);
@@ -2727,15 +2758,15 @@ private:
         a.mii = r.mii;
         a.mii_name = r.mii_name;
         a.us = r.country.empty() || r.country == "US";
-        online_ok_ = online::save_account(dir_ / "online", a);
+        online_ok_ = online::save_account(data_dir() / "online", a);
         online_status_ = online_ok_ ? "Signed in as " + r.user_id + ". Smash's online modes use this account."
                                     : "Signed in, but the account could not be saved.";
     }
 
     void sign_out() {
         std::error_code ec;
-        fs::remove(dir_ / "online" / "account.dat", ec);
-        online::load(dir_ / "online");
+        fs::remove(data_dir() / "online" / "account.dat", ec);
+        online::load(data_dir() / "online");
         online_ok_ = true;
         online_status_ = "Signed out. The console files stay; sign in again any time.";
     }
