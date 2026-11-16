@@ -1060,7 +1060,7 @@ private:
         case Screen::kMods:
             // Each mod with its switch, then the folder and Back.
             for (const Mod& m : mods_) list_.push_back({m.name, m.on ? "On" : "Off"});
-            list_.push_back({"INSTALL MOD...", installing_ ? "Installing..." : ""});
+            list_.push_back({"ADD MOD FOLDER...", installing_ ? "Installing..." : ""});
             list_.push_back({"OPEN MODS FOLDER"});
             list_.push_back({"BACK"});
             break;
@@ -2022,7 +2022,7 @@ private:
         const float icon = px * 0.75f, ix = x - icon * 1.55f;
         if (screen_ == Screen::kMods && !mod_status_.empty()) {
             font_.draw(r_, x, y, fit(mod_status_, px * 0.85f, layout_.w * 0.6f), px * 0.85f, mod_ok_ ? kGood : kBad);
-            font_.draw(r_, x, y + H * 0.045f, "Drop a mod's .zip, .7z or .rar (or its folder) on this window to install it.", px * 0.8f, kDim);
+            font_.draw(r_, x, y + H * 0.045f, "Select an extracted mod folder to install it. Archive support is temporarily disabled for security.", px * 0.8f, kDim);
             return;
         }
         if (screen_ == Screen::kMods) {
