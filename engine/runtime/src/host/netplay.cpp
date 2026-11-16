@@ -59,6 +59,8 @@ enum Type : uint8_t {
     kBye = 9,        // either: leaving
 };
 constexpr size_t kPiece = 1150;                  // H.264 bytes a video datagram (under common MTUs)
+constexpr size_t kMaxVideoFrameBytes = 8u << 20; // bound reassembly memory for a single untrusted frame
+constexpr size_t kMaxVideoPieces = (kMaxVideoFrameBytes + kPiece - 1) / kPiece;
 constexpr auto kSilence = std::chrono::seconds(10); // nothing heard for this long: gone
 
 uint32_t le32(const uint8_t* p) {
@@ -1010,9 +1012,11 @@ int run_guest(const std::string& target, const std::string& name) {
                 uint16_t index, count;
                 std::memcpy(&index, q.data() + 5, 2);
                 std::memcpy(&count, q.data() + 7, 2);
-                if (f < frame || count == 0 || index >= count) continue; // (an old frame's piece)
+                if (f < frame || count == 0 || count > kMaxVideoPieces || index >= count || q[9] > 1) continue;
+                const size_t length = n - 10;
+                if (length == 0 || length > kPiece || (index + 1 < count && length != kPiece)) continue;
                 if (f != frame) {
-                    if (got != pieces) { // the last frame never completed
+                    if (got != pieces) { // The last frame never completed.
                         broken = true;
                         ++lost_frames;
                     }
@@ -1025,7 +1029,6 @@ int run_guest(const std::string& target, const std::string& name) {
                 if (have[index]) continue;
                 have[index] = true;
                 ++got;
-                const size_t length = n - 10;
                 std::memcpy(data.data() + size_t{index} * kPiece, q.data() + 10, length);
                 if (index + 1 == count) data.resize(size_t{index} * kPiece + length);
                 if (got != pieces) continue;
@@ -1045,7 +1048,8 @@ int run_guest(const std::string& target, const std::string& name) {
                     fresh = true;
                     ++pictures;
                 });
-            } else if (q[0] == kAudio && sound) {
+            } else if (q[0] == kAudio && sound && n > 1 && (n - 1) % 4 == 0) {
+                // Audio is stereo int16: reject partial samples before handing bytes to SDL.
                 // Over 150 ms queued (the link stalled): start over rather than lag behind.
                 if (SDL_GetAudioStreamQueued(sound) > static_cast<int>(kAudioRate * 4 * 15 / 100)) SDL_ClearAudioStream(sound);
                 SDL_PutAudioStreamData(sound, q.data() + 1, static_cast<int>(n - 1));
