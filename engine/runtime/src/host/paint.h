@@ -7,6 +7,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <array>
+
 #include "stb_truetype.h"
 
 #include <algorithm>
@@ -66,23 +68,36 @@ public:
         quad(p, cs);
     }
     void round_rect(float x, float y, float w, float h, float radius, Color c) {
-        radius = std::min({radius, w / 2, h / 2});
-        std::vector<SDL_Vertex> v;
-        std::vector<int> idx;
+        if (w <= 0.0f || h <= 0.0f) return;
+        radius = std::clamp(radius, 0.0f, std::min(w / 2.0f, h / 2.0f));
+        constexpr int kSteps = 8;
+        constexpr int kRingVertices = 4 * (kSteps + 1);
+        constexpr int kIndexCount = kRingVertices * 3;
+        std::array<SDL_Vertex, kRingVertices + 1> vertices{};
+        std::array<int, kIndexCount> indices{};
         const SDL_FColor fc{c.r, c.g, c.b, c.a};
-        v.push_back({{x + w / 2, y + h / 2}, fc, {0, 0}});
+        vertices[0] = {{x + w / 2, y + h / 2}, fc, {0, 0}};
         const float cx[4] = {x + w - radius, x + radius, x + radius, x + w - radius};
         const float cy[4] = {y + radius, y + radius, y + h - radius, y + h - radius};
-        constexpr int kSteps = 8;
         for (int corner = 0; corner < 4; ++corner) {
-            for (int s = 0; s <= kSteps; ++s) {
-                const float a = (corner * 90.0f + s * 90.0f / kSteps) * float(M_PI) / 180.0f;
-                v.push_back({{cx[corner] + std::cos(a) * radius, cy[corner] - std::sin(a) * radius}, fc, {0, 0}});
+            for (int step = 0; step <= kSteps; ++step) {
+                const float angle = (corner * 90.0f + step * 90.0f / kSteps) * float(M_PI) / 180.0f;
+                const int vertex = 1 + corner * (kSteps + 1) + step;
+                vertices[vertex] = {
+                    {cx[corner] + std::cos(angle) * radius, cy[corner] - std::sin(angle) * radius},
+                    fc,
+                    {0, 0}
+                };
             }
         }
-        const int n = static_cast<int>(v.size()) - 1;
-        for (int i = 1; i <= n; ++i) idx.insert(idx.end(), {0, i, i % n + 1});
-        SDL_RenderGeometry(r_, nullptr, v.data(), static_cast<int>(v.size()), idx.data(), static_cast<int>(idx.size()));
+        for (int i = 1; i <= kRingVertices; ++i) {
+            const int offset = (i - 1) * 3;
+            indices[offset] = 0;
+            indices[offset + 1] = i;
+            indices[offset + 2] = i % kRingVertices + 1;
+        }
+        SDL_RenderGeometry(r_, nullptr, vertices.data(), static_cast<int>(vertices.size()),
+                           indices.data(), static_cast<int>(indices.size()));
     }
     void image(const Image& img, SDL_FRect dst, float alpha = 1, const SDL_FRect* src = nullptr) {
         if (!img.texture) return;
