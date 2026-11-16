@@ -126,6 +126,12 @@ jobs:
         shell: pwsh
         run: ./tools/windows/verify-checkout.ps1 -SkipToolchainCheck
 
+      - name: Validate four game target configurations
+        shell: pwsh
+        run: |
+          cmake -S engine/tests/cmake_game_targets -B build/cmake-game-targets
+          if ($LASTEXITCODE -ne 0) { throw 'The four game target CMake configuration test failed.' }
+
       - name: Generate the application resource icon
         shell: pwsh
         run: |
