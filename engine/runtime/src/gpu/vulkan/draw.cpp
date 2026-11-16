@@ -713,7 +713,18 @@ void Renderer::precompile() {
     const unsigned preferred_workers = hardware_threads == 0 ? 2u : std::clamp(hardware_threads / 2u, 1u, 4u);
     const unsigned worker_count = static_cast<unsigned>(std::min<size_t>(jobs.size(), preferred_workers));
     std::vector<VkPipelineCache> worker_caches(worker_count, VK_NULL_HANDLE);
+    // Seed each worker with the previous run's driver cache so prewarming can
+    // reuse cached compilation data rather than starting from an empty cache.
+    size_t initial_cache_size = 0;
+    VK_CHECK(vkGetPipelineCacheData(ctx_.device, pipeline_cache_, &initial_cache_size, nullptr));
+    std::vector<uint8_t> initial_cache_data(initial_cache_size);
+    if (initial_cache_size != 0) {
+        VK_CHECK(vkGetPipelineCacheData(ctx_.device, pipeline_cache_, &initial_cache_size, initial_cache_data.data()));
+        initial_cache_data.resize(initial_cache_size);
+    }
     VkPipelineCacheCreateInfo cache_info{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
+    cache_info.initialDataSize = initial_cache_data.size();
+    cache_info.pInitialData = initial_cache_data.empty() ? nullptr : initial_cache_data.data();
     for (VkPipelineCache& cache : worker_caches) VK_CHECK(vkCreatePipelineCache(ctx_.device, &cache_info, nullptr, &cache));
 
     std::atomic<size_t> next{0};
