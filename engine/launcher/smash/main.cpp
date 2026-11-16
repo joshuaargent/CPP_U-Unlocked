@@ -1620,11 +1620,11 @@ private:
         const int feature_items[] = {kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem,
                                       kLibraryItem, kUpdatesItem, kDiagnosticsItem, kQuitItem};
         const char* feature_titles[] = {"ONLINE", "NETPLAY", "CONTROLS", "GRAPHICS", "MODS",
-                                        "LIBRARY", "UPDATES", "DIAGNOSTICS", "QUIT"};
+                                        "BUILD", "GAME UPDATE", "DIAGNOSTICS", "QUIT"};
         const char* feature_descriptions[] = {
             "Pretendo Network services", "Private play with friends", "Configure every controller",
-            "Resolution and frame pacing", "Install and manage content", "Manage game files",
-            "Manage game updates", "System and runtime health", "Close U Unlocked"
+            "Resolution and frame pacing", "Install and manage content", "Configure and verify game files",
+            "Manage the installed game update", "System and runtime health", "Close U Unlocked"
         };
         const float grid_y = H * 0.535f, grid_gap_x = W * 0.014f, grid_gap_y = H * 0.012f;
         const float grid_w = (W - margin * 2 - grid_gap_x * 2) / 3.0f;
