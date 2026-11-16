@@ -123,23 +123,19 @@ The upstream runtime expects the user's own extracted Wii U game folders:
 
 The folders should be dumped from the user's own console using an appropriate dumping tool. Keep game data, console files and keys out of Git, issue attachments and release packages.
 
-### Build the upstream baseline
+### Build U Unlocked
 
-The current baseline build script is maintained by Smash4PC:
-
-```powershell
-.\upstream\tools\windows\build-smash.ps1 -Rpx '<update>\code\cross_f.rpx' -BaseRpx '<game>\code\cross_f.rpx'
-```
-
-The script builds the translated game programs and launcher into the repository's sibling `Play\` directory. The upstream build currently retains its own executable branding; a successful baseline build is not yet a completed U Unlocked release.
-
-The upstream release packager can be run with:
+Run the project-owned build wrapper from the repository root:
 
 ```powershell
-.\upstream\tools\windows\package-release.ps1
+.\tools\windows\build-u-unlocked.ps1 -Rpx '<update>\code\cross_f.rpx' -BaseRpx '<game>\code\cross_f.rpx'
 ```
 
-Do not upload or distribute the generated game code or executables built from it. They contain code translated from the user's game files.
+The wrapper verifies the pinned upstream checkout, copies it to an isolated `upstream-build\` working directory, applies the reviewed U Unlocked branding overlay, and invokes the upstream build. The original `upstream\` submodule is not modified. The launcher and game runtime are written to `Play\`; the launcher is named `U Unlocked.exe`.
+
+This is the first branded build milestone. The launcher still uses the upstream menu layout; the redesigned interface, controller remapping, expanded settings and full mod-management workflow are not yet complete. The build requires the user's game/update RPX files and the toolchain described above.
+
+Do not upload or distribute the generated game code or executables built from it. They contain code translated from the user's game files. No release packager is provided until the U Unlocked package contents and legal-data exclusions have been independently verified.
 
 ## Development and pull requests
 

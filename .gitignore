@@ -5,6 +5,7 @@
 /dist/
 /build/
 /build-*/
+/upstream-build/
 /.cache/
 
 # Upstream build output (the upstream source itself is a submodule)
