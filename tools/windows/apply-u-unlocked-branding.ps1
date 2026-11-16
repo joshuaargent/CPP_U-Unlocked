@@ -8,7 +8,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $sourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 
 function Replace-RequiredText {
     param(
@@ -53,8 +53,8 @@ Replace-RequiredText 'runtime/res/smash.rc' 'smash.ico' 'u-unlocked.ico' 1
 
 # The upstream build script must copy the renamed launcher and must not copy its own game artwork.
 Replace-RequiredText 'tools/windows/build-smash.ps1' 'Smash 4 PC' 'U Unlocked' 2
-Replace-RequiredText 'tools/windows/build-smash.ps1' "Copy-Item (Join-Path $upstream 'assets\smash\logo.png') (Join-Path $play 'title-logo.png')" '# U Unlocked supplies its own launcher identity; upstream title artwork is not copied.' 1
-Replace-RequiredText 'tools/windows/build-smash.ps1' "Copy-Item (Join-Path $upstream 'assets\smash\launcher-background.jpg') $play" '# U Unlocked supplies its own launcher background; upstream game artwork is not copied.' 1
+Replace-RequiredText 'tools/windows/build-smash.ps1' 'Copy-Item (Join-Path $upstream ''assets\smash\logo.png'') (Join-Path $play ''title-logo.png'')' '# U Unlocked supplies its own launcher identity; upstream title artwork is not copied.' 1
+Replace-RequiredText 'tools/windows/build-smash.ps1' 'Copy-Item (Join-Path $upstream ''assets\smash\launcher-background.jpg'') $play' '# U Unlocked supplies its own launcher background; upstream game artwork is not copied.' 1
 
 $iconScript = Join-Path $PSScriptRoot 'new-u-unlocked-icon.ps1'
 if (-not (Test-Path -LiteralPath $iconScript -PathType Leaf)) {

@@ -24,12 +24,12 @@ public static class UUnlockedIconNativeMethods
 }
 '@
 
-$bitmap = New-Object System.Drawing.Bitmap(64, 64, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+$bitmap = [System.Drawing.Bitmap]::new(64, 64, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-$ringPen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(0, 190, 196), 4.5)
-$letterBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(242, 246, 250))
-$font = New-Object System.Drawing.Font('Segoe UI', 39, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-$format = New-Object System.Drawing.StringFormat
+$ringPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(0, 190, 196), 4.5)
+$letterBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(242, 246, 250))
+$font = [System.Drawing.Font]::new('Segoe UI', 39, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+$format = [System.Drawing.StringFormat]::new()
 $iconHandle = [IntPtr]::Zero
 $icon = $null
 $stream = $null
@@ -42,7 +42,7 @@ try {
 
     $format.Alignment = [System.Drawing.StringAlignment]::Center
     $format.LineAlignment = [System.Drawing.StringAlignment]::Center
-    $bounds = New-Object System.Drawing.RectangleF(5, 3, 54, 58)
+    $bounds = [System.Drawing.RectangleF]::new(5, 3, 54, 58)
     $graphics.DrawString('U', $font, $letterBrush, $bounds, $format)
 
     $iconHandle = $bitmap.GetHicon()
