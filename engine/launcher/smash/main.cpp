@@ -1966,7 +1966,7 @@ private:
                         "GET", endpoint,
                         {"Accept: application/vnd.github+json", "User-Agent: U-Unlocked-Updater",
                          "X-GitHub-Api-Version: 2022-11-28"},
-                        {});
+                        {}, 5000);
                     if (response.status != 200) {
                         result.message = response.error.empty()
                             ? "GitHub returned HTTP " + std::to_string(response.status)
