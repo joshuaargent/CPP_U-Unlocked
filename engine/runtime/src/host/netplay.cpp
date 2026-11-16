@@ -460,6 +460,7 @@ struct Guest {
     bool pressed = false; // (logged once)
     os::ProPadState pad{};
     Clock::time_point heard = Clock::now();
+    Clock::time_point last_key_request{};
 };
 
 Socket g_socket;
@@ -551,34 +552,56 @@ void encoder_main() {
         f.release();
         const int64_t time = std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - start).count() / 100;
         encoder.encode(nv12, time, g_force_key.exchange(false),
-                       [](const BYTE* data, DWORD size, bool key) { send_video(data, size, key); });
-    }
-}
-
-// What the guests send.
-void host_receive_main() {
+                       [](const BYTE* data, DWORD size, bool key) { send_video(data, size, kevoid host_receive_main() {
     std::vector<uint8_t> p(2048);
+    // Protect the host loop from packet floods without constraining normal
+    // 60 Hz input from all seven remote controller slots.
+    constexpr double kPacketRate = 1500.0;
+    constexpr double kPacketBurst = 3000.0;
+    constexpr double kHelloRate = 8.0;
+    constexpr double kHelloBurst = 16.0;
+    double packet_tokens = kPacketBurst;
+    double hello_tokens = kHelloBurst;
+    auto token_time = Clock::now();
+
     for (;;) {
         Endpoint from;
         const size_t n = g_socket.receive(p.data(), p.size(), from);
         const auto now = Clock::now();
-        std::lock_guard lock(g_mutex);
-        for (auto& g : g_guests) {
-            if (g && now - g->heard > kSilence) drop(*g, "stopped answering");
-        }
+        const double elapsed = std::chrono::duration<double>(now - token_time).count();
+        token_time = now;
+        packet_tokens = std::min(kPacketBurst, packet_tokens + elapsed * kPacketRate);
+        hello_tokens = std::min(kHelloBurst, hello_tokens + elapsed * kHelloRate);
         if (n == 0) continue;
+        if (packet_tokens < 1.0) continue;
+        packet_tokens -= 1.0;
+
+        // A handshake is much rarer than controller traffic. Limit it
+        // separately so unauthenticated LAN broadcasts cannot churn slots.
+        if (p[0] == kHello) {
+            if (hello_tokens < 1.0) continue;
+            hello_tokens -= 1.0;
+        }
+
+        std::lock_guard lock(g_mutex);
+        for (auto& guest : g_guests) {
+            if (guest && now - guest->heard > kSilence) drop(*guest, "stopped answering");
+        }
         Guest* g = guest_at(from);
-        if (g) g->heard = now;
         switch (p[0]) {
         case kHello: {
-            if (g) { // (the welcome was lost)
+            uint16_t version = 0;
+            if (n != 39 || le32(p.data() + 1) != kMagic ||
+                (std::memcpy(&version, p.data() + 5, 2), version != kVersion)) {
+                break;
+            }
+            if (g) { // The welcome was lost; only a valid repeat hello refreshes the peer.
+                g->heard = now;
                 const uint8_t w[5] = {static_cast<uint8_t>(g->channel), kStreamWidth & 0xFF, kStreamWidth >> 8,
                                       kStreamHeight & 0xFF, kStreamHeight >> 8};
                 g_socket.send(from, kWelcome, w, sizeof w);
                 break;
             }
-            uint16_t version = 0;
-            if (n < 39 || le32(p.data() + 1) != kMagic || (std::memcpy(&version, p.data() + 5, 2), version != kVersion)) break;
             const auto free = std::find_if(g_guests.begin(), g_guests.end(), [](const auto& x) { return !x; });
             if (free == g_guests.end()) {
                 g_socket.send(from, kFull);
@@ -587,7 +610,9 @@ void host_receive_main() {
             Guest& guest = free->emplace();
             guest.address = from;
             guest.channel = static_cast<int>(free - g_guests.begin());
-            guest.name.assign(reinterpret_cast<const char*>(p.data() + 7), strnlen(reinterpret_cast<const char*>(p.data() + 7), 31));
+            guest.name.assign(reinterpret_cast<const char*>(p.data() + 7),
+                              strnlen(reinterpret_cast<const char*>(p.data() + 7), 31));
+            guest.heard = now;
             ++g_guest_count;
             g_force_key = true;
             const uint8_t w[5] = {static_cast<uint8_t>(guest.channel), kStreamWidth & 0xFF, kStreamWidth >> 8,
@@ -597,18 +622,19 @@ void host_receive_main() {
             break;
         }
         case kInput: {
-            if (!g || n < 17) break;
+            if (!g || n != 17) break;
             const uint32_t sequence = le32(p.data() + 1);
-            if (sequence <= g->input_sequence) break; // (late)
+            if (sequence <= g->input_sequence) break; // Late or replayed input.
             g->input_sequence = sequence;
+            g->heard = now;
             os::ProPadState s{true};
             s.buttons = le32(p.data() + 5);
             int16_t axes[4];
-            std::memcpy(axes, p.data() + 9, 8);
-            s.left_x = axes[0] / 32767.0f;
-            s.left_y = axes[1] / 32767.0f;
-            s.right_x = axes[2] / 32767.0f;
-            s.right_y = axes[3] / 32767.0f;
+            std::memcpy(axes, p.data() + 9, sizeof axes);
+            s.left_x = std::clamp(axes[0] / 32767.0f, -1.0f, 1.0f);
+            s.left_y = std::clamp(axes[1] / 32767.0f, -1.0f, 1.0f);
+            s.right_x = std::clamp(axes[2] / 32767.0f, -1.0f, 1.0f);
+            s.right_y = std::clamp(axes[3] / 32767.0f, -1.0f, 1.0f);
             if (s.buttons && !g->pressed) {
                 g->pressed = true;
                 std::fprintf(stderr, "u-unlocked: netplay: player %d's controller works\n", g->channel + 2);
@@ -617,12 +643,21 @@ void host_receive_main() {
             break;
         }
         case kKeyRequest:
-            if (g) g_force_key = true;
+            if (g && n == 1 && now - g->last_key_request >= std::chrono::seconds(1)) {
+                g->heard = now;
+                g->last_key_request = now;
+                g_force_key = true;
+            }
             break;
         case kBye:
-            if (g) drop(*g, "left");
+            if (g && n == 1) drop(*g, "left");
             break;
-        default: break; // punches
+        default: break; // Punches and unknown packet types are ignored.
+        }
+    }
+}
+
+ult: break; // punches
         }
     }
 }
