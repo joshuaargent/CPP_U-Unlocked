@@ -56,6 +56,7 @@
 - [ ] Add authenticated guest pairing and explicit host approval.
 - [ ] Add encryption and message integrity protection for video, audio, and controller datagrams.
 - [x] Enforce exact host-side UDP packet lengths, reject stale input sequence numbers, clamp controller axes, rate-limit total incoming packets and handshakes with token buckets, and limit each guest to one keyframe request per second.
+- [x] Bound guest-side video reassembly to 8 MiB, validate fragment counts/indices/lengths and consistent frame metadata, and reject malformed stereo int16 audio packet framing before decode/playback.
 - [ ] Add authenticated guest pairing, cryptographic replay protection, per-peer abuse controls, and host approval before enabling public internet connectivity.
 - [ ] Add secure public-internet connectivity only after the authentication and transport security work is complete.
 - [ ] Add an optional U Unlocked-owned room directory and NAT traversal service, with no third-party room-service dependency.
