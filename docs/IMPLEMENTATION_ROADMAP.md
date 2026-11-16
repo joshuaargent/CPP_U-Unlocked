@@ -45,7 +45,7 @@
 - [x] Discover connected controllers and select a physical device to configure.
 - [x] Implement press-to-bind buttons and axes, including Escape cancellation and a 10-second timeout.
 - [x] Implement configurable stick dead zones and trigger thresholds.
-- [x] Implement explicit player-slot assignment (automatic, Wii U GamePad, and Pro Controller slots).
+- [x] Reserve player 1 (Wii U GamePad) for keyboard input; assign physical controllers only to Pro Controller slots for players 2-8, including validation that rejects saved profiles targeting player 1.
 - [x] Implement per-axis dead zones and stick-axis inversion.
 - [x] Add a live controller input monitor for all mapped buttons, sticks, and triggers.
 - [ ] Implement full stick/trigger calibration and saturation.
