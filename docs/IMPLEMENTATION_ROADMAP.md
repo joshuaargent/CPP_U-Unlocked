@@ -15,7 +15,8 @@
 - [x] Replace the single-column startup menu with a feature-rich home dashboard and featured game launch panel.
 - [x] Add direct home-screen navigation to Play, Build, game-update management, Online, Netplay, Controls, Graphics, Mods, and Diagnostics.
 - [x] Add a Build/library workflow for selecting and validating the user's game, update, and DLC folders.
-- [ ] Add Windows WUA archive selection and safe extraction into the Build workflow, with strict path, link, file-count, and expanded-size validation. Preserve the original archive and stage extraction before activating the resulting folder.
+- [x] Add a bounded Windows WUA extraction utility using the pinned ZArchive reader, with strict path/filename validation, case-collision detection, reparse-point rejection, exclusive file creation, and depth/file-count/expanded-size limits; add a dedicated Windows compile check in CI. The POSIX extractor now has matching inventory limits.
+- [ ] Integrate WUA archive selection into the launcher Build workflow, with private staging, cleanup/rollback, title-folder detection, preservation of the original archive, and end-to-end tests against real WUA dumps.
 - [x] Add a game-update management page for selecting and removing the locally installed update dump.
 - [x] Add a Diagnostics page for platform, CPU core count, system memory, CPU optimisation path, SDL renderer, game/update validation, active mods, shader-cache count, log path, and clipboard export.
 - [x] Own and join the launcher's background workers for mod installation, Pretendo sign-in, room discovery, and application update checks; contain worker exceptions and clear the sign-in password buffer after use.
