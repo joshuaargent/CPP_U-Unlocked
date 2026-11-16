@@ -627,7 +627,7 @@ void host_receive_main() {
 // The optional room directory, every two seconds: list the host and introduce guests when configured.
 void host_rooms_main() {
     if (room_server().empty()) {
-        std::fprintf(stderr, "u-unlocked: netplay: room discovery is disabled; guests can still join by direct address\\n");
+        std::fprintf(stderr, "u-unlocked: netplay: room discovery is disabled; guests can still join by direct address\n");
         for (;;) std::this_thread::sleep_for(std::chrono::seconds(30));
     }
     const uint32_t id = random_id();
