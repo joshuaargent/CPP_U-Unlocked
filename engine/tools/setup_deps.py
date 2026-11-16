@@ -31,12 +31,23 @@ def safe_extract(archive, destination):
         members = source.infolist()
         if not members:
             raise RuntimeError("The dependency archive is empty.")
+        if len(members) > 200000:
+            raise RuntimeError("The dependency archive contains too many entries.")
         roots = set()
+        seen = set()
+        expanded_size = 0
         for member in members:
             name = member.filename.replace("\\", "/")
             path = PurePosixPath(name)
-            if path.is_absolute() or not path.parts or any(part in ("", ".", "..") for part in path.parts):
+            if (path.is_absolute() or not path.parts or any(part in ("", ".", "..") or ":" in part for part in path.parts)):
                 raise RuntimeError(f"Unsafe dependency archive path: {member.filename}")
+            canonical = "/".join(path.parts).casefold()
+            if canonical in seen:
+                raise RuntimeError(f"Dependency archive contains a duplicate path: {member.filename}")
+            seen.add(canonical)
+            expanded_size += member.file_size
+            if expanded_size > 2 * 1024 * 1024 * 1024:
+                raise RuntimeError("The dependency archive exceeds the 2 GiB expanded-size limit.")
             mode = (member.external_attr >> 16) & 0xFFFF
             if stat.S_ISLNK(mode):
                 raise RuntimeError(f"Dependency archive contains a symbolic link: {member.filename}")
@@ -97,7 +108,18 @@ def fetch_dependency(name, dependency):
         )
         print(f"{name}: downloading pinned source {revision}")
         with urllib.request.urlopen(request, timeout=60) as response, archive.open("wb") as output:
-            shutil.copyfileobj(response, output, length=1024 * 1024)
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > 512 * 1024 * 1024:
+                raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
+            total = 0
+            while True:
+                block = response.read(1024 * 1024)
+                if not block:
+                    break
+                total += len(block)
+                if total > 512 * 1024 * 1024:
+                    raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
+                output.write(block)
         safe_extract(archive, extraction)
         roots = list(extraction.iterdir())
         if len(roots) != 1 or not roots[0].is_dir():
