@@ -992,6 +992,7 @@ int run_guest(const std::string& target, const std::string& name) {
         std::vector<uint8_t> data;
         std::vector<bool> have;
         bool broken = true; // until a keyframe
+        bool frame_key = false;
         auto heard = Clock::now(), asked_key = Clock::time_point{};
         const auto ask_key = [&] {
             if (Clock::now() - asked_key < std::chrono::milliseconds(250)) return;
@@ -1015,12 +1016,14 @@ int run_guest(const std::string& target, const std::string& name) {
                 if (f < frame || count == 0 || count > kMaxVideoPieces || index >= count || q[9] > 1) continue;
                 const size_t length = n - 10;
                 if (length == 0 || length > kPiece || (index + 1 < count && length != kPiece)) continue;
+                if (f == frame && (count != pieces || frame_key != (q[9] != 0))) continue;
                 if (f != frame) {
                     if (got != pieces) { // The last frame never completed.
                         broken = true;
                         ++lost_frames;
                     }
                     frame = f;
+                    frame_key = q[9] != 0;
                     pieces = count;
                     got = 0;
                     data.assign(size_t{count} * kPiece, 0);
@@ -1032,7 +1035,7 @@ int run_guest(const std::string& target, const std::string& name) {
                 std::memcpy(data.data() + size_t{index} * kPiece, q.data() + 10, length);
                 if (index + 1 == count) data.resize(size_t{index} * kPiece + length);
                 if (got != pieces) continue;
-                const bool key = q[9] != 0;
+                const bool key = frame_key;
                 if (broken && !key) {
                     ask_key();
                     continue;
