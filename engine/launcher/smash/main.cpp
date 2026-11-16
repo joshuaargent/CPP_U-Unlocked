@@ -811,7 +811,7 @@ private:
             text_x = std::max(w * 0.085f, h * 0.15f);
             left_chevron = text_x - h * 0.05f;
             right_chevron = text_x + std::min(w * 0.40f, h * 0.78f);
-            if (items > 10) {
+            if (items > 9) {
                 top = 0.405f;
                 step = 0.39f / float(items - 1);
                 px = 0.031f;
