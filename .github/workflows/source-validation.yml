@@ -13,6 +13,12 @@ on:
 permissions:
   contents: read
 
+# Keep only the newest validation run for a branch/PR; obsolete commits do
+# not need to occupy Windows runners while newer commits are waiting.
+concurrency:
+  group: source-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   controller-profile-tests:
     name: Build and test controller profiles
