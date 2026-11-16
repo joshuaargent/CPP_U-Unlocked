@@ -31,14 +31,23 @@ if ($missingSource.Count -gt 0) {
 # Keep the retired upstream project name out of all tracked source and documentation.
 # Split the token so this guard does not match itself.
 $legacyName = 'Smash' + '4PC'
-$legacyMatches = @(git -C $repoRoot grep -n -i -- $legacyName)
-$grepExitCode = $LASTEXITCODE
-if ($grepExitCode -eq 0) {
-    $legacyMatches | ForEach-Object { Write-Host "Forbidden legacy reference: $_" -ForegroundColor Red }
-    throw 'The retired upstream project name must not appear in this repository.'
+$trackedFiles = @(git -C $repoRoot ls-files)
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to enumerate tracked files for the legacy-reference check.'
 }
-if ($grepExitCode -ne 1) {
-    throw "Unable to verify the repository for forbidden legacy references (git grep exit code $grepExitCode)."
+$legacyMatches = @(
+    foreach ($relativePath in $trackedFiles) {
+        $fullPath = Join-Path $repoRoot ($relativePath -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+        if (Test-Path -LiteralPath $fullPath -PathType Leaf) {
+            Select-String -LiteralPath $fullPath -Pattern $legacyName -SimpleMatch -ErrorAction SilentlyContinue
+        }
+    }
+)
+if ($legacyMatches.Count -gt 0) {
+    $legacyMatches | ForEach-Object {
+        Write-Host "Forbidden legacy reference: $($_.Path):$($_.LineNumber)" -ForegroundColor Red
+    }
+    throw 'The retired upstream project name must not appear in this repository.'
 }
 
 if (-not $SkipToolchainCheck) {
