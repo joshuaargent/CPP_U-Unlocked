@@ -56,7 +56,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $buildKitArchive -PathT
 }
 Expand-Archive -LiteralPath $buildKitArchive -DestinationPath $buildKit -Force
 Remove-Item -LiteralPath $buildKitArchive -Force
-foreach ($requiredBuildFile in @('tools\\windows\\build-from-library.ps1', 'tools\\windows\\setup-build-environment.ps1', 'engine\\tools\\setup_deps.py', 'engine\\dependencies.lock.json')) {
+foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
     }
