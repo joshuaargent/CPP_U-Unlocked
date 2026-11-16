@@ -455,11 +455,31 @@ void execute_packet(uint32_t opcode, uint32_t payload, uint32_t count, uint32_t 
             // The title paces on flips: waiting for this frame's GPU work too
             // missed blanks once it took most of a refresh (8 fighters at 4K).
             // One frame in flight: ready once the one before it has finished.
+            // TTT2_TRACE_PACING measures this dependency before changing the
+            // in-flight policy; removing it without snapshotting guest memory
+            // would let vertex/uniform buffers change while Vulkan reads them.
             static uint64_t previous = 0;
+            static uint64_t measured_frames = 0;
+            static double wait_total_ms = 0;
+            static double wait_max_ms = 0;
+            static const bool trace_pacing = std::getenv("TTT2_TRACE_PACING") != nullptr;
             const uint64_t done = g_backend->flush();
+            const auto wait_started = std::chrono::steady_clock::now();
             if (previous != 0) {
                 g_backend->idle(); // (a held-back submission would never finish)
                 g_backend->wait_for(previous);
+            }
+            const double wait_ms =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - wait_started).count();
+            if (trace_pacing) {
+                wait_total_ms += wait_ms;
+                wait_max_ms = std::max(wait_max_ms, wait_ms);
+                if (++measured_frames == 60) {
+                    std::fprintf(stderr, "ttt2: GPU pacing: previous-frame retirement wait avg %.2f ms, max %.2f ms (60 frames)\\n",
+                                 wait_total_ms / measured_frames, wait_max_ms);
+                    measured_frames = 0;
+                    wait_total_ms = wait_max_ms = 0;
+                }
             }
             previous = done;
             frame_ready();
