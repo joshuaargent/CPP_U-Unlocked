@@ -94,6 +94,14 @@ if ($UseSystemTools) {
     if ($pythonVersion -notmatch '^Python 3\.12\.') { throw "Expected Python 3.12; found '$pythonVersion'." }
 }
 
+if (-not $UseSystemTools) {
+    $cmakeVersionLine = (& $cmake --version | Select-Object -First 1)
+    $cmakeMatch = [regex]::Match($cmakeVersionLine, '([0-9]+\.[0-9]+\.[0-9]+)')
+    if (-not $cmakeMatch.Success -or [version]$cmakeMatch.Groups[1].Value -ne [version]'3.31.6') {
+        throw "The pinned local build requires CMake 3.31.6; found '$cmakeVersionLine'. Check the WinGet installation and PATH."
+    }
+}
+
 # llvm-mingw 20260616 is pinned by release tag and the SHA-256 published for this exact asset.
 $llvmVersion = '20260616'
 $llvmArchiveName = "llvm-mingw-$llvmVersion-ucrt-x86_64.zip"
