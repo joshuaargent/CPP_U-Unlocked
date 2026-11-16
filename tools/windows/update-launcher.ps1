@@ -36,7 +36,7 @@ function CompareVersion([string]$A,[string]$B){
 function ValidateEntry([System.IO.Compression.ZipArchiveEntry]$Entry){
  $name=$Entry.FullName.Replace([char]92,[char]47)
  if([string]::IsNullOrWhiteSpace($name) -or $name.StartsWith('/') -or $name.Contains(':') -or
-    $name -match '(^|/)\\.\\.?(/|$)' -or $name -match '^[A-Za-z]:'){
+    $name -match '(^|/)\.\.?(/|$)' -or $name -match '^[A-Za-z]:'){
   throw "Unsafe path in update archive: $($Entry.FullName)"
  }
  if((($Entry.ExternalAttributes -shr 16) -band 0xF000) -eq 0xA000){throw "Archive contains a symbolic link: $name"}
@@ -59,7 +59,7 @@ try{
  $null=VersionObject $version
  $assetName="U-Unlocked-v$version-Windows-Launcher.zip"
  $asset=$release.assets|Where-Object{$_.name -eq $assetName}|Select-Object -First 1
- if(-not $asset -or [string]$asset.browser_download_url -notmatch '^https://github\\.com/'){throw "Release package $assetName is missing or has an unsafe URL."}
+ if(-not $asset -or [string]$asset.browser_download_url -notmatch '^https://github\.com/'){throw "Release package $assetName is missing or has an unsafe URL."}
  if([int64]$asset.size -le 0 -or [int64]$asset.size -gt 2GB){throw 'Release package size is invalid or too large.'}
  $download=Join-Path $work ($assetName+'.'+[guid]::NewGuid().ToString('N'))
  Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $download -Headers @{'User-Agent'='U-Unlocked-Updater'} -TimeoutSec 180 -UseBasicParsing
@@ -68,7 +68,7 @@ try{
  if([string]$asset.digest -match '^sha256:([0-9a-fA-F]{64})$'){$expected=$Matches[1].ToLowerInvariant()}
  else{
   $sumAsset=$release.assets|Where-Object{$_.name -eq "$assetName.sha256"}|Select-Object -First 1
-  if(-not $sumAsset -or [string]$sumAsset.browser_download_url -notmatch '^https://github\\.com/'){throw 'No trusted SHA-256 digest or checksum asset; refusing update.'}
+  if(-not $sumAsset -or [string]$sumAsset.browser_download_url -notmatch '^https://github\.com/'){throw 'No trusted SHA-256 digest or checksum asset; refusing update.'}
   $sum=(Invoke-WebRequest -Uri $sumAsset.browser_download_url -Headers @{'User-Agent'='U-Unlocked-Updater'} -TimeoutSec 30 -UseBasicParsing).Content
   $expected=([regex]::Match([string]$sum,'[0-9a-fA-F]{64}')).Value.ToLowerInvariant()
   if($expected.Length -ne 64){throw 'Release checksum is malformed.'}
@@ -98,7 +98,7 @@ try{
  $new=Join-Path $stage 'new';New-Item -ItemType Directory -Force -Path $new|Out-Null
  foreach($file in $files){
   $name=[string]$file.name;$hash=[string]$file.sha256
-  if($name -notmatch '^(U Unlocked\\.exe|update-launcher\\.ps1|[A-Za-z0-9_.+-]+\\.dll)$' -or $name.Contains('..') -or
+  if($name -notmatch '^(U Unlocked\.exe|update-launcher\.ps1|[A-Za-z0-9_.+-]+\.dll)$' -or $name.Contains('..') -or
      -not $seen.Add($name) -or $hash -notmatch '^(?i:[0-9a-f]{64})$'){throw "Invalid manifest file: $name"}
   if(-not $entries.ContainsKey($name)){throw "Manifest file missing from archive: $name"}
   $entry=$entries[$name]
