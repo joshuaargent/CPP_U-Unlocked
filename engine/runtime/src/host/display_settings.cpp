@@ -129,7 +129,7 @@ std::pair<int, int> window_size(int desktop_width, int desktop_height, float den
         const int h = static_cast<int>(std::lround(720 * scale / density));
         if (w <= room_w && h <= room_h) return {w, h};
     }
-    const int fit = std::max(1, std::min(room_w / 640, room_h / 360));
+    const int fit = (std::max)(1, (std::min)(room_w / 640, room_h / 360));
     return {640 * fit, 360 * fit};
 }
 
@@ -143,9 +143,9 @@ Parsed parse(std::string_view text) {
     size_t number = 0;
     while (!text.empty()) {
         ++number;
-        const size_t end = std::min(text.find('\n'), text.size());
+        const size_t end = (std::min)(text.find('\n'), text.size());
         const std::string_view line = trim(strip_comment(text.substr(0, end)));
-        text.remove_prefix(std::min(end + 1, text.size()));
+        text.remove_prefix((std::min)(end + 1, text.size()));
         if (line.empty()) continue;
 
         const size_t equals = line.find('=');
@@ -258,7 +258,11 @@ Loaded load(const fs::path& file) {
         return unusable("cannot read " + name + ": " + std::strerror(error));
     }
     // Never open a pipe or a device: that could wait forever.
+    #ifdef _WIN32
+    if ((st.st_mode & _S_IFMT) != _S_IFREG) return unusable(name + " is not a file");
+#else
     if (!S_ISREG(st.st_mode)) return unusable(name + " is not a file");
+#endif
     if (static_cast<uint64_t>(st.st_size) > kMaxFileSize) return unusable(name + " is larger than 64 KiB");
     std::ifstream in(file, std::ios::binary);
     std::string text;
