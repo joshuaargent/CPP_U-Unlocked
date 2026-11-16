@@ -23,6 +23,7 @@ namespace {
 constexpr size_t kMaximumEntries = 100000;
 constexpr unsigned kMaximumDepth = 128;
 constexpr uint64_t kMaximumExpandedBytes = 64ULL * 1024 * 1024 * 1024;
+constexpr uint64_t kMaximumArchiveBytes = 64ULL * 1024 * 1024 * 1024;
 
 class Fd {
 public:
@@ -190,6 +191,10 @@ int main(int argc, char** argv) {
         return 2;
     }
     try {
+        std::error_code size_error;
+        const uint64_t archive_size = fs::file_size(fs::path(argv[2]), size_error);
+        if (size_error || archive_size == 0) throw std::runtime_error("Archive is empty or cannot be read");
+        if (archive_size > kMaximumArchiveBytes) throw std::runtime_error("Archive exceeds the 64 GiB input-size safety limit");
         std::unique_ptr<ZArchiveReader> reader(ZArchiveReader::OpenFromFile(argv[2]));
         if (!reader) throw std::runtime_error("Cannot open WUA/ZArchive: " + std::string(argv[2]));
         const auto files = inventory(*reader);
