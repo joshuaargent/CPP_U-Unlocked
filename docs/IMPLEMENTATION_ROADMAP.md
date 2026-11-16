@@ -18,6 +18,9 @@
 - [x] Add a bounded Windows WUA extraction utility using the pinned ZArchive reader, with strict path/filename validation, case-collision detection, reparse-point rejection, exclusive file creation, and depth/file-count/expanded-size limits; add a dedicated Windows compile check in CI. The POSIX extractor now has matching inventory limits.
 - [x] Integrate WUA archive selection into the launcher Library workflow, with private staging, cleanup on failure, Smash title-folder validation, preservation of the original archive, and activation into the local game library.
 - [ ] Run end-to-end tests against real WUA dumps and verify interrupted-import recovery on Windows.
+- [ ] Connect the validated, user-supplied Smash Wii U base/update RPX files to the local cafe-recomp and native Vulkan runtime build pipeline; keep all game-derived code and data on the user's machine and out of CI/release assets.
+- [ ] Complete first-run build UX: toolchain/dependency checks, progress and logs, cancellation, interrupted-build recovery, and incremental rebuilds.
+- [ ] Verify the launcher starts the locally generated game runtime after a clean WUA import, without requiring a developer checkout or manually run build script.
 - [x] Add a game-update management page for selecting and removing the locally installed update dump.
 - [x] Add a Diagnostics page for platform, CPU core count, system memory, CPU optimisation path, SDL renderer, game/update validation, active mods, shader-cache count, log path, and clipboard export.
 - [x] Own and join the launcher's background workers for mod installation, Pretendo sign-in, room discovery, and application update checks; contain worker exceptions and clear the sign-in password buffer after use.
