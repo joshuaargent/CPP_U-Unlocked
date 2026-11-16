@@ -40,6 +40,8 @@ cross_f.rpx
 Thumbs.db
 
 # Build artifacts
+/engine/runtime/res/u-unlocked.ico
+/engine/runtime/res/title-logo.png
 *.exe
 *.dll
 *.pdb
