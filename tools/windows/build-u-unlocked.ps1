@@ -45,7 +45,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $playDirectory = Join-Path $repoRoot 'Play'
-$expected = @('U Unlocked.exe', 'smash.exe', 'smash-compat.exe', 'smash-base.exe', 'wua_extract.exe', 'title-logo.png')
+$expected = @('U Unlocked.exe', 'smash.exe', 'smash-compat.exe', 'smash-base.exe', 'smash-base-compat.exe', 'wua_extract.exe', 'title-logo.png')
 $missing = @($expected | Where-Object { -not (Test-Path -LiteralPath (Join-Path $playDirectory $_) -PathType Leaf) })
 if ($missing.Count -gt 0) {
     $missing | ForEach-Object { Write-Host "Missing output: $_" -ForegroundColor Red }
