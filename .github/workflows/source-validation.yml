@@ -144,7 +144,7 @@ jobs:
       - name: Compile complete Vulkan runtime
         shell: pwsh
         run: |
-          ninja -C engine/build cafe_runtime
+          ninja -j 2 -C engine/build cafe_runtime
           if ($LASTEXITCODE -ne 0) { throw 'The complete Vulkan runtime failed to compile.' }
 
   validate:
