@@ -78,7 +78,7 @@
 - [ ] Benchmark the HP EliteBook 640 G9 and tune defaults from measured results.
 - [ ] Verify graphics options do not alter deterministic game simulation; presentation interpolation must remain a render-only operation and must not advance gameplay state.
 - [x] Add opt-in measurements for previous-frame GPU retirement waits and presentation-image pool waits; see [GPU frame pacing and simulation decoupling](GPU_FRAME_PACING.md).
-- [x] Bound the GPU command-submission and timeline-retirement queues to 256 entries each with producer back-pressure; preserve all submissions and guest-visible writebacks. This bounds backlog memory but does not yet decouple simulation from GPU completion.
+- [x] Replace the GPU command-submission and timeline-retirement deques with fixed 256-entry circular buffers and producer back-pressure; preserve all submissions and guest-visible writebacks. This bounds backlog memory but does not yet decouple simulation from GPU completion.
 - [x] Bound asynchronous shader compilation to at most four workers and 64 queued jobs, with failed jobs transitioned out of the pending state.
 - [x] Report the selected Vulkan device, driver, API version, vendor/device IDs, memory heaps, and enabled optional capabilities in the runtime log.
 - [x] Filter Vulkan adapters by the renderer's required Vulkan 1.3 features and a combined graphics/compute queue before preferring a discrete GPU, allowing fallback to a compatible integrated GPU.
