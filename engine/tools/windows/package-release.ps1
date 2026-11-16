@@ -1,4 +1,4 @@
-# Packages the redistributable U Unlocked launcher only.
+# Packages the redistributable launcher and bounded WUA utility; no game runtime or user data.
 # Game runtime binaries and generated code are deliberately excluded: each user builds those locally
 # from their own game files. User saves, console files, keys, mods, caches, and settings are never packaged.
 [CmdletBinding()]
