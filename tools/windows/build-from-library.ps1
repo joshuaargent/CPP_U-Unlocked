@@ -100,6 +100,88 @@ function Find-BuildTool {
     return $null
 }
 
+$script:AssetVerificationCache = $null
+$script:AssetVerificationCachePath = $null
+$script:AssetVerificationCacheRoot = $null
+
+function Initialize-AssetVerificationCache {
+    param([Parameter(Mandatory = $true)][string]$BuildKitDirectory)
+    $resolvedRoot = [IO.Path]::GetFullPath($BuildKitDirectory)
+    if ($null -ne $script:AssetVerificationCache) {
+        if ($script:AssetVerificationCacheRoot -ne $resolvedRoot) {
+            throw 'A single build invocation cannot verify assets from multiple build-kit roots.'
+        }
+        return
+    }
+
+    $localRoot = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:TEMP }
+    $identityBytes = [Text.Encoding]::UTF8.GetBytes($resolvedRoot.ToUpperInvariant())
+    $identitySha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $identity = [BitConverter]::ToString($identitySha.ComputeHash($identityBytes)).Replace('-', '').ToLowerInvariant().Substring(0, 20)
+    } finally {
+        $identitySha.Dispose()
+    }
+    $cacheRoot = Join-Path $localRoot 'U Unlocked\BuildCache\AssetVerification'
+    New-Item -ItemType Directory -Force -Path $cacheRoot | Out-Null
+    $script:AssetVerificationCacheRoot = $resolvedRoot
+    $script:AssetVerificationCachePath = Join-Path $cacheRoot "$identity.json"
+    $script:AssetVerificationCache = @{}
+
+    if (Test-Path -LiteralPath $script:AssetVerificationCachePath -PathType Leaf) {
+        try {
+            $state = Get-Content -LiteralPath $script:AssetVerificationCachePath -Raw | ConvertFrom-Json
+            if ($state.schema_version -eq 1 -and $state.root_path -eq $resolvedRoot -and $state.files) {
+                foreach ($property in $state.files.PSObject.Properties) {
+                    $script:AssetVerificationCache[$property.Name] = [string]$property.Value
+                }
+            }
+        } catch {
+            $script:AssetVerificationCache = @{}
+        }
+    }
+}
+
+function Assert-ReleaseAssetHash {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$ExpectedHash,
+        [Parameter(Mandatory = $true)][string]$BuildKitDirectory,
+        [Parameter(Mandatory = $true)][string]$CacheKey
+    )
+    $file = Get-Item -LiteralPath $Path
+    $useCache = $file.Length -ge 10MB
+    $signature = "$($ExpectedHash.ToUpperInvariant())|$($file.Length)|$($file.LastWriteTimeUtc.Ticks)"
+    if ($useCache) {
+        Initialize-AssetVerificationCache -BuildKitDirectory $BuildKitDirectory
+        if ($script:AssetVerificationCache.ContainsKey($CacheKey) -and
+            $script:AssetVerificationCache[$CacheKey] -eq $signature) {
+            return
+        }
+    }
+
+    $actualHash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    if ($actualHash -ne $ExpectedHash.ToUpperInvariant()) {
+        throw "Release asset failed SHA-256 verification: $Path"
+    }
+    if ($useCache) {
+        $script:AssetVerificationCache[$CacheKey] = $signature
+        try {
+            $state = [ordered]@{
+                schema_version = 1
+                root_path = $script:AssetVerificationCacheRoot
+                files = $script:AssetVerificationCache
+            }
+            $temporary = "$($script:AssetVerificationCachePath).tmp"
+            $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $temporary -Encoding UTF8
+            Move-Item -LiteralPath $temporary -Destination $script:AssetVerificationCachePath -Force
+        } catch {
+            Remove-Item -LiteralPath "$($script:AssetVerificationCachePath).tmp" -Force -ErrorAction SilentlyContinue
+            Write-Verbose "Could not persist release asset verification cache: $($_.Exception.Message)"
+        }
+    }
+}
+
 function Assert-BuildKitFile {
     param(
         [Parameter(Mandatory = $true)][string]$BuildKitDirectory,
@@ -121,10 +203,7 @@ function Assert-BuildKitFile {
     if ($expected.Length -ne 64 -or $expected -match '[^0-9a-fA-F]') {
         throw "The build-kit manifest has an invalid SHA-256 for $FileName."
     }
-    $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash
-    if ($actual -ne $expected.ToUpperInvariant()) {
-        throw "The build-kit asset failed SHA-256 verification: $FileName"
-    }
+    Assert-ReleaseAssetHash -Path $filePath -ExpectedHash $expected -BuildKitDirectory $BuildKitDirectory -CacheKey "build-kit:$FileName"
 }
 
 function Assert-RootPackageFile {
@@ -149,10 +228,7 @@ function Assert-RootPackageFile {
     if ($expected.Length -ne 64 -or $expected -match '[^0-9a-fA-F]') {
         throw "The build-kit manifest has an invalid SHA-256 for $FileName."
     }
-    $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash
-    if ($actual -ne $expected.ToUpperInvariant()) {
-        throw "The root release asset failed build-kit manifest SHA-256 verification: $FileName"
-    }
+    Assert-ReleaseAssetHash -Path $filePath -ExpectedHash $expected -BuildKitDirectory $BuildKitDirectory -CacheKey "package-root:$FileName"
 }
 
 function Copy-PreservedDirectory {
