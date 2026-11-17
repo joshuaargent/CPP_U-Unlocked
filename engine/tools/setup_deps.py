@@ -290,7 +290,7 @@ def create_dependency_bundle(output, dependencies):
                 bundle.write(path, f"bundle/{archive_path}")
         bundle.writestr(
             "bundle/dependency-manifest.json",
-            json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\\n",
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
         )
     if not output.is_file() or output.stat().st_size == 0:
         raise RuntimeError("The dependency bundle was not created.")
