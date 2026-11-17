@@ -84,7 +84,7 @@ try {
         $name = $entry.FullName.Replace([char]92, [char]47)
         if ($name -eq 'runtime-manifest.json') { continue }
         if (-not $expected.ContainsKey($name)) { throw "Unlisted prebuilt runtime object: $name" }
-        $relative = $name.Substring('objects/'.Length).Replace('/', '\')
+        $relative = $name.Replace('/', '\')
         $target = Join-Path $stage $relative
         $targetDirectory = Split-Path -Parent $target
         New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
@@ -96,7 +96,9 @@ try {
             throw "Prebuilt runtime object failed SHA-256 verification: $name"
         }
     }
-    Copy-Item -LiteralPath (Join-Path $stage 'runtime-manifest.json') -Destination (Join-Path $stage 'runtime-manifest.json') -Force -ErrorAction SilentlyContinue
+    $manifestInput = $entries['runtime-manifest.json'].Open()
+    $manifestOutput = [IO.File]::Create((Join-Path $stage 'runtime-manifest.json'))
+    try { $manifestInput.CopyTo($manifestOutput) } finally { $manifestOutput.Dispose(); $manifestInput.Dispose() }
     $archive.Dispose()
     $archive = $null
 
