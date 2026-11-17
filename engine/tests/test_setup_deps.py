@@ -214,6 +214,20 @@ class DependencyArchiveTests(unittest.TestCase):
                     )
             self.assertEqual(urlopen.call_count, 1)
 
+    def test_rejects_invalid_content_length_without_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "source.zip"
+            response = FakeResponse("not-a-number", [b"abcdef"])
+            with mock.patch.object(
+                setup_deps.urllib.request, "urlopen", return_value=response
+            ) as urlopen:
+                with self.assertRaisesRegex(RuntimeError, "invalid Content-Length"):
+                    setup_deps.download_archive(
+                        "SDL", "https://example.invalid/source.zip", archive
+                    )
+            self.assertEqual(urlopen.call_count, 1)
+            self.assertFalse(archive.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
