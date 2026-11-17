@@ -56,6 +56,10 @@ try {
     Copy-Item -LiteralPath $cmakeRoot -Destination $cmakeDestination -Recurse -Force
     Copy-Item -LiteralPath $pythonRoot -Destination $pythonDestination -Recurse -Force
     Copy-Item -LiteralPath $ninjaExe -Destination (Join-Path $ninjaDestination 'ninja.exe') -Force
+    $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+    $ninjaLicense = Join-Path $repoRoot 'LICENSES\NINJA-APACHE-2.0.txt'
+    if (-not (Test-Path -LiteralPath $ninjaLicense -PathType Leaf)) { throw 'The Ninja Apache 2.0 licence notice is missing.' }
+    Copy-Item -LiteralPath $ninjaLicense -Destination (Join-Path $ninjaDestination 'LICENSE-APACHE-2.0.txt') -Force
 
     $stagedCmake = Join-Path $cmakeDestination $cmakeRelative
     $stagedPython = Join-Path $pythonDestination $pythonRelative
