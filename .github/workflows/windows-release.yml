@@ -65,6 +65,8 @@ jobs:
 
       - name: Fetch all pinned third-party sources
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python engine/tools/setup_deps.py
           if ($LASTEXITCODE -ne 0) { throw 'Fetching pinned third-party sources failed.' }
