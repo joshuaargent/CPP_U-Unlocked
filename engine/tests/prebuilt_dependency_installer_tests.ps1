@@ -86,11 +86,13 @@ function New-TestArchive {
 
 try {
     $lockPath = Join-Path $engineRoot 'dependencies.lock.json'
-    Set-Content -LiteralPath $lockPath -Value '{"SDL":{"revision":"0123456789abcdef0123456789abcdef01234567"}}' -Encoding UTF8
+    $originalLock = '{"SDL":{"revision":"0123456789abcdef0123456789abcdef01234567"}}'
+    Set-Content -LiteralPath $lockPath -Value $originalLock -Encoding UTF8
     $lockHash = Get-TestHash $lockPath
     $recipePath = Join-Path $engineRoot 'tools\windows\build-deps.ps1'
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $recipePath) | Out-Null
-    Set-Content -LiteralPath $recipePath -Value '# pinned dependency build recipe test fixture' -Encoding UTF8
+    $originalRecipe = '# pinned dependency build recipe test fixture'
+    Set-Content -LiteralPath $recipePath -Value $originalRecipe -Encoding UTF8
     $recipeHash = Get-TestHash $recipePath
 
     $libDirectory = Join-Path $sourceRoot 'lib'
@@ -126,6 +128,16 @@ try {
     if ((Get-TestHash $installedLibrary) -ne $installedHash) {
         throw 'A lock mismatch modified the previously installed prefix.'
     }
+
+    Set-Content -LiteralPath $lockPath -Value $originalLock -Encoding UTF8
+    Set-Content -LiteralPath $recipePath -Value 'changed dependency build recipe' -Encoding UTF8
+    $recipeMismatchRejected = $false
+    try { & $installer -ArchivePath $validArchive -EngineRoot $engineRoot } catch { $recipeMismatchRejected = $true }
+    if (-not $recipeMismatchRejected) { throw 'The installer accepted a dependency build recipe mismatch.' }
+    if ((Get-TestHash $installedLibrary) -ne $installedHash) {
+        throw 'A build recipe mismatch modified the previously installed prefix.'
+    }
+    Set-Content -LiteralPath $recipePath -Value $originalRecipe -Encoding UTF8
 
     $traversalArchive = Join-Path $temporary 'traversal.zip'
     New-TestArchive -Path $traversalArchive -Root $sourceRoot -LockHash $lockHash -RecipeHash $recipeHash -Traversal
