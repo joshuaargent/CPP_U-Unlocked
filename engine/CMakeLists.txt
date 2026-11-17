@@ -10,7 +10,9 @@ if(WIN32)
     find_package(ZLIB REQUIRED)
     set(Vulkan_INCLUDE_DIR ${CAFE_DEPS_PREFIX}/include CACHE PATH "")
     set(Vulkan_LIBRARY ${CAFE_DEPS_PREFIX}/lib/libvulkan-1.a CACHE FILEPATH "")
-    set(CAFE_PREBUILT_RUNTIME_DIR "$ENV{U_UNLOCKED_PREBUILT_RUNTIME_DIR}")
+    # CMake's generated glob-verification scripts parse backslashes as escapes.
+    # Normalize this externally supplied Windows path before it is used in GLOB.
+    file(TO_CMAKE_PATH "$ENV{U_UNLOCKED_PREBUILT_RUNTIME_DIR}" CAFE_PREBUILT_RUNTIME_DIR)
 elseif(NOT UNIX)
     message(FATAL_ERROR "The safe extraction utility currently requires a POSIX host.")
 endif()
