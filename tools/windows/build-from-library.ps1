@@ -83,7 +83,7 @@ $logPath = Join-Path $LogDirectory ("build-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date
 $transcriptStarted = $false
 
 try {
-    Start-Transcript -LiteralPath $logPath -Force | Out-Null
+    Start-Transcript -Path $logPath -Force | Out-Null
     $transcriptStarted = $true
 
     Write-Host 'U Unlocked local Vulkan runtime build' -ForegroundColor Cyan
