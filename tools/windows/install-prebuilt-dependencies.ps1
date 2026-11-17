@@ -43,6 +43,7 @@ try {
         $kind = ($entry.ExternalAttributes -shr 16) -band 0xF000
         if ($kind -eq 0xA000) { throw "Symbolic links are not allowed in the prebuilt dependency archive: $name" }
         if ($entries.ContainsKey($name)) { throw "Duplicate prebuilt dependency archive path: $name" }
+        if ($entry.Name -eq '') { continue }
         $entries.Add($name, $entry)
         $expanded += [int64]$entry.Length
         if ($expanded -gt 2GB) { throw 'Prebuilt dependency archive expands beyond the 2 GiB safety limit.' }
@@ -67,7 +68,7 @@ try {
         $name = [string]$file.path
         $hash = [string]$file.sha256
         if (-not $name.StartsWith('prefix/', [StringComparison]::Ordinal) -or
-            $name.Contains('..') -or $name.Contains(':') -or $hash -notmatch '^[0-9a-fA-F]{64}$' -or
+            $name.Contains('..') -or $name.Contains(':') -or ($hash.Length -ne 64 -or $hash -notmatch '^[0-9a-fA-F]{64}') -or
             $expected.ContainsKey($name)) {
             throw "Invalid or duplicate file in prebuilt dependency manifest: $name"
         }
