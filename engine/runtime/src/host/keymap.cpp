@@ -100,9 +100,9 @@ Parsed parse(std::string_view text, const Resolver& resolve) {
     size_t number = 0;
     while (!text.empty()) {
         ++number;
-        const size_t end = std::min(text.find('\n'), text.size());
+        const size_t end = (std::min)(text.find('\n'), text.size());
         const std::string_view line = trim(strip_comment(text.substr(0, end)));
-        text.remove_prefix(std::min(end + 1, text.size()));
+        text.remove_prefix((std::min)(end + 1, text.size()));
         if (line.empty()) continue;
 
         const size_t equals = line.find('=');
