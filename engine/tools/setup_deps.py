@@ -125,6 +125,100 @@ def safe_extract(archive, destination):
                 raise RuntimeError(f"Unresolved symbolic links in dependency archive: {unresolved}")
             pending = remaining
 
+def download_archive(name, url, archive):
+    """Download a pinned archive with bounded retries for transient network failures."""
+    import http.client
+    import time
+    import urllib.error
+
+    class TransientReadError(Exception):
+        pass
+
+    attempts = 5
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "U-Unlocked-Dependency-Bootstrap", "Accept": "application/zip"}
+        )
+        try:
+            response = urllib.request.urlopen(request, timeout=90)
+        except urllib.error.HTTPError as error:
+            if error.code not in (408, 425, 429) and not 500 <= error.code <= 599:
+                error.close()
+                archive.unlink(missing_ok=True)
+                raise RuntimeError(
+                    f"{name}: GitHub rejected the pinned dependency download (HTTP {error.code})."
+                ) from error
+            last_error = error
+            error.close()
+        except (urllib.error.URLError, http.client.RemoteDisconnected,
+                TimeoutError, ConnectionError) as error:
+            last_error = error
+        else:
+            try:
+                with response:
+                    content_length = response.headers.get("Content-Length")
+                    try:
+                        expected = int(content_length) if content_length else None
+                    except ValueError as error:
+                        raise RuntimeError(
+                            f"{name}: server returned an invalid Content-Length header."
+                        ) from error
+                    if expected is not None and (expected < 0 or expected > 512 * 1024 * 1024):
+                        raise RuntimeError(
+                            f"{name}: compressed dependency archive exceeds the 512 MiB download limit."
+                        )
+
+                    total = 0
+                    with archive.open("wb") as output:
+                        while True:
+                            try:
+                                block = response.read(1024 * 1024)
+                            except (http.client.IncompleteRead, http.client.RemoteDisconnected,
+                                    TimeoutError, ConnectionError, OSError) as error:
+                                raise TransientReadError from error
+                            if not block:
+                                break
+                            total += len(block)
+                            if total > 512 * 1024 * 1024:
+                                raise RuntimeError(
+                                    f"{name}: compressed dependency archive exceeds the 512 MiB download limit."
+                                )
+                            output.write(block)
+                    if expected is not None and total != expected:
+                        raise http.client.IncompleteRead(b"", expected - total)
+                    if total == 0:
+                        raise RuntimeError(f"{name}: downloaded dependency archive is empty.")
+                return
+            except TransientReadError as error:
+                last_error = error.__cause__
+            except (http.client.IncompleteRead, http.client.RemoteDisconnected,
+                    TimeoutError, ConnectionError, urllib.error.URLError) as error:
+                last_error = error
+
+        try:
+            archive.unlink(missing_ok=True)
+        except OSError as error:
+            raise RuntimeError(
+                f"{name}: cannot remove an incomplete dependency archive: {error}"
+            ) from error
+
+        if attempt == attempts:
+            break
+        delay = min(2 ** (attempt - 1), 16)
+        print(
+            f"{name}: transient download failure on attempt {attempt}/{attempts} "
+            f"({last_error}); retrying in {delay}s",
+            flush=True
+        )
+        time.sleep(delay)
+
+    raise RuntimeError(
+        f"{name}: unable to download pinned source after {attempts} attempts: {last_error}"
+    ) from last_error
+
+
 def fetch_dependency(name, dependency):
     destination = ROOT / "third_party" / name
     revision = dependency["revision"]
@@ -155,24 +249,8 @@ def fetch_dependency(name, dependency):
         archive = temporary_path / "source.zip"
         extraction = temporary_path / "source"
         extraction.mkdir()
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": "U-Unlocked-Dependency-Bootstrap", "Accept": "application/zip"}
-        )
-        print(f"{name}: downloading pinned source {revision}")
-        with urllib.request.urlopen(request, timeout=60) as response, archive.open("wb") as output:
-            content_length = response.headers.get("Content-Length")
-            if content_length and int(content_length) > 512 * 1024 * 1024:
-                raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
-            total = 0
-            while True:
-                block = response.read(1024 * 1024)
-                if not block:
-                    break
-                total += len(block)
-                if total > 512 * 1024 * 1024:
-                    raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
-                output.write(block)
+        print(f"{name}: downloading pinned source {revision}", flush=True)
+        download_archive(name, url, archive)
         safe_extract(archive, extraction)
         if not any(extraction.iterdir()):
             raise RuntimeError(f"{name}: source archive extracted no files.")
