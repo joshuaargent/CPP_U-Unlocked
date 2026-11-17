@@ -124,6 +124,30 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $runtimeVerificationEngine 'build-prebuilt-runtime\runtime-manifest.json') -PathType Leaf)) {
         throw 'The prebuilt runtime archive failed its clean-directory installation test.'
     }
+
+    # Configure and link all four CPU/game combinations against the imported
+    # runtime objects and static libraries, proving players do not rebuild them.
+    $previousRuntimeDirectory = $env:U_UNLOCKED_PREBUILT_RUNTIME_DIR
+    $env:U_UNLOCKED_PREBUILT_RUNTIME_DIR = Join-Path $runtimeVerificationEngine 'build-prebuilt-runtime'
+    . (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1')
+    $toolchainRoot = Get-UUnlockedToolchainRoot
+    $compilerBin = Join-Path $toolchainRoot 'llvm-mingw\bin'
+    $env:PATH = "$compilerBin;$env:PATH"
+    try {
+        $runtimeVerificationBuild = Join-Path $runtimeVerificationRoot 'cmake-build'
+        $updateFixture = (Resolve-Path (Join-Path $engineRoot 'tests\cmake_game_targets\fixtures\update')).Path
+        $baseFixture = (Resolve-Path (Join-Path $engineRoot 'tests\cmake_game_targets\fixtures\base')).Path
+        & cmake -S $engineRoot -B $runtimeVerificationBuild -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-clang++ -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_EXE_LINKER_FLAGS=-static "-DSMASH_GENERATED_DIR=$updateFixture" "-DSMASH_BASE_GENERATED_DIR=$baseFixture"
+        if ($LASTEXITCODE -ne 0) { throw 'CMake could not configure the installed prebuilt runtime and library targets.' }
+        & ninja -j 2 -C $runtimeVerificationBuild smash_update_v3 smash_update_v2 smash_base_v3 smash_base_v2
+        if ($LASTEXITCODE -ne 0) { throw 'The four game targets failed to link against the prebuilt runtime bundle.' }
+    } finally {
+        if ([string]::IsNullOrWhiteSpace($previousRuntimeDirectory)) {
+            Remove-Item Env:\U_UNLOCKED_PREBUILT_RUNTIME_DIR -ErrorAction SilentlyContinue
+        } else {
+            $env:U_UNLOCKED_PREBUILT_RUNTIME_DIR = $previousRuntimeDirectory
+        }
+    }
 } finally {
     if (Test-Path -LiteralPath $runtimeVerificationRoot) {
         Remove-Item -LiteralPath $runtimeVerificationRoot -Recurse -Force
