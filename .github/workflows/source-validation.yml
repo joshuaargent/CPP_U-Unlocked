@@ -163,7 +163,11 @@ jobs:
           add_executable(prebuilt_sdl_check main.cpp)
           target_link_libraries(prebuilt_sdl_check PRIVATE SDL3::SDL3)
           '@ | Set-Content -LiteralPath (Join-Path $checkProject 'CMakeLists.txt') -Encoding UTF8
-          '#include <SDL3/SDL.h>' | Set-Content -LiteralPath (Join-Path $checkProject 'main.cpp') -Encoding UTF8
+          @'
+          #define SDL_MAIN_HANDLED
+          #include <SDL3/SDL.h>
+          int main() { return 0; }
+          '@ | Set-Content -LiteralPath (Join-Path $checkProject 'main.cpp') -Encoding UTF8
           $compilerBin = (Resolve-Path 'toolchain/llvm-mingw/bin').Path
           $env:PATH = "$compilerBin;$env:PATH"
           $relocatedPrefix = Join-Path $testEngine 'build-deps/prefix'
