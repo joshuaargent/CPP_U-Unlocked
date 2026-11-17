@@ -305,7 +305,7 @@ jobs:
             }
           }
           if ($allParseErrors.Count -gt 0) {
-            $allParseErrors | ForEach-Object { Write-Error $_ }
+            $allParseErrors | ForEach-Object { Write-Host $_ -ForegroundColor Red }
             throw 'PowerShell syntax validation failed. See all file and line diagnostics above.'
           }
 
