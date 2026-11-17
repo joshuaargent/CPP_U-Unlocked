@@ -65,6 +65,7 @@ namespace display = cafe::host::display;
 namespace online = cafe::os::online;
 namespace act_server = cafe::os::act_server;
 namespace controller_profiles = cafe::host::controller_profiles;
+namespace keymap = cafe::host::keymap;
 using namespace cafe::host::paint;
 
 namespace {
