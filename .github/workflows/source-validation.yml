@@ -276,7 +276,7 @@ jobs:
         shell: pwsh
         run: |
           $root = (Resolve-Path '.').Path
-          $scriptRoots = @((Join-Path $root 'tools'), (Join-Path $root 'engine/tools'))
+          $scriptRoots = @((Join-Path $root 'tools'), (Join-Path $root 'engine/tools'), (Join-Path $root 'engine/tests'))
           $files = @($scriptRoots | ForEach-Object { Get-ChildItem -Path $_ -Filter '*.ps1' -Recurse -File })
           foreach ($file in $files) {
             $tokens = $null
