@@ -131,6 +131,9 @@ def download_archive(name, url, archive):
     import time
     import urllib.error
 
+    class _TransientDownloadError(Exception):
+        pass
+
     attempts = 5
     last_error = None
     for attempt in range(1, attempts + 1):
