@@ -189,6 +189,7 @@ try {
     Write-Host "Update RPX: $($update.Size) bytes"
 
     $releaseAssetRoot = $null
+    Remove-Item Env:\U_UNLOCKED_PREBUILT_RUNTIME_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:\U_UNLOCKED_PREBUILT_LAUNCHER -ErrorAction SilentlyContinue
     Remove-Item Env:\U_UNLOCKED_PREBUILT_WUA_EXTRACTOR -ErrorAction SilentlyContinue
     if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
@@ -250,6 +251,7 @@ try {
         $sourceRevision = (Get-Content -LiteralPath (Join-Path $releaseAssetRoot 'source-revision.txt') -Raw).Trim()
         & $prebuiltRuntimeInstaller -ArchivePath $runtimeArchive -EngineRoot (Join-Path $repoRoot 'engine') -ExpectedSourceRevision $sourceRevision
         if ($LASTEXITCODE -ne 0) { throw 'Precompiled generic runtime verification or installation failed.' }
+        $env:U_UNLOCKED_PREBUILT_RUNTIME_DIR = Join-Path (Join-Path $repoRoot 'engine') 'build-prebuilt-runtime'
     }
 
     # Keep Ninja's object files outside the replaceable release folder. The key
@@ -295,7 +297,7 @@ try {
         finally { $dependencySha.Dispose() }
     }
     $runtimeManifestPath = Join-Path $repoRoot 'engine\build-prebuilt-runtime\runtime-manifest.json'
-    if (Test-Path -LiteralPath $runtimeManifestPath -PathType Leaf) {
+    if ($releaseAssetRoot -and (Test-Path -LiteralPath $runtimeManifestPath -PathType Leaf)) {
         $runtimeManifest = Get-Content -LiteralPath $runtimeManifestPath -Raw | ConvertFrom-Json
         $runtimeFingerprintData = [ordered]@{
             compiler_sha256 = $runtimeManifest.compiler_sha256
