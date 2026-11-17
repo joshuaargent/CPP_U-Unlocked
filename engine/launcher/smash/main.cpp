@@ -1097,7 +1097,8 @@ private:
                     "D-PAD UP", "D-PAD DOWN", "D-PAD LEFT", "D-PAD RIGHT",
                     "FACE TOP (X)", "FACE BOTTOM (B)", "FACE LEFT (Y)", "FACE RIGHT (A)",
                     "L", "R", "ZL", "ZR", "LEFT STICK UP", "LEFT STICK DOWN",
-                    "LEFT STICK LEFT", "LEFT STICK RIGHT", "PLUS", "MINUS", "HOME"};
+                    "LEFT STICK LEFT", "LEFT STICK RIGHT", "RIGHT STICK UP", "RIGHT STICK DOWN",
+                    "RIGHT STICK LEFT", "RIGHT STICK RIGHT", "PLUS", "MINUS", "HOME"};
                 const uint16_t scancode = keyboard_keys_[control_keyboard_action_];
                 const char* key_name = SDL_GetScancodeName(static_cast<SDL_Scancode>(scancode));
                 list_ = {{"INPUT DEVICE", "Keyboard (Player 1)"},
