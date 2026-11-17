@@ -90,6 +90,18 @@ endif()
 # Function-level PowerPC -> C++ recompiler for the standalone port.
 add_subdirectory(recomp)
 add_subdirectory(runtime)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "\${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    foreach(variant IN ITEMS v2 v3)
+        file(GLOB_RECURSE CAFE_PREBUILT_HOST_OBJECTS CONFIGURE_DEPENDS
+            "\${CAFE_PREBUILT_RUNTIME_DIR}/host/\${variant}/*.obj")
+        list(LENGTH CAFE_PREBUILT_HOST_OBJECTS CAFE_PREBUILT_HOST_OBJECT_COUNT)
+        if(NOT CAFE_PREBUILT_HOST_OBJECT_COUNT EQUAL 3)
+            message(FATAL_ERROR "The prebuilt \${variant} host object set is incomplete: \${CAFE_PREBUILT_HOST_OBJECT_COUNT} objects")
+        endif()
+        add_library(smash_host_\${variant} OBJECT IMPORTED GLOBAL)
+        set_property(TARGET smash_host_\${variant} PROPERTY IMPORTED_OBJECTS "\${CAFE_PREBUILT_HOST_OBJECTS}")
+    endforeach()
+endif()
 
 if(WIN32)
     # Compile the game-host translation units in CI even when no copyrighted
