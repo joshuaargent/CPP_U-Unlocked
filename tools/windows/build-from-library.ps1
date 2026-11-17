@@ -225,9 +225,9 @@ try {
     # Child PowerShell processes cannot modify this process's PATH. Resolve the
     # just-installed tools again here before verify-checkout and the build scripts.
     $toolchainRoot = Get-UUnlockedToolchainRoot
-    $cmake = Find-BuildTool 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
-    $ninja = Find-BuildTool 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
-    $python = Find-BuildTool 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
+    $cmake = Find-BuildTool 'cmake.exe' @((Join-Path $toolchainRoot 'cmake\bin\cmake.exe'), "$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
+    $ninja = Find-BuildTool 'ninja.exe' @((Join-Path $toolchainRoot 'ninja\ninja.exe'), "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
+    $python = Find-BuildTool 'python.exe' @((Join-Path $toolchainRoot 'python\python.exe'), "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
     $compilerBin = Join-Path $toolchainRoot 'llvm-mingw\bin'
     if (-not $cmake -or -not $ninja -or -not $python -or -not (Test-Path -LiteralPath (Join-Path $compilerBin 'x86_64-w64-mingw32-clang++.exe') -PathType Leaf)) {
         throw 'The pinned CMake, Ninja, Python, or llvm-mingw compiler could not be located after bootstrap.'
