@@ -96,18 +96,24 @@ foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\
 # Bind the player assets to the exact build-kit archive. The outer release
 # manifest authenticates build-kit.zip; this inner manifest lets the player
 # re-check each prebuilt asset immediately before using it.
+$buildKitAssets = @(
+    @{ name = 'prebuilt-dependencies.zip'; path = (Join-Path $buildKit 'prebuilt-dependencies.zip') },
+    @{ name = 'cafe-recomp.exe'; path = (Join-Path $buildKit 'cafe-recomp.exe') },
+    @{ name = 'dependency-bundle.zip'; path = (Join-Path $buildKit 'dependency-bundle.zip') },
+    @{ name = 'U Unlocked.exe'; path = $launcher },
+    @{ name = 'wua_extract.exe'; path = $wuaExtractor }
+)
 $buildKitManifest = [ordered]@{
     schema_version = 1
     version = $Version
     files = @(
-        foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip')) {
-            $assetPath = Join-Path $buildKit $asset
-            if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
-                throw "A required prebuilt build-kit asset is missing: $asset"
+        foreach ($asset in $buildKitAssets) {
+            if (-not (Test-Path -LiteralPath $asset.path -PathType Leaf)) {
+                throw "A required release build-kit asset is missing: $($asset.name)"
             }
             [ordered]@{
-                name = $asset
-                sha256 = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+                name = $asset.name
+                sha256 = (Get-FileHash -LiteralPath $asset.path -Algorithm SHA256).Hash.ToLowerInvariant()
             }
         }
     )
