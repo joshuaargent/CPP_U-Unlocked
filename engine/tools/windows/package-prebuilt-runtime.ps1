@@ -20,6 +20,19 @@ if (-not (Test-Path -LiteralPath $objectsRoot -PathType Container)) {
     throw "The compiled generic runtime object directory is missing: $objectsRoot"
 }
 $objects = @(Get-ChildItem -LiteralPath $objectsRoot -Filter '*.obj' -File -Recurse | Sort-Object FullName)
+$librarySources = [ordered]@{
+    'libamd_addrlib.a' = Join-Path $EngineRoot 'build\libamd_addrlib.a'
+    'libcemu_nex.a' = Join-Path $EngineRoot 'build\libcemu_nex.a'
+    'libcafe_rpx.a' = Join-Path $EngineRoot 'build\recomp\libcafe_rpx.a'
+    'libcafe_title.a' = Join-Path $EngineRoot 'build\runtime\libcafe_title.a'
+    'libcafe_latte.a' = Join-Path $EngineRoot 'build\runtime\libcafe_latte.a'
+    'libzarchive.a' = Join-Path $EngineRoot 'build\third_party\ZArchive\libzarchive.a'
+}
+foreach ($library in $librarySources.GetEnumerator()) {
+    if (-not (Test-Path -LiteralPath $library.Value -PathType Leaf)) {
+        throw "A required generic runtime static library is missing: $($library.Value)"
+    }
+}
 if ($objects.Count -lt 40 -or $objects.Count -gt 200) {
     throw "The generic runtime object count is outside the expected range: $($objects.Count)"
 }
@@ -41,6 +54,8 @@ $completed = $false
 try {
     $stageObjects = Join-Path $stage 'objects'
     New-Item -ItemType Directory -Force -Path $stageObjects | Out-Null
+    $stageLibraries = Join-Path $stage 'libraries'
+    New-Item -ItemType Directory -Force -Path $stageObjects, $stageLibraries | Out-Null
     $records = @(
         foreach ($object in $objects) {
             $relative = $object.FullName.Substring($objectsRoot.Length + 1).Replace('\', '/')
@@ -59,6 +74,17 @@ try {
             }
         }
     )
+    $libraryRecords = @(
+        foreach ($library in $librarySources.GetEnumerator()) {
+            $destination = Join-Path $stageLibraries $library.Key
+            Copy-Item -LiteralPath $library.Value -Destination $destination
+            [ordered]@{
+                path = 'libraries/' + $library.Key
+                sha256 = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+                length = (Get-Item -LiteralPath $destination).Length
+            }
+        }
+    )
     $manifest = [ordered]@{
         schema_version = 1
         architecture = 'x86_64-windows'
@@ -67,6 +93,8 @@ try {
         build_configuration = 'Release; generic x86-64 baseline; no game-derived sources'
         object_count = $records.Count
         objects = $records
+        library_count = $libraryRecords.Count
+        libraries = $libraryRecords
     }
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stage 'runtime-manifest.json') -Encoding UTF8
 
