@@ -31,6 +31,7 @@ $outputDirectory = Split-Path -Parent $OutputArchive
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 $stage = Join-Path $outputDirectory ('.prebuilt-dependencies-' + [guid]::NewGuid().ToString('N'))
 $archive = $null
+$completed = $false
 
 try {
     $stagePrefix = Join-Path $stage 'prefix'
@@ -96,10 +97,14 @@ try {
     if (-not (Test-Path -LiteralPath $OutputArchive -PathType Leaf) -or (Get-Item -LiteralPath $OutputArchive).Length -eq 0) {
         throw 'Precompiled dependency archive was not created.'
     }
+    $completed = $true
     Write-Host "Created relocatable precompiled dependency archive: $OutputArchive" -ForegroundColor Green
 } finally {
     if ($archive) { $archive.Dispose() }
     if (Test-Path -LiteralPath $stage -PathType Container) {
         Remove-Item -LiteralPath $stage -Recurse -Force
+    }
+    if (-not $completed -and (Test-Path -LiteralPath $OutputArchive -PathType Leaf)) {
+        Remove-Item -LiteralPath $OutputArchive -Force
     }
 }
