@@ -23,6 +23,7 @@ $requiredSource = @(
     (Join-Path $repoRoot 'tools\windows\build-from-library.ps1'),
     (Join-Path $repoRoot 'tools\windows\setup-build-environment.ps1'),
     (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1'),
+    (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1'),
     (Join-Path $repoRoot 'tools\windows\install-prebuilt-dependencies.ps1'),
     (Join-Path $enginePath 'tools\windows\package-prebuilt-dependencies.ps1'),
     (Join-Path $enginePath 'tools\windows\package-release.ps1'),
