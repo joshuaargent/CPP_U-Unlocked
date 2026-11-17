@@ -13,7 +13,7 @@ function Assert-True {
 }
 
 function New-TestRuntime {
-    param([string]$Directory, [string]$Marker, [string[]]$Files = $required)
+    param([string]$Directory, [string]$Marker, [string[]]$Files = @('smash.exe', 'smash-compat.exe', 'smash-base.exe', 'smash-base-compat.exe', 'wua_extract.exe', 'title-logo.png'))
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     foreach ($file in $Files) {
         $path = Join-Path $Directory $file
