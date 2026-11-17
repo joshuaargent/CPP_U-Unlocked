@@ -102,6 +102,28 @@ try {
         if ($actualHash -ne $expected[$name]) { throw "Prebuilt dependency SHA-256 mismatch: $name" }
     }
 
+    # Rebuilds can happen when only the user's game RPX changes. Avoid extracting
+    # and rewriting the large dependency prefix when every installed file is
+    # already byte-for-byte identical to the verified release archive.
+    if (Test-Path -LiteralPath $destination -PathType Container) {
+        $existingFiles = @(Get-ChildItem -LiteralPath $destination -File -Recurse)
+        if ($existingFiles.Count -eq $expected.Count) {
+            $existingMatches = $true
+            foreach ($file in $existingFiles) {
+                $relative = $file.FullName.Substring($destination.Length + 1).Replace('\\', '/')
+                if (-not $expected.ContainsKey("prefix/$relative") -or
+                    (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected["prefix/$relative"]) {
+                    $existingMatches = $false
+                    break
+                }
+            }
+            if ($existingMatches) {
+                Write-Host "Verified precompiled Windows dependencies are already current: $destination" -ForegroundColor Green
+                return
+            }
+        }
+    }
+
     New-Item -ItemType Directory -Force -Path $stage | Out-Null
     foreach ($name in $actualNames) {
         $relative = $name.Substring('prefix/'.Length)
