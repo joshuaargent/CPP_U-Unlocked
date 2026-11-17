@@ -126,6 +126,7 @@ $buildEntry = Join-Path $repoRoot 'tools\windows\build-u-unlocked.ps1'
 $environmentSetup = Join-Path $PSScriptRoot 'setup-build-environment.ps1'
 $verifyScript = Join-Path $PSScriptRoot 'verify-checkout.ps1'
 $activationScript = Join-Path $PSScriptRoot 'runtime-activation.ps1'
+. (Join-Path $PSScriptRoot 'toolchain-path.ps1')
 $prebuiltDependencyInstaller = Join-Path $PSScriptRoot 'install-prebuilt-dependencies.ps1'
 
 foreach ($required in @($buildEntry, $environmentSetup, $verifyScript, $activationScript, $prebuiltDependencyInstaller)) {
@@ -185,7 +186,7 @@ try {
 
     # Child PowerShell processes cannot modify this process's PATH. Resolve the
     # just-installed tools again here before verify-checkout and the build scripts.
-    $toolchainRoot = Join-Path $repoRoot 'toolchain'
+    $toolchainRoot = Get-UUnlockedToolchainRoot
     $cmake = Find-BuildTool 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
     $ninja = Find-BuildTool 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
     $python = Find-BuildTool 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
