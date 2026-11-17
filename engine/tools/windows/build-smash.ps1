@@ -32,29 +32,21 @@ function Get-Sha256([string]$Path) {
 }
 
 function Test-GeneratedCodeCache {
-    param(
-        [Parameter(Mandatory = $true)][string]$RpxPath,
-        [Parameter(Mandatory = $true)][string]$OutputDirectory,
-        [Parameter(Mandatory = $true)][string]$RecompilerPath
-    )
+    param([string]$RpxPath, [string]$OutputDirectory, [string]$RecompilerPath)
     $manifestPath = Join-Path $OutputDirectory '.u-unlocked-cache.json'
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $false }
     try {
         $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-        if ($manifest.schema_version -ne 1 -or
-            $manifest.rpx_sha256 -ne (Get-Sha256 $RpxPath) -or
-            $manifest.recompiler_sha256 -ne (Get-Sha256 $RecompilerPath) -or
-            $manifest.arguments -ne '--any-rpx' -or
-            -not ($manifest.files -is [array]) -or $manifest.files.Count -eq 0) {
-            return $false
-        }
-
+        if ($manifest.schema_version -ne 1 -or $manifest.rpx_sha256 -ne (Get-Sha256 $RpxPath) -or
+            $manifest.recompiler_sha256 -ne (Get-Sha256 $RecompilerPath) -or $manifest.arguments -ne '--any-rpx' -or
+            -not ($manifest.files -is [array]) -or $manifest.files.Count -eq 0) { return $false }
         $expected = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($file in $manifest.files) {
             $relative = [string]$file.path
             $hash = [string]$file.sha256
-            if ([string]::IsNullOrWhiteSpace($relative) -or $relative.Contains('..') -or
-                [IO.Path]::IsPathRooted($relative) -or $hash -notmatch '^[0-9a-fA-F]{64}if (-not (Test-Path -LiteralPath $stbHeader -PathType Leaf)) {
+            if ([string]::IsNullOrWhiteSpace($relative) -or $relative.Contains('..') -or [IO.Path]::IsPathRooted($relative) -or
+                $hash -notmatch '^[0-9a-fA-F]{64}
+if (-not (Test-Path -LiteralPath $stbHeader -PathType Leaf)) {
     $python = (Get-Command python).Source
     & $python (Join-Path $engineRoot 'tools\setup_deps.py') stb
     if ($LASTEXITCODE) { throw 'Fetching the pinned stb headers failed.' }
@@ -68,9 +60,7 @@ if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) {
     & (Join-Path $PSScriptRoot 'build-recomp.ps1')
     if ($LASTEXITCODE) { throw 'Building the recompilation tools failed.' }
 }
-if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) {
-    throw "The cafe-recomp executable is missing: $recompiler"
-}
+if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) { throw "The cafe-recomp executable is missing: $recompiler" }
 
 $env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $prefix 'bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
 Invoke-CachedRecompile -Label 'update' -RpxPath $Rpx -OutputDirectory $updateGenerated -RecompilerPath $recompiler
@@ -157,50 +147,30 @@ if ($missing.Count -gt 0) {
     throw "Build finished with missing outputs: $($missing -join ', ')"
 }
 Write-Host 'U Unlocked and all four local game executables were built successfully.' -ForegroundColor Green
- -or
-                $expected.ContainsKey($relative)) {
-                return $false
-            }
+ -or $expected.ContainsKey($relative)) { return $false }
             $expected.Add($relative, $hash.ToLowerInvariant())
         }
-
-        $actualFiles = @(Get-ChildItem -LiteralPath $OutputDirectory -File -Recurse | Where-Object {
-            $_.FullName -ne $manifestPath
-        })
+        $actualFiles = @(Get-ChildItem -LiteralPath $OutputDirectory -File -Recurse | Where-Object { $_.FullName -ne $manifestPath })
         if ($actualFiles.Count -ne $expected.Count) { return $false }
         foreach ($file in $actualFiles) {
             $relative = $file.FullName.Substring($OutputDirectory.Length + 1).Replace('\', '/')
-            if (-not $expected.ContainsKey($relative) -or (Get-Sha256 $file.FullName) -ne $expected[$relative]) {
-                return $false
-            }
+            if (-not $expected.ContainsKey($relative) -or (Get-Sha256 $file.FullName) -ne $expected[$relative]) { return $false }
         }
         return $true
-    } catch {
-        return $false
-    }
+    } catch { return $false }
 }
 
 function Invoke-CachedRecompile {
-    param(
-        [Parameter(Mandatory = $true)][string]$Label,
-        [Parameter(Mandatory = $true)][string]$RpxPath,
-        [Parameter(Mandatory = $true)][string]$OutputDirectory,
-        [Parameter(Mandatory = $true)][string]$RecompilerPath
-    )
-
+    param([string]$Label, [string]$RpxPath, [string]$OutputDirectory, [string]$RecompilerPath)
     if (Test-GeneratedCodeCache -RpxPath $RpxPath -OutputDirectory $OutputDirectory -RecompilerPath $RecompilerPath) {
         Write-Host "$Label RPX and generated code are unchanged; reusing the verified local recompile cache." -ForegroundColor Green
         return
     }
-
-    if (Test-Path -LiteralPath $OutputDirectory -PathType Container) {
-        Remove-Item -LiteralPath $OutputDirectory -Recurse -Force
-    }
+    if (Test-Path -LiteralPath $OutputDirectory -PathType Container) { Remove-Item -LiteralPath $OutputDirectory -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
     Write-Host "Recompiling the user's $Label RPX locally..." -ForegroundColor Cyan
     & $RecompilerPath $RpxPath $OutputDirectory --any-rpx
     if ($LASTEXITCODE) { throw "cafe-recomp failed on the $Label RPX." }
-
     $generatedFiles = @(Get-ChildItem -LiteralPath $OutputDirectory -File -Recurse)
     if ($generatedFiles.Count -eq 0) { throw "cafe-recomp produced no files for the $Label RPX." }
     $manifest = [ordered]@{
@@ -210,10 +180,7 @@ function Invoke-CachedRecompile {
         arguments = '--any-rpx'
         files = @(
             foreach ($file in $generatedFiles) {
-                [ordered]@{
-                    path = $file.FullName.Substring($OutputDirectory.Length + 1).Replace('\', '/')
-                    sha256 = Get-Sha256 $file.FullName
-                }
+                [ordered]@{ path = $file.FullName.Substring($OutputDirectory.Length + 1).Replace('\', '/'); sha256 = Get-Sha256 $file.FullName }
             }
         )
     }
@@ -222,7 +189,6 @@ function Invoke-CachedRecompile {
         throw "Generated $Label RPX cache failed its post-build integrity check."
     }
 }
-
 $stbHeader = Join-Path $engineRoot 'third_party\stb\stb_truetype.h'
 if (-not (Test-Path -LiteralPath $stbHeader -PathType Leaf)) {
     $python = (Get-Command python).Source
