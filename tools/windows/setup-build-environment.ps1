@@ -57,7 +57,9 @@ function Install-BundledToolchain {
         try {
             $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
             if ($manifest.schema_version -ne 1 -or $manifest.architecture -ne 'x86_64-windows' -or
-                -not ($manifest.executables -is [array]) -or $manifest.executables.Count -ne 4) { return $false }
+                -not ($manifest.executables -is [array]) -or $manifest.executables.Count -ne 4 -or
+                -not ($manifest.files -is [array]) -or $manifest.files.Count -lt 4 -or
+                $manifest.files.Count -gt 100000 -or [int]$manifest.file_count -ne $manifest.files.Count) { return $false }
             foreach ($entry in $manifest.executables) {
                 $relative = [string]$entry.path
                 $hash = [string]$entry.sha256
