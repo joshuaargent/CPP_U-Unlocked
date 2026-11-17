@@ -531,7 +531,8 @@ try {
         -not (Test-Path -LiteralPath (Join-Path $playDirectory $_) -PathType Leaf)
     })
     if ($missing.Count -gt 0) {
-        throw "Build returned without all required files. Missing: $($missing -join ', ')."
+        $missingText = $missing -join ', '
+        throw "Build returned without all required files. Missing: $missingText."
     }
 
     if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
