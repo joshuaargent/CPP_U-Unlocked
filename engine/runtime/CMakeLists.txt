@@ -92,7 +92,7 @@ if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/
     endif()
     add_library(cafe_runtime OBJECT IMPORTED GLOBAL)
     set_property(TARGET cafe_runtime PROPERTY IMPORTED_OBJECTS "${CAFE_RUNTIME_PREBUILT_OBJECTS}")
-    target_include_directories(cafe_runtime INTERFACE include)
+    target_include_directories(cafe_runtime INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_compile_features(cafe_runtime INTERFACE cxx_std_20)
     set(CAFE_RUNTIME_LINK_SCOPE INTERFACE)
     set(CAFE_RUNTIME_PREBUILT TRUE)
