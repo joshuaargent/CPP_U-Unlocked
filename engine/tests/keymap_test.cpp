@@ -78,16 +78,16 @@ void test_inputs() {
         int stick_x, stick_y, right_x, right_y;
         uint16_t key;
     } expected[] = {
-        {"dpad_up", cafe::os::vpad::kUp, 0, 0, 0, 0, 26}, {"dpad_down", cafe::os::vpad::kDown, 0, 0, 0, 0, 22},
-        {"dpad_left", cafe::os::vpad::kLeft, 0, 0, 0, 0, 4}, {"dpad_right", cafe::os::vpad::kRight, 0, 0, 0, 0, 7},
-        {"face_top", cafe::os::vpad::kX, 0, 0, 0, 0, 12}, {"face_bottom", cafe::os::vpad::kB, 0, 0, 0, 0, 14},
-        {"face_left", cafe::os::vpad::kY, 0, 0, 0, 0, 13}, {"face_right", cafe::os::vpad::kA, 0, 0, 0, 0, 15},
-        {"l", cafe::os::vpad::kL, 0, 0, 0, 0, 20}, {"r", cafe::os::vpad::kR, 0, 0, 0, 0, 8},
-        {"zl", cafe::os::vpad::kZL, 0, 0, 0, 0, 24}, {"zr", cafe::os::vpad::kZR, 0, 0, 0, 0, 18},
-        {"stick_up", 0, 0, 1, 0, 0, 82}, {"stick_down", 0, 0, -1, 0, 0, 81},
-        {"stick_left", 0, -1, 0, 0, 0, 80}, {"stick_right", 0, 1, 0, 0, 0, 79},
-        {"right_stick_up", 0, 0, 0, 0, 1, 23}, {"right_stick_down", 0, 0, 0, 0, -1, 10},
-        {"right_stick_left", 0, 0, 0, -1, 0, 9}, {"right_stick_right", 0, 0, 0, 1, 0, 11},
+        {"dpad_up", cafe::os::vpad::kUp, 0, 0, 0, 0, 82}, {"dpad_down", cafe::os::vpad::kDown, 0, 0, 0, 0, 81},
+        {"dpad_left", cafe::os::vpad::kLeft, 0, 0, 0, 0, 80}, {"dpad_right", cafe::os::vpad::kRight, 0, 0, 0, 0, 79},
+        {"face_top", cafe::os::vpad::kX, 0, 0, 0, 0, 44}, {"face_bottom", cafe::os::vpad::kB, 0, 0, 0, 0, 12},
+        {"face_left", cafe::os::vpad::kY, 0, 0, 0, 0, 17}, {"face_right", cafe::os::vpad::kA, 0, 0, 0, 0, 28},
+        {"l", cafe::os::vpad::kL, 0, 0, 0, 0, 225}, {"r", cafe::os::vpad::kR, 0, 0, 0, 0, 15},
+        {"zl", cafe::os::vpad::kZL, 0, 0, 0, 0, 20}, {"zr", cafe::os::vpad::kZR, 0, 0, 0, 0, 8},
+        {"stick_up", 0, 0, 1, 0, 0, 26}, {"stick_down", 0, 0, -1, 0, 0, 22},
+        {"stick_left", 0, -1, 0, 0, 0, 4}, {"stick_right", 0, 1, 0, 0, 0, 7},
+        {"right_stick_up", 0, 0, 0, 0, 1, 24}, {"right_stick_down", 0, 0, 0, 0, -1, 13},
+        {"right_stick_left", 0, 0, 0, -1, 0, 11}, {"right_stick_right", 0, 0, 0, 1, 0, 14},
         {"plus", cafe::os::vpad::kPlus, 0, 0, 0, 0, 40}, {"minus", cafe::os::vpad::kMinus, 0, 0, 0, 0, 42},
         {"home", cafe::os::vpad::kHome, 0, 0, 0, 0, 74},
     };
@@ -104,8 +104,8 @@ void test_inputs() {
         check(!keymap::reserved(defaults[i]), what + " default not reserved");
     }
     // SDL's names for the defaults are the US keys.
-    const char* names[] = {"W", "S", "A", "D", "I", "K", "J", "L", "Q", "E",
-                           "U", "O", "Up", "Down", "Left", "Right", "T", "G", "F", "H", "Return", "Backspace", "Home"};
+    const char* names[] = {"Up", "Down", "Left", "Right", "Space", "I", "N", "Y", "Left Shift", "L",
+                           "Q", "E", "W", "S", "A", "D", "U", "J", "H", "K", "Return", "Backspace", "Home"};
     for (size_t i = 0; i < std::size(names) && i < keymap::kInputCount; ++i) {
         check(sdl_name(names[i]) == defaults[i], std::string("SDL's name of the default key ") + names[i]);
     }
