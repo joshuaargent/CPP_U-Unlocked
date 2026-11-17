@@ -130,6 +130,8 @@ jobs:
 
       - name: Fetch and build pinned Vulkan/runtime dependencies
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           ./engine/tools/windows/build-deps.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Pinned runtime dependency build failed.' }
