@@ -85,6 +85,20 @@ try {
         throw "The staged build tools failed version validation: $cmakeVersion; Ninja $ninjaVersion; $pythonVersion."
     }
 
+    $stagedFiles = @(Get-ChildItem -LiteralPath $stage -Force -File -Recurse | Sort-Object FullName)
+    if ($stagedFiles.Count -lt 4 -or $stagedFiles.Count -gt 100000) {
+        throw "The staged toolchain has an invalid file count: $($stagedFiles.Count)"
+    }
+    $fileRecords = @(
+        foreach ($file in $stagedFiles) {
+            $relative = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            [ordered]@{
+                path = $relative
+                sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                length = $file.Length
+            }
+        }
+    )
     $manifest = [ordered]@{
         schema_version = 1
         architecture = 'x86_64-windows'
@@ -92,6 +106,8 @@ try {
         cmake_version = $cmakeMatch.Groups[1].Value
         ninja_version = $ninjaVersion
         python_version = $pythonVersion
+        file_count = $fileRecords.Count
+        files = $fileRecords
         executables = @(
             [ordered]@{ path = 'cmake/' + $cmakeRelative.Replace('\', '/'); sha256 = (Get-FileHash -LiteralPath $stagedCmake -Algorithm SHA256).Hash.ToLowerInvariant() },
             [ordered]@{ path = 'ninja/ninja.exe'; sha256 = (Get-FileHash -LiteralPath $stagedNinja -Algorithm SHA256).Hash.ToLowerInvariant() },
