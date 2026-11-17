@@ -367,6 +367,78 @@ if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
 }
 if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { throw 'The llvm-mingw compiler is still missing after installation.' }
 
+# Do not package a WinGet AppsFolder execution alias. Download Ninja's official
+# standalone archive, verify its pinned SHA-256, and install the real binary.
+# Player releases already contain this binary inside the verified toolchain bundle.
+if (-not $bundledToolchain) {
+    $ninjaArchiveName = 'ninja-win-1.12.1.zip'
+    $ninjaArchive = Join-Path $downloads $ninjaArchiveName
+    $ninjaArchiveSha256 = 'f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a'
+    $ninjaUrl = 'https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip'
+    $ninjaArchiveVerified = $false
+
+    if (Test-Path -LiteralPath $ninjaArchive -PathType Leaf) {
+        $existingNinjaHash = (Get-FileHash -LiteralPath $ninjaArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($existingNinjaHash -eq $ninjaArchiveSha256) {
+            $ninjaArchiveVerified = $true
+        } else {
+            Remove-Item -LiteralPath $ninjaArchive -Force
+        }
+    }
+
+    if (-not $ninjaArchiveVerified) {
+        $ninjaAttempts = 5
+        for ($attempt = 1; $attempt -le $ninjaAttempts; $attempt++) {
+            Remove-Item -LiteralPath $ninjaArchive -Force -ErrorAction SilentlyContinue
+            try {
+                Write-Host "Downloading pinned standalone Ninja 1.12.1, attempt $attempt of $ninjaAttempts..." -ForegroundColor Cyan
+                Invoke-WebRequest -UseBasicParsing -Uri $ninjaUrl -OutFile $ninjaArchive -TimeoutSec 180
+                if (-not (Test-Path -LiteralPath $ninjaArchive -PathType Leaf)) {
+                    throw 'The Ninja download did not create an archive.'
+                }
+                $actualNinjaHash = (Get-FileHash -LiteralPath $ninjaArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actualNinjaHash -ne $ninjaArchiveSha256) {
+                    throw "Ninja archive SHA-256 mismatch. Expected $ninjaArchiveSha256; got $actualNinjaHash."
+                }
+                $ninjaArchiveVerified = $true
+                break
+            } catch {
+                $downloadError = $_
+                Remove-Item -LiteralPath $ninjaArchive -Force -ErrorAction SilentlyContinue
+                if ($attempt -eq $ninjaAttempts) {
+                    throw "Unable to download and verify standalone Ninja after $ninjaAttempts attempts. $($downloadError.Exception.Message)"
+                }
+                $delay = [Math]::Min(20, 2 * $attempt)
+                Write-Warning "Ninja download failed: $($downloadError.Exception.Message). Retrying in $delay seconds."
+                Start-Sleep -Seconds $delay
+            }
+        }
+    }
+    if (-not $ninjaArchiveVerified) { throw 'The pinned standalone Ninja archive could not be verified.' }
+
+    $ninjaStage = Join-Path $toolchainRoot ('.ninja-staging-' + [guid]::NewGuid().ToString('N'))
+    $ninjaDestination = Join-Path $toolchainRoot 'ninja'
+    New-Item -ItemType Directory -Force -Path $ninjaStage | Out-Null
+    try {
+        Expand-Archive -LiteralPath $ninjaArchive -DestinationPath $ninjaStage -Force
+        $stagedNinja = Join-Path $ninjaStage 'ninja.exe'
+        if (-not (Test-Path -LiteralPath $stagedNinja -PathType Leaf)) {
+            throw 'The official Ninja archive does not contain ninja.exe at its root.'
+        }
+        New-Item -ItemType Directory -Force -Path $ninjaDestination | Out-Null
+        Copy-Item -LiteralPath $stagedNinja -Destination (Join-Path $ninjaDestination 'ninja.exe') -Force
+    } finally {
+        if (Test-Path -LiteralPath $ninjaStage -PathType Container) {
+            Remove-Item -LiteralPath $ninjaStage -Recurse -Force
+        }
+    }
+    $ninja = Join-Path $ninjaDestination 'ninja.exe'
+    $ninjaVersionLine = (& $ninja --version | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $ninjaVersionLine -ne '1.12.1') {
+        throw "The verified standalone Ninja binary failed its version check: '$ninjaVersionLine'."
+    }
+}
+
 $cmakeVersion = (& $cmake --version | Select-Object -First 1)
 $ninjaVersion = (& $ninja --version | Out-String).Trim()
 Write-Host "Build tools ready: $cmakeVersion; Ninja $ninjaVersion; $pythonVersion; llvm-mingw $llvmVersion." -ForegroundColor Green
