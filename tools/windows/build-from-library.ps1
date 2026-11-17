@@ -369,6 +369,7 @@ try {
     $cacheState | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $cacheStateTemp -Encoding UTF8
     Move-Item -LiteralPath $cacheStateTemp -Destination $cacheStatePath -Force
     $env:U_UNLOCKED_ENGINE_BUILD_DIR = $engineBuildDirectory
+    $env:U_UNLOCKED_BUILD_CACHE_ROOT = $cacheDirectory
     Write-Host "Persistent build cache: $engineBuildDirectory"
 
     if ($releaseAssetRoot) {
