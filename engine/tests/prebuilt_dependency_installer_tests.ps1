@@ -111,7 +111,7 @@ try {
     $installedLibrary = Join-Path $engineRoot 'build-deps\prefix\lib\libvulkan-1.a'
     $installedHash = Get-TestHash $installedLibrary
     $tamperedArchive = Join-Path $temporary 'tampered.zip'
-    New-TestArchive -Path $tamperedArchive -Root $sourceRoot -LockHash $lockHash -Tamper
+    New-TestArchive -Path $tamperedArchive -Root $sourceRoot -LockHash $lockHash -RecipeHash $recipeHash -Tamper
     $rejected = $false
     try { & $installer -ArchivePath $tamperedArchive -EngineRoot $engineRoot } catch { $rejected = $true }
     if (-not $rejected) { throw 'The installer accepted a file that failed its SHA-256 check.' }
@@ -128,7 +128,7 @@ try {
     }
 
     $traversalArchive = Join-Path $temporary 'traversal.zip'
-    New-TestArchive -Path $traversalArchive -Root $sourceRoot -LockHash $lockHash -Traversal
+    New-TestArchive -Path $traversalArchive -Root $sourceRoot -LockHash $lockHash -RecipeHash $recipeHash -Traversal
     $traversalRejected = $false
     try { & $installer -ArchivePath $traversalArchive -EngineRoot $engineRoot } catch { $traversalRejected = $true }
     if (-not $traversalRejected) { throw 'The installer accepted a path-traversal archive entry.' }
