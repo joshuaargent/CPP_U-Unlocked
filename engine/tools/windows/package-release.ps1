@@ -117,6 +117,8 @@ try {
             throw "The dependency bundle did not install the locked $($dependency.Name) revision."
         }
     }
+    & $python.Source (Join-Path $dependencyVerificationEngine 'tools\setup_deps.py') --bundle-archive $dependencyBundle
+    if ($LASTEXITCODE -ne 0) { throw 'The installed dependency bundle did not pass its repeated-install fast path.' }
 } finally {
     foreach ($proxy in @(
         @{ Name = 'HTTP_PROXY'; Value = $previousHttpProxy },
