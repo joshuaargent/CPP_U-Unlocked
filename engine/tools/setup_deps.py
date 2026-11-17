@@ -2,6 +2,7 @@
 """Fetch the exact dependency revisions in dependencies.lock.json without requiring Git."""
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -265,12 +266,14 @@ def create_dependency_bundle(output, dependencies):
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.unlink(missing_ok=True)
+    manifest = {"schema_version": 1, "revisions": {}, "files": []}
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:
         for name, dependency in sorted(dependencies.items()):
             source = ROOT / "third_party" / name
             marker = source / MARKER
             if not marker.is_file() or marker.read_text(encoding="ascii").strip() != dependency["revision"]:
                 raise RuntimeError(f"{name}: cannot bundle a missing or unverified dependency; expected {dependency['revision']}.")
+            manifest["revisions"][name] = dependency["revision"]
             for path in sorted(source.rglob("*")):
                 if path.is_symlink():
                     raise RuntimeError(f"{name}: refusing to bundle a symbolic link: {path}")
@@ -279,7 +282,16 @@ def create_dependency_bundle(output, dependencies):
                 relative = path.relative_to(source).as_posix()
                 if any(part in ("", ".", "..") or ":" in part for part in PurePosixPath(relative).parts):
                     raise RuntimeError(f"{name}: unsafe dependency path: {relative}")
-                bundle.write(path, f"bundle/third_party/{name}/{relative}")
+                archive_path = f"third_party/{name}/{relative}"
+                manifest["files"].append({
+                    "path": archive_path,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                })
+                bundle.write(path, f"bundle/{archive_path}")
+        bundle.writestr(
+            "bundle/dependency-manifest.json",
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\\n",
+        )
     if not output.is_file() or output.stat().st_size == 0:
         raise RuntimeError("The dependency bundle was not created.")
     print(f"Created verified dependency bundle: {output} ({output.stat().st_size} bytes)")
@@ -294,8 +306,42 @@ def install_dependency_bundle(bundle_path, dependencies):
         extracted = Path(temporary)
         safe_extract(bundle_path, extracted)
         source_root = extracted / "third_party"
-        if not source_root.is_dir():
-            raise RuntimeError("Dependency bundle is missing its third_party directory.")
+        manifest_path = extracted / "dependency-manifest.json"
+        if not source_root.is_dir() or not manifest_path.is_file():
+            raise RuntimeError("Dependency bundle is missing its source tree or integrity manifest.")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise RuntimeError(f"Dependency bundle integrity manifest is invalid: {error}") from error
+        expected_revisions = {name: dependency["revision"] for name, dependency in dependencies.items()}
+        if manifest.get("schema_version") != 1 or manifest.get("revisions") != expected_revisions:
+            raise RuntimeError("Dependency bundle lock revisions do not match dependencies.lock.json.")
+        expected_hashes = {}
+        for entry in manifest.get("files", []):
+            if not isinstance(entry, dict):
+                raise RuntimeError("Dependency bundle integrity manifest contains an invalid file entry.")
+            relative = entry.get("path")
+            digest = entry.get("sha256")
+            if not isinstance(relative, str) or not isinstance(digest, str) or len(digest) != 64:
+                raise RuntimeError("Dependency bundle integrity manifest contains an invalid path or SHA-256.")
+            parts = PurePosixPath(relative).parts
+            if len(parts) < 3 or parts[0] != "third_party" or parts[1] not in dependencies or any(part in ("", ".", "..") or ":" in part for part in parts):
+                raise RuntimeError(f"Dependency bundle manifest contains an unsafe path: {relative}")
+            if relative in expected_hashes or any(character not in "0123456789abcdef" for character in digest.lower()):
+                raise RuntimeError(f"Dependency bundle manifest contains a duplicate path or invalid hash: {relative}")
+            expected_hashes[relative] = digest.lower()
+        actual_files = {
+            path.relative_to(extracted).as_posix()
+            for path in source_root.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
+        if actual_files != set(expected_hashes):
+            raise RuntimeError("Dependency bundle file inventory does not match its integrity manifest.")
+        for relative, expected_hash in expected_hashes.items():
+            path = extracted.joinpath(*PurePosixPath(relative).parts)
+            actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+            if actual_hash != expected_hash:
+                raise RuntimeError(f"Dependency bundle SHA-256 mismatch: {relative}")
         sources = {}
         for name, dependency in dependencies.items():
             source = source_root / name
