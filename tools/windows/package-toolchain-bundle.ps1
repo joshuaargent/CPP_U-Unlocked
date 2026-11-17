@@ -68,10 +68,13 @@ try {
     }
 
     $cmakeVersion = (& $stagedCmake --version | Select-Object -First 1).Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'The staged CMake executable failed to run.' }
+    $cmakeMatch = [regex]::Match($cmakeVersion, '([0-9]+\.[0-9]+\.[0-9]+)')
     $ninjaVersion = (& $stagedNinja --version | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { throw 'The staged Ninja executable failed to run.' }
     $pythonVersion = (& $stagedPython --version 2>&1 | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $cmakeVersion -notmatch '([0-9]+\.[0-9]+\.[0-9]+)' -or
-        [version]$Matches[1] -lt [version]'3.20.0' -or
+    if ($LASTEXITCODE -ne 0) { throw 'The staged Python executable failed to run.' }
+    if (-not $cmakeMatch.Success -or [version]$cmakeMatch.Groups[1].Value -lt [version]'3.20.0' -or
         $ninjaVersion -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$' -or
         [version]$ninjaVersion -lt [version]'1.12.1' -or
         $pythonVersion -notmatch '^Python 3\.12\.') {
