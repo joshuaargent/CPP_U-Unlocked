@@ -183,6 +183,13 @@ try {
     }
     if(-not $hasExe){throw 'Manifest does not contain the launcher executable.'}
 
+    # Keep the current package manifest beside the updated root binaries. The
+    # player build uses it to verify the prebuilt launcher and WUA extractor.
+    $manifestDestination=Join-Path $newFiles 'package-manifest.json'
+    $manifestInput=$entries['package-manifest.json'].Open()
+    $manifestOutput=[IO.File]::Open($manifestDestination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+    try {$manifestInput.CopyTo($manifestOutput);$manifestOutput.Flush($true)} finally {$manifestOutput.Dispose();$manifestInput.Dispose()}
+
     # The build kit is a separately hashed source archive. Validate its complete
     # inner path inventory before extraction; it contains no generated game data.
     $buildKitArchivePath=Join-Path $newFiles 'build-kit.zip'
@@ -240,6 +247,12 @@ try {
             $changed.Add('build-kit')
             Move-Item -LiteralPath (Join-Path $newFiles 'build-kit') -Destination $buildKitTarget
         }
+        $manifestTarget=Join-Path $InstallDirectory 'package-manifest.json'
+        $manifestBackup=Join-Path $rollback 'package-manifest.json'
+        if(Test-Path -LiteralPath $manifestTarget -PathType Leaf){Copy-Item -LiteralPath $manifestTarget -Destination $manifestBackup}
+        $changed.Add('package-manifest.json')
+        Move-Item -LiteralPath (Join-Path $newFiles 'package-manifest.json') -Destination $manifestTarget -Force
+
         Start-Process -FilePath (Join-Path $InstallDirectory 'U Unlocked.exe') -WorkingDirectory $InstallDirectory | Out-Null
     } catch {
         foreach($name in $changed) {
