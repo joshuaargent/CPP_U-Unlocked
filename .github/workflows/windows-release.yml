@@ -60,7 +60,7 @@ jobs:
             $vcpkgRoot = Split-Path $vcpkgCommand.Source
           }
           "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows-static zstd:x64-windows-static
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows-static zstd:x64-windows-static zlib:x64-windows-static
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg dependency installation failed.' }
 
       - name: Fetch all pinned third-party sources
