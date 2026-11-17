@@ -88,7 +88,7 @@ if ($legacyMatches.Count -gt 0) {
 
 if (-not $SkipToolchainCheck) {
     $compiler = Join-Path $repoRoot 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
-    $missingCommands = @('cmake', 'ninja', 'python') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) }
+    $missingCommands = @(@('cmake', 'ninja', 'python') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
     if (-not (Test-Path -LiteralPath $compiler -PathType Leaf) -or $missingCommands.Count -gt 0) {
         if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { Write-Host "Missing compiler: $compiler" -ForegroundColor Yellow }
         if ($missingCommands.Count -gt 0) { Write-Host "Missing commands: $($missingCommands -join ', ')" -ForegroundColor Yellow }
