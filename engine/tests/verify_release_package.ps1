@@ -218,8 +218,8 @@ try {
             throw "The packaged prebuilt dependency archive is missing link library $pattern."
         }
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $installedPrefix 'lib\libz.a') -PathType Leaf) -and
-        -not (Test-Path -LiteralPath (Join-Path $installedPrefix 'lib\libz.dll.a') -PathType Leaf)) {
+    $zlibLibraryNames = @('libz.a', 'libz.dll.a', 'libzlib.dll.a', 'libzlibstatic.a')
+    if (-not ($zlibLibraryNames | Where-Object { Test-Path -LiteralPath (Join-Path $installedPrefix "lib\$_") -PathType Leaf })) {
         throw 'The packaged prebuilt dependency archive is missing the zlib link library.'
     }
 
