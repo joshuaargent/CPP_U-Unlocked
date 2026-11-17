@@ -170,6 +170,8 @@ try {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
             throw "The clean-root toolchain bootstrap did not install: $required"
         }
+    & (Join-Path $repoRoot 'tools\windows\setup-build-environment.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'The already-installed toolchain failed its repeated-bootstrap fast path.' }
     }
 } finally {
     if ([string]::IsNullOrWhiteSpace($previousToolchainRoot)) {
@@ -213,6 +215,8 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $runtimeVerificationEngine 'build-prebuilt-runtime\runtime-manifest.json') -PathType Leaf)) {
         throw 'The prebuilt runtime archive failed its clean-directory installation test.'
     }
+    & (Join-Path $repoRoot 'tools\windows\install-prebuilt-runtime.ps1') -ArchivePath $prebuiltRuntime -EngineRoot $runtimeVerificationEngine -ExpectedSourceRevision $sourceRevision
+    if ($LASTEXITCODE -ne 0) { throw 'The prebuilt runtime failed its repeated-install fast path.' }
 
     # Configure and link all four CPU/game combinations against the imported
     # runtime objects and static libraries, proving players do not rebuild them.
