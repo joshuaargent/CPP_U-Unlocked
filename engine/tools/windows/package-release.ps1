@@ -390,6 +390,26 @@ if ($LASTEXITCODE -ne 0) { throw "Launcher archive creation failed with exit cod
 $archiveHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 "$archiveHash  $([System.IO.Path]::GetFileName($zip))" |
     Set-Content -LiteralPath "$zip.sha256" -Encoding ASCII
+
+# Emit a concrete size report so release reviewers can see the download and
+# embedded asset trade-offs rather than guessing from the archive contents.
+$sizeReport = @(
+    @{ label = 'Final release ZIP'; path = $zip },
+    @{ label = 'Embedded build-kit ZIP'; path = (Join-Path $stage 'build-kit.zip') },
+    @{ label = 'Bundled Windows toolchain'; path = (Join-Path $buildKit 'toolchain-bundle.zip') },
+    @{ label = 'Pinned dependency source bundle'; path = (Join-Path $buildKit 'dependency-bundle.zip') },
+    @{ label = 'Precompiled dependency prefix'; path = (Join-Path $buildKit 'prebuilt-dependencies.zip') },
+    @{ label = 'Precompiled generic runtime'; path = (Join-Path $buildKit 'prebuilt-runtime.zip') }
+)
+foreach ($item in $sizeReport) {
+    if (Test-Path -LiteralPath $item.path -PathType Leaf) {
+        $bytes = (Get-Item -LiteralPath $item.path).Length
+        Write-Host ("PACKAGE SIZE | {0}: {1:N2} MiB ({2:N0} bytes)" -f $item.label, ($bytes / 1MB), $bytes) -ForegroundColor Cyan
+    }
+}
+$expandedBuildKitBytes = (Get-ChildItem -LiteralPath $buildKit -File -Recurse -Force | Measure-Object -Property Length -Sum).Sum
+Write-Host ("PACKAGE SIZE | Expanded build-kit directory: {0:N2} MiB ({1:N0} bytes)" -f ($expandedBuildKitBytes / 1MB), $expandedBuildKitBytes) -ForegroundColor Cyan
+
 Remove-Item -LiteralPath $stage -Recurse -Force
 Write-Host "Launcher package created: $zip" -ForegroundColor Green
 Write-Host "SHA-256 checksum created: $zip.sha256" -ForegroundColor Green
