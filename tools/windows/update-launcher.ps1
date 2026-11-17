@@ -109,9 +109,14 @@ try {
     if([int64]$asset.size -le 0 -or [int64]$asset.size -gt 2GB){throw 'Release package size is invalid or too large.'}
 
     $expected=''
-    if([string]$asset.digest -match '^sha256:([0-9a-fA-F]{64})') {
-        $expected=$Matches[1].ToLowerInvariant()
-    } else {
+    $assetDigest=[string]$asset.digest
+    if($assetDigest.Length -eq 71 -and $assetDigest.StartsWith('sha256:')) {
+        $digestValue=$assetDigest.Substring(7)
+        if($digestValue.Length -eq 64 -and $digestValue -notmatch '[^0-9a-fA-F]') {
+            $expected=$digestValue.ToLowerInvariant()
+        }
+    }
+    if([string]::IsNullOrWhiteSpace($expected)) {
         $checksumName="$assetName.sha256"
         $checksumAsset=$release.assets | Where-Object { $_.name -eq $checksumName } | Select-Object -First 1
         if(-not $checksumAsset -or [string]$checksumAsset.browser_download_url -notlike 'https://github.com/*') {
