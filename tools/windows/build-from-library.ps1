@@ -94,29 +94,12 @@ function Assert-BuildKitFile {
     $records = @($manifest.files | Where-Object { [string]$_.name -ceq $FileName })
     if ($records.Count -ne 1) { throw "The build-kit manifest does not uniquely list $FileName." }
     $expected = [string]$records[0].sha256
-    if ($expected.Length -ne 64 -or $expected -notmatch '^[0-9a-fA-F]{64}    param(
-        [Parameter(Mandatory = $true)][string]$PackageDirectory,
-        [Parameter(Mandatory = $true)][string]$FileName
-    )
-    $manifestPath = Join-Path $PackageDirectory 'package-manifest.json'
-    $filePath = Join-Path $PackageDirectory $FileName
-    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
-        throw "The release package manifest or required asset is missing: $FileName"
-    }
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    if ($manifest.schema_version -ne 1 -or -not ($manifest.files -is [array])) {
-        throw 'The release package manifest is invalid.'
-    }
-    $records = @($manifest.files | Where-Object { [string]$_.name -ceq $FileName })
-    if ($records.Count -ne 1) { throw "The release package manifest does not uniquely list $FileName." }
-    $expected = [string]$records[0].sha256
-    if ($expected.Length -ne 64 -or $expected -notmatch '^[0-9a-fA-F]{64}') {
-        throw "The release package manifest has an invalid SHA-256 for $FileName."
+    if ($expected.Length -ne 64 -or $expected -match '[^0-9a-fA-F]') {
+        throw "The build-kit manifest has an invalid SHA-256 for $FileName."
     }
     $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash
     if ($actual -ne $expected.ToUpperInvariant()) {
-        throw "The release package asset failed SHA-256 verification: $FileName"
+        throw "The build-kit asset failed SHA-256 verification: $FileName"
     }
 }
 
@@ -184,32 +167,17 @@ try {
                 Assert-BuildKitFile -BuildKitDirectory $buildKitRoot -FileName $asset
             }
             $releaseAssetRoot = $buildKitRoot
-        } else {
-            # Compatibility with development packages that carried prebuilt assets
-            # at the launcher root before the assets moved into build-kit.zip.
-            $releaseAssetRoot = $packageRoot
-            foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip')) {
-                if (Test-Path -LiteralPath (Join-Path $releaseAssetRoot $asset) -PathType Leaf) {
-                    Assert-PackagedFile -PackageDirectory $packageRoot -FileName $asset
-                }
-            }
         }
     }
-
     Write-Host 'Installing build prerequisites and preparing pinned dependencies. The first build can take a while.'
     Write-Host 'Game files remain in their selected locations. Generated code and executables stay on this PC.'
 
-    # Prefer the checksum-verified dependency bundle shipped beside the launcher.
-    # setup_deps.py validates every embedded revision marker before installing it.
-    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
-        $bundlePath = if ($releaseAssetRoot) { Join-Path $releaseAssetRoot 'dependency-bundle.zip' } else { $null }
-        if (Test-Path -LiteralPath $bundlePath -PathType Leaf) {
-            $env:U_UNLOCKED_DEPENDENCY_BUNDLE = $bundlePath
-            Write-Host "Using the bundled pinned dependency sources: $bundlePath" -ForegroundColor Green
-        } else {
-            Remove-Item Env:\U_UNLOCKED_DEPENDENCY_BUNDLE -ErrorAction SilentlyContinue
-            Write-Host 'No local dependency bundle found; the build will use the verified online fallback.' -ForegroundColor Yellow
-        }
+    if ($releaseAssetRoot) {
+        $bundlePath = Join-Path $releaseAssetRoot 'dependency-bundle.zip'
+        $env:U_UNLOCKED_DEPENDENCY_BUNDLE = $bundlePath
+        Write-Host "Using the bundled pinned dependency sources: $bundlePath" -ForegroundColor Green
+    } else {
+        Remove-Item Env:\U_UNLOCKED_DEPENDENCY_BUNDLE -ErrorAction SilentlyContinue
     }
 
     & $environmentSetup
@@ -233,267 +201,16 @@ try {
     }
     $env:U_UNLOCKED_BUILD_JOBS = if ($memoryGb -ge 32) { '4' } elseif ($memoryGb -ge 12) { '2' } else { '1' }
 
-    # Official releases carry precompiled dependency libraries and the generic
-    # recompiler. Verify and install them before the local CMake build. Source
-    # checkouts without these files retain the existing compile-from-source path.
-    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
-        $prebuiltArchive = if ($releaseAssetRoot) { Join-Path $releaseAssetRoot 'prebuilt-dependencies.zip' } else { $null }
-        if (Test-Path -LiteralPath $prebuiltArchive -PathType Leaf) {
-            & $prebuiltDependencyInstaller -ArchivePath $prebuiltArchive -EngineRoot (Join-Path $repoRoot 'engine')
-            if ($LASTEXITCODE -ne 0) { throw 'Precompiled dependency verification or installation failed.' }
-        } else {
-            Write-Host 'No precompiled dependency archive found; developer source-build fallback will be used.' -ForegroundColor Yellow
-        }
+    if ($releaseAssetRoot) {
+        $prebuiltArchive = Join-Path $releaseAssetRoot 'prebuilt-dependencies.zip'
+        & $prebuiltDependencyInstaller -ArchivePath $prebuiltArchive -EngineRoot (Join-Path $repoRoot 'engine')
+        if ($LASTEXITCODE -ne 0) { throw 'Precompiled dependency verification or installation failed.' }
 
-        $prebuiltRecompiler = if ($releaseAssetRoot) { Join-Path $releaseAssetRoot 'cafe-recomp.exe' } else { $null }
-        if (Test-Path -LiteralPath $prebuiltRecompiler -PathType Leaf) {
-            $recompilerDirectory = Join-Path $repoRoot 'engine\build\recomp'
-            New-Item -ItemType Directory -Force -Path $recompilerDirectory | Out-Null
-            Copy-Item -LiteralPath $prebuiltRecompiler -Destination (Join-Path $recompilerDirectory 'cafe-recomp.exe') -Force
-            Write-Host 'Using the release-matched prebuilt generic recompiler.' -ForegroundColor Green
-        }
-    }
-
-    & $verifyScript
-    if ($LASTEXITCODE -ne 0) { throw "Source/toolchain verification failed with exit code $LASTEXITCODE." }
-
-    & $buildEntry -Rpx $update.Rpx -BaseRpx $game.Rpx
-    if ($LASTEXITCODE -ne 0) { throw "The native Vulkan build failed with exit code $LASTEXITCODE." }
-
-    $playDirectory = Join-Path $repoRoot 'Play'
-    $requiredOutputs = @(
-        'U Unlocked.exe',
-        'smash.exe',
-        'smash-compat.exe',
-        'smash-base.exe',
-        'smash-base-compat.exe',
-        'wua_extract.exe',
-        'title-logo.png'
-    )
-    $missing = @($requiredOutputs | Where-Object {
-        -not (Test-Path -LiteralPath (Join-Path $playDirectory $_) -PathType Leaf)
-    })
-    if ($missing.Count -gt 0) {
-        throw "Build returned without all required files. Missing: $($missing -join ', ')."
-    }
-
-    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
-        $launcherRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
-        if (-not (Test-Path -LiteralPath $launcherRoot -PathType Container)) {
-            throw "Launcher directory does not exist: $launcherRoot"
-        }
-
-        $runtimeStage = Join-Path $launcherRoot '.runtime-staging'
-        $runtimeTarget = Join-Path $launcherRoot 'runtime'
-        $runtimeBackup = Join-Path $launcherRoot '.runtime-previous'
-        $runtimeRequired = @(
-            'smash.exe', 'smash-compat.exe', 'smash-base.exe',
-            'smash-base-compat.exe', 'wua_extract.exe', 'title-logo.png'
-        )
-
-        # Recover the previous runtime before preparing a replacement. This
-        # preserves the only working copy if an earlier activation was interrupted.
-        Recover-RuntimeActivation -Stage $runtimeStage -Target $runtimeTarget -Backup $runtimeBackup -RequiredFiles $runtimeRequired
-
-        New-Item -ItemType Directory -Force -Path $runtimeStage | Out-Null
-        foreach ($file in Get-ChildItem -LiteralPath $playDirectory -File) {
-            if ($file.Name -eq 'U Unlocked.exe') { continue }
-            Copy-Item -LiteralPath $file.FullName -Destination $runtimeStage -Force
-        }
-
-        # Rebuilding the runtime must never discard saves, online credentials,
-        # user fonts, logs, or display settings from the previous installation.
-        foreach ($name in @('save', 'online', 'fonts', 'logs', 'cache')) {
-            $stagedData = Join-Path $runtimeStage $name
-            Copy-PreservedDirectory -Source (Join-Path $runtimeTarget $name) -Destination $stagedData
-            if (-not (Test-Path -LiteralPath $stagedData -PathType Container)) {
-                Copy-PreservedDirectory -Source (Join-Path $launcherRoot $name) -Destination $stagedData
-            }
-        }
-        $previousDisplay = Join-Path $runtimeTarget 'display.ini'
-        if (Test-Path -LiteralPath $previousDisplay -PathType Leaf) {
-            Copy-Item -LiteralPath $previousDisplay -Destination $runtimeStage -Force
-        } else {
-            $launcherDisplay = Join-Path $launcherRoot 'display.ini'
-            if (Test-Path -LiteralPath $launcherDisplay -PathType Leaf) {
-                Copy-Item -LiteralPath $launcherDisplay -Destination $runtimeStage -Force
-            }
-        }
-
-        Activate-StagedRuntime -Stage $runtimeStage -Target $runtimeTarget -Backup $runtimeBackup -RequiredFiles $runtimeRequired
-        Write-Host "Local game runtime activated: $runtimeTarget" -ForegroundColor Green
-    }
-
-    Write-Host "Build verified. Launcher: $(Join-Path $playDirectory 'U Unlocked.exe')" -ForegroundColor Green
-    Write-Host "Build log: $logPath"
-} catch {
-    Write-Host "BUILD FAILED: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "Build log: $logPath"
-    throw
-} finally {
-    if ($transcriptStarted) {
-        Stop-Transcript | Out-Null
-    }
-}
-) {
-        throw "The build-kit manifest has an invalid SHA-256 for $FileName."
-    }
-    $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash
-    if ($actual -ne $expected.ToUpperInvariant()) {
-        throw "The build-kit asset failed SHA-256 verification: $FileName"
-    }
-}
-
-function Assert-PackagedFile {
-    param(
-        [Parameter(Mandatory = $true)][string]$PackageDirectory,
-        [Parameter(Mandatory = $true)][string]$FileName
-    )
-    $manifestPath = Join-Path $PackageDirectory 'package-manifest.json'
-    $filePath = Join-Path $PackageDirectory $FileName
-    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or
-        -not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
-        throw "The release package manifest or required asset is missing: $FileName"
-    }
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    if ($manifest.schema_version -ne 1 -or -not ($manifest.files -is [array])) {
-        throw 'The release package manifest is invalid.'
-    }
-    $records = @($manifest.files | Where-Object { [string]$_.name -ceq $FileName })
-    if ($records.Count -ne 1) { throw "The release package manifest does not uniquely list $FileName." }
-    $expected = [string]$records[0].sha256
-    if ($expected.Length -ne 64 -or $expected -notmatch '^[0-9a-fA-F]{64}') {
-        throw "The release package manifest has an invalid SHA-256 for $FileName."
-    }
-    $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash
-    if ($actual -ne $expected.ToUpperInvariant()) {
-        throw "The release package asset failed SHA-256 verification: $FileName"
-    }
-}
-
-function Copy-PreservedDirectory {
-    param(
-        [Parameter(Mandatory = $true)][string]$Source,
-        [Parameter(Mandatory = $true)][string]$Destination
-    )
-    if (-not (Test-Path -LiteralPath $Source -PathType Container)) { return }
-    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-    foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
-        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
-        $target = Join-Path $Destination $item.Name
-        if ($item.PSIsContainer) {
-            Copy-PreservedDirectory -Source $item.FullName -Destination $target
-        } else {
-            Copy-Item -LiteralPath $item.FullName -Destination $target -Force
-        }
-    }
-}
-
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$buildEntry = Join-Path $repoRoot 'tools\windows\build-u-unlocked.ps1'
-$environmentSetup = Join-Path $PSScriptRoot 'setup-build-environment.ps1'
-$verifyScript = Join-Path $PSScriptRoot 'verify-checkout.ps1'
-$activationScript = Join-Path $PSScriptRoot 'runtime-activation.ps1'
-$prebuiltDependencyInstaller = Join-Path $PSScriptRoot 'install-prebuilt-dependencies.ps1'
-
-foreach ($required in @($buildEntry, $environmentSetup, $verifyScript, $activationScript, $prebuiltDependencyInstaller)) {
-    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-        throw "A required local build script is missing: $required"
-    }
-}
-
-. $activationScript
-
-if ([string]::IsNullOrWhiteSpace($LogDirectory)) {
-    $local = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:TEMP }
-    $LogDirectory = Join-Path $local 'U Unlocked\BuildLogs'
-}
-New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
-$logPath = Join-Path $LogDirectory ("build-{0:yyyyMMdd-HHmmss}.log" -f (Get-Date))
-$transcriptStarted = $false
-
-try {
-    Start-Transcript -LiteralPath $logPath -Force | Out-Null
-    $transcriptStarted = $true
-
-    Write-Host 'U Unlocked local Vulkan runtime build' -ForegroundColor Cyan
-    Write-Host 'Validating the selected game folders...'
-    $game = Resolve-TitleFolder -Path $GameDirectory -ExpectedTitleId '0005000010144F00' -Label 'Base game'
-    $update = Resolve-TitleFolder -Path $UpdateDirectory -ExpectedTitleId '0005000E10144F00' -Label 'Game update'
-
-    Write-Host "Base game: $($game.Folder)"
-    Write-Host "Update:    $($update.Folder)"
-    Write-Host "Base RPX:  $($game.Size) bytes"
-    Write-Host "Update RPX: $($update.Size) bytes"
-
-    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
-        $packageRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
-        foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe')) {
-            $assetPath = Join-Path $packageRoot $asset
-            if (Test-Path -LiteralPath $assetPath -PathType Leaf) {
-                Assert-PackagedFile -PackageDirectory $packageRoot -FileName $asset
-            }
-        }
-    }
-
-    Write-Host 'Installing build prerequisites and preparing pinned dependencies. The first build can take a while.'
-    Write-Host 'Game files remain in their selected locations. Generated code and executables stay on this PC.'
-
-    # Prefer the checksum-verified dependency bundle shipped beside the launcher.
-    # setup_deps.py validates every embedded revision marker before installing it.
-    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
-        $bundleRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
-        $bundlePath = Join-Path $bundleRoot 'dependency-bundle.zip'
-        if (Test-Path -LiteralPath $bundlePath -PathType Leaf) {
-            $env:U_UNLOCKED_DEPENDENCY_BUNDLE = $bundlePath
-            Write-Host "Using the bundled pinned dependency sources: $bundlePath" -ForegroundColor Green
-        } else {
-            Remove-Item Env:\U_UNLOCKED_DEPENDENCY_BUNDLE -ErrorAction SilentlyContinue
-            Write-Host 'No local dependency bundle found; the build will use the verified online fallback.' -ForegroundColor Yellow
-        }
-    }
-
-    & $environmentSetup
-    if ($LASTEXITCODE -ne 0) { throw "Windows build environment setup failed with exit code $LASTEXITCODE." }
-
-    # Child PowerShell processes cannot modify this process's PATH. Resolve the
-    # just-installed tools again here before verify-checkout and the build scripts.
-    $toolchainRoot = Join-Path $repoRoot 'toolchain'
-    $cmake = Find-BuildTool 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
-    $ninja = Find-BuildTool 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
-    $python = Find-BuildTool 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
-    $compilerBin = Join-Path $toolchainRoot 'llvm-mingw\bin'
-    if (-not $cmake -or -not $ninja -or -not $python -or -not (Test-Path -LiteralPath (Join-Path $compilerBin 'x86_64-w64-mingw32-clang++.exe') -PathType Leaf)) {
-        throw 'The pinned CMake, Ninja, Python, or llvm-mingw compiler could not be located after bootstrap.'
-    }
-    $env:PATH = (@((Split-Path -Parent $python), (Split-Path -Parent $cmake), (Split-Path -Parent $ninja), $compilerBin, "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
-    try {
-        $memoryGb = [math]::Floor((Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory / 1GB)
-    } catch {
-        $memoryGb = 8
-    }
-    $env:U_UNLOCKED_BUILD_JOBS = if ($memoryGb -ge 32) { '4' } elseif ($memoryGb -ge 12) { '2' } else { '1' }
-
-    # Official releases carry precompiled dependency libraries and the generic
-    # recompiler. Verify and install them before the local CMake build. Source
-    # checkouts without these files retain the existing compile-from-source path.
-    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
-        $launcherRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
-        $prebuiltArchive = Join-Path $launcherRoot 'prebuilt-dependencies.zip'
-        if (Test-Path -LiteralPath $prebuiltArchive -PathType Leaf) {
-            & $prebuiltDependencyInstaller -ArchivePath $prebuiltArchive -EngineRoot (Join-Path $repoRoot 'engine')
-            if ($LASTEXITCODE -ne 0) { throw 'Precompiled dependency verification or installation failed.' }
-        } else {
-            Write-Host 'No precompiled dependency archive found; developer source-build fallback will be used.' -ForegroundColor Yellow
-        }
-
-        $prebuiltRecompiler = Join-Path $launcherRoot 'cafe-recomp.exe'
-        if (Test-Path -LiteralPath $prebuiltRecompiler -PathType Leaf) {
-            $recompilerDirectory = Join-Path $repoRoot 'engine\build\recomp'
-            New-Item -ItemType Directory -Force -Path $recompilerDirectory | Out-Null
-            Copy-Item -LiteralPath $prebuiltRecompiler -Destination (Join-Path $recompilerDirectory 'cafe-recomp.exe') -Force
-            Write-Host 'Using the release-matched prebuilt generic recompiler.' -ForegroundColor Green
-        }
+        $prebuiltRecompiler = Join-Path $releaseAssetRoot 'cafe-recomp.exe'
+        $recompilerDirectory = Join-Path $repoRoot 'engine\build\recomp'
+        New-Item -ItemType Directory -Force -Path $recompilerDirectory | Out-Null
+        Copy-Item -LiteralPath $prebuiltRecompiler -Destination (Join-Path $recompilerDirectory 'cafe-recomp.exe') -Force
+        Write-Host 'Installed verified precompiled dependencies and the release-matched generic recompiler.' -ForegroundColor Green
     }
 
     & $verifyScript
