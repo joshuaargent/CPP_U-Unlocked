@@ -10,6 +10,24 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Add-Type -AssemblyName System.IO.Compression
 
+function Get-RuntimeIdentityHash {
+    param([Parameter(Mandatory = $true)]$Manifest)
+    $identity = [ordered]@{
+        compiler_sha256 = [string]$Manifest.compiler_sha256
+        objects = @($Manifest.objects | ForEach-Object { "$($_.path):$($_.sha256):$($_.length)" })
+        libraries = @($Manifest.libraries | ForEach-Object { "$($_.path):$($_.sha256):$($_.length)" })
+        host_variants = @($Manifest.host_variants | ForEach-Object {
+            $variantName = [string]$_.variant
+            @($_.objects | ForEach-Object { "$variantName/$($_.path):$($_.sha256):$($_.length)" })
+        })
+    }
+    $json = $identity | ConvertTo-Json -Depth 8 -Compress
+    $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+}
+
 if ($ExpectedSourceRevision -notmatch '^[0-9a-fA-F]{40}$') {
     throw 'The expected source revision is not a valid 40-character Git commit.'
 }
@@ -62,11 +80,17 @@ try {
     if (-not $entries.ContainsKey('runtime-manifest.json')) {
         throw 'The prebuilt runtime manifest is missing.'
     }
-    $reader = [IO.StreamReader]::new($entries['runtime-manifest.json'].Open())
+    $manifestStream = $entries['runtime-manifest.json'].Open()
     try {
-        $manifest = $reader.ReadToEnd() | ConvertFrom-Json
+        $reader = [IO.StreamReader]::new($manifestStream)
+        try {
+            $manifestText = $reader.ReadToEnd()
+            $manifest = $manifestText | ConvertFrom-Json
+        } finally {
+            $reader.Dispose()
+        }
     } finally {
-        $reader.Dispose()
+        $manifestStream.Dispose()
     }
 
     if ($manifest.schema_version -ne 1 -or
@@ -82,6 +106,26 @@ try {
         throw 'The prebuilt runtime manifest does not match this release source or architecture.'
     }
 
+    $runtimeIdentityHash = Get-RuntimeIdentityHash -Manifest $manifest
+    $archiveExpectedCount = $manifest.objects.Count + $manifest.libraries.Count + 6 + 1
+    if ($archive.Entries.Count -ne $archiveExpectedCount) {
+        throw 'Prebuilt runtime archive entry count does not match its manifest.'
+    }
+    foreach ($record in @($manifest.objects) + @($manifest.libraries)) {
+        $relative = [string]$record.path
+        if (-not $entries.ContainsKey($relative) -or $entries[$relative].Length -ne [int64]$record.length) {
+            throw "Prebuilt runtime archive is missing a listed file or has the wrong size: $relative"
+        }
+    }
+    foreach ($variant in $manifest.host_variants) {
+        foreach ($record in $variant.objects) {
+            $relative = [string]$record.path
+            if (-not $entries.ContainsKey($relative) -or $entries[$relative].Length -ne [int64]$record.length) {
+                throw "Prebuilt runtime archive is missing a listed host object or has the wrong size: $relative"
+            }
+        }
+    }
+
     $repoRoot = Split-Path -Parent $EngineRoot
     . (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1')
     $toolchainRoot = Get-UUnlockedToolchainRoot
@@ -90,6 +134,36 @@ try {
         (Get-FileHash -LiteralPath $compiler -Algorithm SHA256).Hash.ToLowerInvariant() -ne
         ([string]$manifest.compiler_sha256).ToLowerInvariant()) {
         throw 'The prebuilt runtime was compiled with a different or missing pinned compiler.'
+    }
+
+    $identityMarkerPath = Join-Path $destination '.u-unlocked-runtime-identity.sha256'
+    $installedManifestPath = Join-Path $destination 'runtime-manifest.json'
+    if ((Test-Path -LiteralPath $identityMarkerPath -PathType Leaf) -and
+        (Get-Content -LiteralPath $identityMarkerPath -Raw).Trim() -eq $runtimeIdentityHash -and
+        (Test-Path -LiteralPath $installedManifestPath -PathType Leaf)) {
+        $installedIdentityMatches = $false
+        try {
+            $installedManifest = Get-Content -LiteralPath $installedManifestPath -Raw | ConvertFrom-Json
+            $installedIdentityMatches = (Get-RuntimeIdentityHash -Manifest $installedManifest) -eq $runtimeIdentityHash
+        } catch {
+            $installedIdentityMatches = $false
+        }
+        if ($installedIdentityMatches) {
+            $allInstalledFilesExist = $true
+            foreach ($relative in $entries.Keys) {
+                if ($relative -eq 'runtime-manifest.json') { continue }
+                if (-not (Test-Path -LiteralPath (Join-Path $destination $relative.Replace('/', '\')) -PathType Leaf)) {
+                    $allInstalledFilesExist = $false
+                    break
+                }
+            }
+            if ($allInstalledFilesExist) {
+                [IO.File]::WriteAllText($installedManifestPath, $manifestText, [Text.UTF8Encoding]::new($false))
+                Set-Content -LiteralPath $identityMarkerPath -Value $runtimeIdentityHash -Encoding ASCII
+                Write-Host 'The verified generic runtime is already installed; skipping object extraction and hashing.' -ForegroundColor Green
+                return
+            }
+        }
     }
 
     $expected = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -206,6 +280,7 @@ try {
         $manifestOutput.Dispose()
         $manifestInput.Dispose()
     }
+    Set-Content -LiteralPath (Join-Path $stage '.u-unlocked-runtime-identity.sha256') -Value $runtimeIdentityHash -Encoding ASCII
     $archive.Dispose()
     $archive = $null
 
