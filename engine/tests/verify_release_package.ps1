@@ -125,8 +125,8 @@ try {
     }
 
     foreach ($required in @('build-kit-manifest.json', 'prebuilt-dependencies.zip', 'cafe-recomp.exe',
-        'dependency-bundle.zip', 'tools/windows/build-from-library.ps1', 'tools/windows/toolchain-path.ps1',
-        'tools/windows/install-prebuilt-dependencies.ps1', 'engine/dependencies.lock.json',
+        'dependency-bundle.zip', 'toolchain-bundle.zip', 'prebuilt-runtime.zip', 'source-revision.txt', 'tools/windows/build-from-library.ps1', 'tools/windows/toolchain-path.ps1',
+        'tools/windows/install-prebuilt-dependencies.ps1', 'tools/windows/install-prebuilt-runtime.ps1', 'tools/windows/package-toolchain-bundle.ps1', 'engine/tools/windows/package-prebuilt-runtime.ps1', 'LICENSES/NINJA-APACHE-2.0.txt', 'engine/dependencies.lock.json',
         'engine/tools/windows/build-deps.ps1')) {
         if (-not $buildKitEntries.ContainsKey($required)) { throw "Embedded build kit is missing $required." }
     }
@@ -160,6 +160,7 @@ try {
         if ($actualHash -ne $hash.ToLowerInvariant()) { throw "Embedded build-kit asset SHA-256 mismatch: $name" }
     }
     foreach ($requiredAsset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip',
+        'toolchain-bundle.zip', 'prebuilt-runtime.zip', 'source-revision.txt',
         'U Unlocked.exe', 'wua_extract.exe')) {
         if (-not $innerListedFiles.Contains($requiredAsset)) {
             throw "Embedded build-kit manifest does not authenticate $requiredAsset."
@@ -174,7 +175,8 @@ try {
     $directArchive = [IO.Compression.ZipFile]::OpenRead($packagePath)
     try {
         foreach ($required in @('build-kit/build-kit-manifest.json', 'build-kit/prebuilt-dependencies.zip',
-            'build-kit/cafe-recomp.exe', 'build-kit/dependency-bundle.zip',
+            'build-kit/cafe-recomp.exe', 'build-kit/dependency-bundle.zip', 'build-kit/toolchain-bundle.zip',
+            'build-kit/prebuilt-runtime.zip', 'build-kit/source-revision.txt',
             'build-kit/tools/windows/build-from-library.ps1')) {
             if (-not $directArchive.GetEntry($required)) { throw "Expanded release build kit is missing $required." }
         }
