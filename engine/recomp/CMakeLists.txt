@@ -7,11 +7,19 @@ else()
 endif()
 
 # RPX loading is shared with the runtime so both place the image identically.
-add_library(cafe_rpx STATIC src/rpx.cpp)
-target_include_directories(cafe_rpx PUBLIC src ${CMAKE_SOURCE_DIR}/runtime/include)
-target_compile_features(cafe_rpx PUBLIC cxx_std_20)
-target_link_libraries(cafe_rpx PUBLIC ZLIB::ZLIB)
-target_compile_options(cafe_rpx PRIVATE -Wall -Wextra -Wpedantic)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    add_library(cafe_rpx STATIC IMPORTED GLOBAL)
+    set_target_properties(cafe_rpx PROPERTIES
+        IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libcafe_rpx.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src;${CMAKE_SOURCE_DIR}/runtime/include")
+    target_link_libraries(cafe_rpx INTERFACE ZLIB::ZLIB)
+else()
+    add_library(cafe_rpx STATIC src/rpx.cpp)
+    target_include_directories(cafe_rpx PUBLIC src ${CMAKE_SOURCE_DIR}/runtime/include)
+    target_compile_features(cafe_rpx PUBLIC cxx_std_20)
+    target_link_libraries(cafe_rpx PUBLIC ZLIB::ZLIB)
+    target_compile_options(cafe_rpx PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 add_library(cafe_recomp STATIC
     src/ppc.cpp
