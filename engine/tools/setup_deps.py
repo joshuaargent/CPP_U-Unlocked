@@ -125,6 +125,61 @@ def safe_extract(archive, destination):
                 raise RuntimeError(f"Unresolved symbolic links in dependency archive: {unresolved}")
             pending = remaining
 
+def download_archive(name, url, archive):
+    """Download a pinned archive with bounded retries for interrupted network transfers."""
+    import http.client
+    import time
+    import urllib.error
+
+    attempts = 5
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            request = urllib.request.Request(
+                url,
+                headers={"User-Agent": "U-Unlocked-Dependency-Bootstrap", "Accept": "application/zip"}
+            )
+            total = 0
+            with urllib.request.urlopen(request, timeout=90) as response, archive.open("wb") as output:
+                content_length = response.headers.get("Content-Length")
+                expected = int(content_length) if content_length else None
+                if expected is not None and expected > 512 * 1024 * 1024:
+                    raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
+                while True:
+                    block = response.read(1024 * 1024)
+                    if not block:
+                        break
+                    total += len(block)
+                    if total > 512 * 1024 * 1024:
+                        raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
+                    output.write(block)
+                if expected is not None and total != expected:
+                    raise http.client.IncompleteRead(b"", expected - total)
+            if total == 0:
+                raise RuntimeError(f"{name}: downloaded dependency archive is empty.")
+            return
+        except (http.client.IncompleteRead, http.client.RemoteDisconnected,
+                urllib.error.URLError, TimeoutError, ConnectionError, OSError) as error:
+            last_error = error
+            try:
+                archive.unlink(missing_ok=True)
+            except OSError:
+                pass
+            if attempt == attempts:
+                break
+            delay = min(2 ** (attempt - 1), 16)
+            print(
+                f"{name}: download interrupted on attempt {attempt}/{attempts} "
+                f"({error}); retrying in {delay}s",
+                flush=True
+            )
+            time.sleep(delay)
+
+    raise RuntimeError(
+        f"{name}: unable to download pinned source after {attempts} attempts: {last_error}"
+    ) from last_error
+
+
 def fetch_dependency(name, dependency):
     destination = ROOT / "third_party" / name
     revision = dependency["revision"]
@@ -155,24 +210,8 @@ def fetch_dependency(name, dependency):
         archive = temporary_path / "source.zip"
         extraction = temporary_path / "source"
         extraction.mkdir()
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": "U-Unlocked-Dependency-Bootstrap", "Accept": "application/zip"}
-        )
-        print(f"{name}: downloading pinned source {revision}")
-        with urllib.request.urlopen(request, timeout=60) as response, archive.open("wb") as output:
-            content_length = response.headers.get("Content-Length")
-            if content_length and int(content_length) > 512 * 1024 * 1024:
-                raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
-            total = 0
-            while True:
-                block = response.read(1024 * 1024)
-                if not block:
-                    break
-                total += len(block)
-                if total > 512 * 1024 * 1024:
-                    raise RuntimeError(f"{name}: compressed dependency archive exceeds the 512 MiB download limit.")
-                output.write(block)
+        print(f"{name}: downloading pinned source {revision}", flush=True)
+        download_archive(name, url, archive)
         safe_extract(archive, extraction)
         if not any(extraction.iterdir()):
             raise RuntimeError(f"{name}: source archive extracted no files.")
