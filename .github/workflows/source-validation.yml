@@ -135,6 +135,17 @@ jobs:
           ./engine/tools/windows/build-deps.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Pinned runtime dependency build failed.' }
 
+      - name: Create and verify the pinned dependency release bundle
+        shell: pwsh
+        run: |
+          $bundle = Join-Path $env:RUNNER_TEMP 'u-unlocked-dependency-bundle.zip'
+          python engine/tools/setup_deps.py --bundle-output $bundle
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $bundle -PathType Leaf)) {
+            throw 'Creating the pinned dependency release bundle failed.'
+          }
+          python engine/tools/setup_deps.py --bundle-archive $bundle
+          if ($LASTEXITCODE -ne 0) { throw 'Verifying the pinned dependency release bundle failed.' }
+
       - name: Build recompiler and runtime build utilities
         shell: pwsh
         run: |
