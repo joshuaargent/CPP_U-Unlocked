@@ -97,6 +97,42 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $toolchainBundle -PathT
     throw 'Creating the self-contained Windows toolchain bundle failed.'
 }
 Copy-Item -LiteralPath $toolchainBundle -Destination (Join-Path $buildKit 'toolchain-bundle.zip')
+
+# Test the actual player bootstrap against a clean toolchain root. This must
+# install without WinGet, external downloads, or preinstalled developer tools.
+$previousToolchainRoot = $env:U_UNLOCKED_TOOLCHAIN_ROOT
+$previousToolchainBundle = $env:U_UNLOCKED_TOOLCHAIN_BUNDLE
+$toolchainVerificationRoot = Join-Path $dist ('.toolchain-install-verification-' + [guid]::NewGuid().ToString('N'))
+try {
+    $env:U_UNLOCKED_TOOLCHAIN_ROOT = $toolchainVerificationRoot
+    $env:U_UNLOCKED_TOOLCHAIN_BUNDLE = $toolchainBundle
+    & (Join-Path $repoRoot 'tools\windows\setup-build-environment.ps1')
+    if ($LASTEXITCODE -ne 0) { throw 'The bundled toolchain failed its clean-root player bootstrap test.' }
+    foreach ($required in @(
+        (Join-Path $toolchainVerificationRoot 'cmake\bin\cmake.exe'),
+        (Join-Path $toolchainVerificationRoot 'ninja\ninja.exe'),
+        (Join-Path $toolchainVerificationRoot 'python\python.exe'),
+        (Join-Path $toolchainVerificationRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe')
+    )) {
+        if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+            throw "The clean-root toolchain bootstrap did not install: $required"
+        }
+    }
+} finally {
+    if ([string]::IsNullOrWhiteSpace($previousToolchainRoot)) {
+        Remove-Item Env:\U_UNLOCKED_TOOLCHAIN_ROOT -ErrorAction SilentlyContinue
+    } else {
+        $env:U_UNLOCKED_TOOLCHAIN_ROOT = $previousToolchainRoot
+    }
+    if ([string]::IsNullOrWhiteSpace($previousToolchainBundle)) {
+        Remove-Item Env:\U_UNLOCKED_TOOLCHAIN_BUNDLE -ErrorAction SilentlyContinue
+    } else {
+        $env:U_UNLOCKED_TOOLCHAIN_BUNDLE = $previousToolchainBundle
+    }
+    if (Test-Path -LiteralPath $toolchainVerificationRoot) {
+        Remove-Item -LiteralPath $toolchainVerificationRoot -Recurse -Force
+    }
+}
 Remove-Item -LiteralPath $toolchainBundle -Force
 
 # Ship the generic native runtime objects built by CI. These contain no game data;
