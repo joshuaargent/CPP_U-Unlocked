@@ -47,10 +47,10 @@ class DependencyArchiveTests(unittest.TestCase):
             destination = root / "out"
             destination.mkdir()
             with zipfile.ZipFile(archive, "w") as output:
-                output.writestr("SDL-abc123/CMakeLists.txt", "project(SDL)\\n")
-                output.writestr("SDL-abc123/include/SDL.h", "/* header */\\n")
+                output.writestr("SDL-abc123/CMakeLists.txt", "project(SDL)\n")
+                output.writestr("SDL-abc123/include/SDL.h", "/* header */\n")
             setup_deps.safe_extract(archive, destination)
-            self.assertEqual((destination / "include" / "SDL.h").read_text(), "/* header */\\n")
+            self.assertEqual((destination / "include" / "SDL.h").read_text(), "/* header */\n")
             self.assertTrue((destination / "CMakeLists.txt").is_file())
 
     def test_rejects_parent_traversal(self):
