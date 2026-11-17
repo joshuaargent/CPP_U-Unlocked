@@ -291,6 +291,7 @@ jobs:
           $root = (Resolve-Path '.').Path
           $scriptRoots = @((Join-Path $root 'tools'), (Join-Path $root 'engine/tools'), (Join-Path $root 'engine/tests'))
           $files = @($scriptRoots | ForEach-Object { Get-ChildItem -Path $_ -Filter '*.ps1' -Recurse -File })
+          $allParseErrors = @()
           foreach ($file in $files) {
             $tokens = $null
             $parseErrors = $null
@@ -299,10 +300,13 @@ jobs:
               [ref]$tokens,
               [ref]$parseErrors
             ) | Out-Null
-            if ($parseErrors.Count -gt 0) {
-              $parseErrors | ForEach-Object { Write-Error "$($file.FullName):$($_.Extent.StartLineNumber):$($_.Extent.StartColumnNumber): $($_.Message)" }
-              throw "PowerShell syntax validation failed: $($file.FullName)"
+            foreach ($parseError in $parseErrors) {
+              $allParseErrors += "$($file.FullName):$($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber): $($parseError.Message)"
             }
+          }
+          if ($allParseErrors.Count -gt 0) {
+            $allParseErrors | ForEach-Object { Write-Error $_ }
+            throw 'PowerShell syntax validation failed. See all file and line diagnostics above.'
           }
 
       - name: Test prebuilt dependency installer integrity and rollback
