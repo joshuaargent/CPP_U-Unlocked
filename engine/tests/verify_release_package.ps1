@@ -103,7 +103,7 @@ try {
     }
 
     foreach ($required in @('build-kit-manifest.json', 'prebuilt-dependencies.zip', 'cafe-recomp.exe',
-        'dependency-bundle.zip', 'tools/windows/build-from-library.ps1',
+        'dependency-bundle.zip', 'tools/windows/build-from-library.ps1', 'tools/windows/toolchain-path.ps1',
         'tools/windows/install-prebuilt-dependencies.ps1', 'engine/dependencies.lock.json',
         'engine/tools/windows/build-deps.ps1')) {
         if (-not $buildKitEntries.ContainsKey($required)) { throw "Embedded build kit is missing $required." }
