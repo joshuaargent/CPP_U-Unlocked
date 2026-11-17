@@ -76,6 +76,33 @@ function Find-BuildTool {
     return $null
 }
 
+function Assert-PackagedFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$PackageDirectory,
+        [Parameter(Mandatory = $true)][string]$FileName
+    )
+    $manifestPath = Join-Path $PackageDirectory 'package-manifest.json'
+    $filePath = Join-Path $PackageDirectory $FileName
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+        throw "The release package manifest or required asset is missing: $FileName"
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    if ($manifest.schema_version -ne 1 -or -not ($manifest.files -is [array])) {
+        throw 'The release package manifest is invalid.'
+    }
+    $records = @($manifest.files | Where-Object { [string]$_.name -ceq $FileName })
+    if ($records.Count -ne 1) { throw "The release package manifest does not uniquely list $FileName." }
+    $expected = [string]$records[0].sha256
+    if ($expected.Length -ne 64 -or $expected -notmatch '^[0-9a-fA-F]{64}') {
+        throw "The release package manifest has an invalid SHA-256 for $FileName."
+    }
+    $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash
+    if ($actual -ne $expected.ToUpperInvariant()) {
+        throw "The release package asset failed SHA-256 verification: $FileName"
+    }
+}
+
 function Copy-PreservedDirectory {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -130,6 +157,17 @@ try {
     Write-Host "Update:    $($update.Folder)"
     Write-Host "Base RPX:  $($game.Size) bytes"
     Write-Host "Update RPX: $($update.Size) bytes"
+
+    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
+        $packageRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
+        foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe')) {
+            $assetPath = Join-Path $packageRoot $asset
+            if (Test-Path -LiteralPath $assetPath -PathType Leaf) {
+                Assert-PackagedFile -PackageDirectory $packageRoot -FileName $asset
+            }
+        }
+    }
+
     Write-Host 'Installing build prerequisites and preparing pinned dependencies. The first build can take a while.'
     Write-Host 'Game files remain in their selected locations. Generated code and executables stay on this PC.'
 
