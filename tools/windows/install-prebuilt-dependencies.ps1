@@ -37,8 +37,17 @@ try {
         $name = $entry.FullName.Replace([char]92, [char]47)
         $parts = $name.Split([char]47)
         if ([string]::IsNullOrWhiteSpace($name) -or $name.StartsWith('/') -or $name.Contains(':') -or
-            ($parts -contains '..') -or ($parts -contains '.') -or -not $name.StartsWith('prefix/', [StringComparison]::Ordinal)) {
-            throw "Unsafe or unexpected prebuilt dependency archive path: $name"
+            ($parts -contains '..') -or ($parts -contains '.')) {
+            throw "Unsafe prebuilt dependency archive path: $name"
+        }
+        if ($name -eq 'prebuilt-manifest.json') {
+            if ($entries.ContainsKey($name)) { throw 'Duplicate prebuilt dependency manifest.' }
+            $entries.Add($name, $entry)
+            $expanded += [int64]$entry.Length
+            continue
+        }
+        if (-not $name.StartsWith('prefix/', [StringComparison]::Ordinal)) {
+            throw "Unexpected prebuilt dependency archive path: $name"
         }
         $kind = ($entry.ExternalAttributes -shr 16) -band 0xF000
         if ($kind -eq 0xA000) { throw "Symbolic links are not allowed in the prebuilt dependency archive: $name" }
