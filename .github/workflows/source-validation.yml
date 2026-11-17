@@ -229,6 +229,12 @@ jobs:
             }
           }
 
+      - name: Test runtime activation recovery and rollback
+        shell: pwsh
+        run: |
+          & pwsh -NoProfile -File engine/tests/runtime_activation_tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime activation recovery tests failed.' }
+
       - name: Ensure protected game data is not tracked
         shell: pwsh
         run: |

@@ -98,12 +98,15 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $buildEntry = Join-Path $repoRoot 'tools\windows\build-u-unlocked.ps1'
 $environmentSetup = Join-Path $PSScriptRoot 'setup-build-environment.ps1'
 $verifyScript = Join-Path $PSScriptRoot 'verify-checkout.ps1'
+$activationScript = Join-Path $PSScriptRoot 'runtime-activation.ps1'
 
-foreach ($required in @($buildEntry, $environmentSetup, $verifyScript)) {
+foreach ($required in @($buildEntry, $environmentSetup, $verifyScript, $activationScript)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "A required local build script is missing: $required"
     }
 }
+
+. $activationScript
 
 if ([string]::IsNullOrWhiteSpace($LogDirectory)) {
     $local = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:TEMP }
@@ -178,12 +181,19 @@ try {
         if (-not (Test-Path -LiteralPath $launcherRoot -PathType Container)) {
             throw "Launcher directory does not exist: $launcherRoot"
         }
+
         $runtimeStage = Join-Path $launcherRoot '.runtime-staging'
         $runtimeTarget = Join-Path $launcherRoot 'runtime'
         $runtimeBackup = Join-Path $launcherRoot '.runtime-previous'
-        foreach ($temporaryPath in @($runtimeStage, $runtimeBackup)) {
-            if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Recurse -Force }
-        }
+        $runtimeRequired = @(
+            'smash.exe', 'smash-compat.exe', 'smash-base.exe',
+            'smash-base-compat.exe', 'wua_extract.exe', 'title-logo.png'
+        )
+
+        # Recover the previous runtime before preparing a replacement. This
+        # preserves the only working copy if an earlier activation was interrupted.
+        Recover-RuntimeActivation -Stage $runtimeStage -Target $runtimeTarget -Backup $runtimeBackup -RequiredFiles $runtimeRequired
+
         New-Item -ItemType Directory -Force -Path $runtimeStage | Out-Null
         foreach ($file in Get-ChildItem -LiteralPath $playDirectory -File) {
             if ($file.Name -eq 'U Unlocked.exe') { continue }
@@ -209,18 +219,7 @@ try {
             }
         }
 
-        if (Test-Path -LiteralPath $runtimeTarget) {
-            Move-Item -LiteralPath $runtimeTarget -Destination $runtimeBackup
-        }
-        try {
-            Move-Item -LiteralPath $runtimeStage -Destination $runtimeTarget
-        } catch {
-            if (Test-Path -LiteralPath $runtimeBackup) {
-                Move-Item -LiteralPath $runtimeBackup -Destination $runtimeTarget
-            }
-            throw
-        }
-        if (Test-Path -LiteralPath $runtimeBackup) { Remove-Item -LiteralPath $runtimeBackup -Recurse -Force }
+        Activate-StagedRuntime -Stage $runtimeStage -Target $runtimeTarget -Backup $runtimeBackup -RequiredFiles $runtimeRequired
         Write-Host "Local game runtime activated: $runtimeTarget" -ForegroundColor Green
     }
 
