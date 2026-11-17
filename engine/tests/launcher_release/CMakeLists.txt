@@ -30,6 +30,7 @@ set_target_properties(u_unlocked_launcher PROPERTIES
 )
 target_include_directories(u_unlocked_launcher PRIVATE
     "${ENGINE_ROOT}/runtime/src"
+    "${ENGINE_ROOT}/runtime/include"
     "${ENGINE_ROOT}/third_party/tinyxml2"
 )
 target_include_directories(u_unlocked_launcher SYSTEM PRIVATE "${ENGINE_ROOT}/third_party/stb")
