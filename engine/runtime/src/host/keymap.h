@@ -20,11 +20,12 @@
 
 namespace cafe::host::keymap {
 
-// One assignable input: GamePad buttons, or a direction of the left stick.
+// One assignable input: GamePad buttons, or a direction of either stick.
 struct Input {
     std::string_view id;
     uint32_t button;
-    int8_t stick_x, stick_y; // up positive
+    int8_t stick_x, stick_y; // left stick, up positive
+    int8_t right_stick_x, right_stick_y; // right stick, up positive
     uint16_t default_key;
 };
 
@@ -33,26 +34,30 @@ struct Input {
 // diamond, by place: I top, K bottom, J left, L right); H/; for L/R, U/O
 // for ZL/ZR; the arrows the left stick; Enter Plus, Backspace Minus, the
 // Home key HOME.
-inline constexpr std::array<Input, 19> kInputs{{
-    {"dpad_up", os::vpad::kUp, 0, 0, 26},
-    {"dpad_down", os::vpad::kDown, 0, 0, 22},
-    {"dpad_left", os::vpad::kLeft, 0, 0, 4},
-    {"dpad_right", os::vpad::kRight, 0, 0, 7},
-    {"face_top", os::vpad::kX, 0, 0, 12},
-    {"face_bottom", os::vpad::kB, 0, 0, 14},
-    {"face_left", os::vpad::kY, 0, 0, 13},
-    {"face_right", os::vpad::kA, 0, 0, 15},
-    {"l", os::vpad::kL, 0, 0, 11},
-    {"r", os::vpad::kR, 0, 0, 51},
-    {"zl", os::vpad::kZL, 0, 0, 24},
-    {"zr", os::vpad::kZR, 0, 0, 18},
-    {"stick_up", 0, 0, 1, 82},
-    {"stick_down", 0, 0, -1, 81},
-    {"stick_left", 0, -1, 0, 80},
-    {"stick_right", 0, 1, 0, 79},
-    {"plus", os::vpad::kPlus, 0, 0, 40},
-    {"minus", os::vpad::kMinus, 0, 0, 42},
-    {"home", os::vpad::kHome, 0, 0, 74},
+inline constexpr std::array<Input, 23> kInputs{{
+    {"dpad_up", os::vpad::kUp, 0, 0, 0, 0, 26},
+    {"dpad_down", os::vpad::kDown, 0, 0, 0, 0, 22},
+    {"dpad_left", os::vpad::kLeft, 0, 0, 0, 0, 4},
+    {"dpad_right", os::vpad::kRight, 0, 0, 0, 0, 7},
+    {"face_top", os::vpad::kX, 0, 0, 0, 0, 12},
+    {"face_bottom", os::vpad::kB, 0, 0, 0, 0, 14},
+    {"face_left", os::vpad::kY, 0, 0, 0, 0, 13},
+    {"face_right", os::vpad::kA, 0, 0, 0, 0, 15},
+    {"l", os::vpad::kL, 0, 0, 0, 0, 11},
+    {"r", os::vpad::kR, 0, 0, 0, 0, 51},
+    {"zl", os::vpad::kZL, 0, 0, 0, 0, 24},
+    {"zr", os::vpad::kZR, 0, 0, 0, 0, 18},
+    {"stick_up", 0, 0, 1, 0, 0, 82},
+    {"stick_down", 0, 0, -1, 0, 0, 81},
+    {"stick_left", 0, -1, 0, 0, 0, 80},
+    {"stick_right", 0, 1, 0, 0, 0, 79},
+    {"right_stick_up", 0, 0, 0, 0, 1, 23},
+    {"right_stick_down", 0, 0, 0, 0, -1, 10},
+    {"right_stick_left", 0, 0, 0, -1, 0, 9},
+    {"right_stick_right", 0, 0, 0, 1, 0, 11},
+    {"plus", os::vpad::kPlus, 0, 0, 0, 0, 40},
+    {"minus", os::vpad::kMinus, 0, 0, 0, 0, 42},
+    {"home", os::vpad::kHome, 0, 0, 0, 0, 74},
 }};
 constexpr size_t kInputCount = kInputs.size();
 
