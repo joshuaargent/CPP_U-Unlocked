@@ -708,6 +708,7 @@ public:
         time_ += dt;
         if (capture_binding_ && time_ - capture_started_ >= 10.0f) {
             capture_binding_ = false;
+            capture_keyboard_ = false;
             controls_status_ = "Binding timed out. Select Bind again to retry.";
         }
         // The stick moves the selection, repeating while held.
@@ -1099,7 +1100,7 @@ private:
                     "LEFT STICK LEFT", "LEFT STICK RIGHT", "PLUS", "MINUS", "HOME"};
                 const uint16_t scancode = keyboard_keys_[control_keyboard_action_];
                 const char* key_name = SDL_GetScancodeName(static_cast<SDL_Scancode>(scancode));
-                list_ = {{"CONTROLLER", "Keyboard (Player 1)"},
+                list_ = {{"INPUT DEVICE", "Keyboard (Player 1)"},
                          {"BUTTON", names[control_keyboard_action_]},
                          {"BIND KEY", capture_binding_ && capture_keyboard_ ? "Press a key..." : (key_name && *key_name ? key_name : "Unbound")},
                          {"SAVE KEYBOARD", "Save"},
@@ -1119,7 +1120,7 @@ private:
                 char dead_zone[16]{}, threshold[16]{};
                 std::snprintf(dead_zone, sizeof(dead_zone), "%.2f", control_profile_.dead_zones[control_axis_action_]);
                 std::snprintf(threshold, sizeof(threshold), "%.2f", control_profile_.trigger_threshold);
-                list_ = {{"CONTROLLER", device},
+                list_ = {{"INPUT DEVICE", device},
                          {"PLAYER SLOT", player_slot},
                          {"BUTTON", control_button_names()[control_button_action_]},
                          {"BIND BUTTON", capture_binding_ && !capture_axis_ ? "Waiting..." : (button_name ? button_name : "Unbound")},
@@ -2533,7 +2534,7 @@ private:
             font_.draw(r_, x, y, fit(line, px * 0.85f, layout_.w * 0.65f), px * 0.85f,
                        capture_binding_ ? kGold : kDim);
             font_.draw(r_, x, y + H * 0.045f,
-                       "Profiles are stored per controller in the U Unlocked configuration folder.",
+                       "Keyboard bindings are stored in the U Unlocked configuration folder.",
                        px * 0.75f, kDim);
             return;
         }
