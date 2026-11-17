@@ -61,7 +61,7 @@ function Resolve-TitleFolder {
         throw "$Label folder is missing code\app.xml. Select the extracted title folder, not its parent or the code folder."
     }
     if (-not (Test-Path -LiteralPath $rpxPath -PathType Leaf)) {
-        throw "$Label folder is missing code\cross_f.rpx. This build currently requires the title's cross_f.rpx input."
+        throw "$Label folder is missing code\cross_f.rpx. This build currently requires the cross_f.rpx input from the title."
     }
 
     try {
