@@ -87,6 +87,18 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $dependencyBundle -Path
 }
 Copy-Item -LiteralPath $dependencyBundle -Destination (Join-Path $buildKit 'dependency-bundle.zip')
 Remove-Item -LiteralPath $dependencyBundle -Force
+
+# Bundle the exact compiler, CMake, Ninja, and Python used by this release build.
+# The player no longer needs WinGet or a separate 180 MB compiler download.
+$toolchainBundle = Join-Path $dist "$name-toolchain-bundle.zip"
+Remove-Item -LiteralPath $toolchainBundle -Force -ErrorAction SilentlyContinue
+& (Join-Path $repoRoot 'tools\\windows\\package-toolchain-bundle.ps1') -OutputArchive $toolchainBundle
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $toolchainBundle -PathType Leaf)) {
+    throw 'Creating the self-contained Windows toolchain bundle failed.'
+}
+Copy-Item -LiteralPath $toolchainBundle -Destination (Join-Path $buildKit 'toolchain-bundle.zip')
+Remove-Item -LiteralPath $toolchainBundle -Force
+
 foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\toolchain-path.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
@@ -100,6 +112,7 @@ $buildKitAssets = @(
     @{ name = 'prebuilt-dependencies.zip'; path = (Join-Path $buildKit 'prebuilt-dependencies.zip') },
     @{ name = 'cafe-recomp.exe'; path = (Join-Path $buildKit 'cafe-recomp.exe') },
     @{ name = 'dependency-bundle.zip'; path = (Join-Path $buildKit 'dependency-bundle.zip') },
+    @{ name = 'toolchain-bundle.zip'; path = (Join-Path $buildKit 'toolchain-bundle.zip') },
     @{ name = 'U Unlocked.exe'; path = $launcher },
     @{ name = 'wua_extract.exe'; path = $wuaExtractor }
 )
@@ -205,7 +218,7 @@ stb_image and stb_truetype (Sean Barrett): public domain or MIT, at your choice;
 @'
 This package contains the U Unlocked launcher, its bounded WUA extraction utility, and the complete source build kit.
 
-Select your base-game and update folders in the launcher, then choose BUILD RUNTIME (or select PLAY when no runtime has been built). The launcher runs the included build kit, which installs the precompiled third-party libraries and generic recompiler supplied with this release. It installs the pinned compiler/build tools and compiles only the runtime and game-specific code that must be built from your own legally obtained game files.
+Select your base-game and update folders in the launcher, then choose BUILD RUNTIME (or select PLAY when no runtime has been built). The launcher runs the included build kit, which installs the precompiled third-party libraries, generic recompiler, and pinned Windows compiler/build tools supplied with this release. It compiles the native runtime and game-specific code that must be built from your own legally obtained game files.
 
 No Nintendo game data, console keys, saves, generated recompiled code, or game executable is included. Generated game code and executables remain on this PC.
 '@ | Set-Content -LiteralPath (Join-Path $stage 'RUNTIME-BUILD-REQUIRED.txt') -Encoding utf8
