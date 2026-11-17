@@ -143,6 +143,34 @@ class DependencyArchiveTests(unittest.TestCase):
             self.assertEqual((installed / setup_deps.MARKER).read_text(encoding="ascii").strip(), revision)
             self.assertEqual((installed / "CMakeLists.txt").read_text(encoding="utf-8"), "project(SDL)\n")
 
+    def test_rejects_modified_dependency_file_by_sha256(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            build_root = root / "build-engine"
+            dependency = build_root / "third_party" / "SDL"
+            dependency.mkdir(parents=True)
+            revision = "a" * 40
+            (dependency / setup_deps.MARKER).write_text(revision + "\n", encoding="ascii")
+            (dependency / "source.txt").write_text("original", encoding="utf-8")
+            lock = {"SDL": {"revision": revision}}
+            bundle = root / "dependency-bundle.zip"
+            with mock.patch.object(setup_deps, "ROOT", build_root):
+                setup_deps.create_dependency_bundle(bundle, lock)
+
+            tampered = root / "tampered-bundle.zip"
+            with zipfile.ZipFile(bundle, "r") as source, zipfile.ZipFile(tampered, "w") as output:
+                for entry in source.infolist():
+                    data = source.read(entry.filename)
+                    if entry.filename.endswith("/source.txt"):
+                        data = b"modified"
+                    output.writestr(entry.filename, data)
+
+            install_root = root / "install-engine"
+            with mock.patch.object(setup_deps, "ROOT", install_root):
+                with self.assertRaisesRegex(RuntimeError, "SHA-256 mismatch"):
+                    setup_deps.install_dependency_bundle(tampered, lock)
+            self.assertFalse((install_root / "third_party" / "SDL").exists())
+
     def test_rejects_bundle_revision_mismatch_before_installing_any_dependency(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
