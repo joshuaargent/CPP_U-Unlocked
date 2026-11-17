@@ -102,7 +102,8 @@ try {
     # usage path. Missing dependent DLLs fail before the process can start.
     $wuaExecutable = Join-Path $rootRuntimeDirectory 'wua_extract.exe'
     $wuaProcess = Start-Process -FilePath $wuaExecutable -WorkingDirectory $rootRuntimeDirectory -PassThru -Wait -NoNewWindow
-    if (-not $wuaProcess -or $wuaProcess.Id -le 0 -or $wuaProcess.ExitCode -ne 2) {
+    if (-not $wuaProcess) { throw 'The packaged WUA extractor could not be started.' }
+    if ($wuaProcess.Id -le 0 -or $wuaProcess.ExitCode -ne 2) {
         throw "The packaged WUA extractor failed its startup/usage smoke test (exit code $($wuaProcess.ExitCode))."
     }
 
