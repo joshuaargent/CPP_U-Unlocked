@@ -77,7 +77,7 @@ fs::path home() {
 
 } // namespace
 
-bool is_regular_file(const host::FileStat& st) {
+static bool is_regular_file(const host::FileStat& st) {
 #ifdef _WIN32
     return (st.st_mode & _S_IFMT) == _S_IFREG;
 #else
@@ -198,7 +198,7 @@ Watcher::Stamp Watcher::stamp() const {
     host::FileStat st{};
     if (host::file_stat(file_, st) != 0) return {};
 #ifdef _WIN32
-    const auto ns = [](time_t t) { return int64_t{t} * 1'000'000'000; };
+    const auto ns = [](std::time_t t) { return int64_t{t} * 1'000'000'000; };
     return {true, st.st_dev, st.st_ino, static_cast<uint64_t>(st.st_size), ns(st.st_mtime), ns(st.st_ctime)};
 #else
     const auto ns = [](const timespec& t) { return int64_t{t.tv_sec} * 1'000'000'000 + t.tv_nsec; };
