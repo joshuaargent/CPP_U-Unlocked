@@ -61,40 +61,14 @@ Remove-Item -LiteralPath $buildKitArchive -Force
 # The release workflow has already fetched every locked source revision. Package
 # those exact, marker-verified trees so first-run builds do not depend on GitHub
 # archive downloads or the user's network connection.
-# Build a separate, integrity-manifested archive of the already-compiled
-# dependency prefix. Player machines install these libraries; they do not compile
-# SDL, shaderc, glslang, SPIRV-Tools, zlib, or zstd themselves.
-$prebuiltPrefix = Join-Path $engineRoot 'build-deps\prefix'
+# Package the compiled dependency prefix using the same tested packager as CI.
 $prebuiltArchive = Join-Path $dist "$name-prebuilt-dependencies.zip"
-$prebuiltStage = Join-Path $dist ('.prebuilt-dependencies-' + [guid]::NewGuid().ToString('N'))
-if (-not (Test-Path -LiteralPath (Join-Path $prebuiltPrefix 'lib\libvulkan-1.a') -PathType Leaf) -or
-    -not (Test-Path -LiteralPath (Join-Path $prebuiltPrefix 'include\vulkan\vulkan.h') -PathType Leaf)) {
-    throw "The compiled dependency prefix is missing or incomplete: $prebuiltPrefix"
+& (Join-Path $engineRoot 'tools\windows\package-prebuilt-dependencies.ps1') -EngineRoot $engineRoot -OutputArchive $prebuiltArchive
+if (-not (Test-Path -LiteralPath $prebuiltArchive -PathType Leaf)) {
+    throw 'Precompiled dependency archive was not created.'
 }
-Remove-Item -LiteralPath $prebuiltArchive -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path (Join-Path $prebuiltStage 'prefix') | Out-Null
-Copy-Item -Path (Join-Path $prebuiltPrefix '*') -Destination (Join-Path $prebuiltStage 'prefix') -Recurse -Force
-$lockPath = Join-Path $engineRoot 'dependencies.lock.json'
-$prebuiltManifest = [ordered]@{
-    schema_version = 1
-    architecture = 'x86_64-windows'
-    toolchain_version = '20260616'
-    dependency_lock_sha256 = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
-    build_recipe_sha256 = (Get-FileHash -LiteralPath (Join-Path $engineRoot 'tools\windows\build-deps.ps1') -Algorithm SHA256).Hash.ToLowerInvariant()
-    files = @(
-        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $prebuiltStage 'prefix') -File -Recurse | Sort-Object FullName) {
-            $relative = $file.FullName.Substring($prebuiltStage.Length + 1).Replace('\', '/')
-            [ordered]@{ path = $relative; sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
-        }
-    )
-}
-if ($prebuiltManifest.files.Count -lt 2) { throw 'The precompiled dependency prefix contains too few files.' }
-$prebuiltManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $prebuiltStage 'prebuilt-manifest.json') -Encoding UTF8
-Compress-Archive -Path (Join-Path $prebuiltStage '*') -DestinationPath $prebuiltArchive -CompressionLevel Optimal
-if (-not (Test-Path -LiteralPath $prebuiltArchive -PathType Leaf)) { throw 'Precompiled dependency archive was not created.' }
 Copy-Item -LiteralPath $prebuiltArchive -Destination (Join-Path $stage 'prebuilt-dependencies.zip')
 Remove-Item -LiteralPath $prebuiltArchive -Force
-Remove-Item -LiteralPath $prebuiltStage -Recurse -Force
 
 # Include the generic PowerPC recompiler built from this exact source revision.
 # It contains no game-derived code; the user's RPX files are still processed locally.
@@ -114,7 +88,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $dependencyBundle -Path
 }
 Copy-Item -LiteralPath $dependencyBundle -Destination (Join-Path $stage 'dependency-bundle.zip')
 Remove-Item -LiteralPath $dependencyBundle -Force
-foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
+foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
     }
