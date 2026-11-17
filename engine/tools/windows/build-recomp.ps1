@@ -1,7 +1,8 @@
 # Build cafe-recomp, cafe-census, and the function finder self-test.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-$toolchain = Join-Path $root 'toolchain'
+. (Join-Path $root 'tools\windows\toolchain-path.ps1')
+$toolchain = Get-UUnlockedToolchainRoot
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $prefix = Join-Path $engineRoot 'build-deps\prefix'
 $python = (Get-Command python).Source
