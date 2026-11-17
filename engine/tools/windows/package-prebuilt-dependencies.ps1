@@ -32,9 +32,15 @@ foreach ($required in @(
         throw "A required prebuilt dependency input is missing: $required"
     }
 }
-$shadercImportLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -match 'shaderc_shared' })
-$sdlImportLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -match 'SDL3' })
-$zlibLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -match '^libz(\.dll)?\.a
+$shadercImportLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -like '*shaderc_shared*' })
+$sdlImportLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -like '*SDL3*' })
+$zlibLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -eq 'libz.a' -or $_.Name -eq 'libz.dll.a' })
+$zstdLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -like '*zstd*' })
+if ($shadercImportLibraries.Count -eq 0 -or $sdlImportLibraries.Count -eq 0 -or
+    $zlibLibraries.Count -eq 0 -or $zstdLibraries.Count -eq 0) {
+    throw 'One or more required shaderc, SDL3, zlib, or zstd link libraries are missing from the prebuilt prefix.'
+}
+
 $outputDirectory = Split-Path -Parent $OutputArchive
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
 $stage = Join-Path $outputDirectory ('.prebuilt-dependencies-' + [guid]::NewGuid().ToString('N'))
