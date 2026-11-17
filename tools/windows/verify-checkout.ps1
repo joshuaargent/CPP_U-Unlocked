@@ -62,11 +62,14 @@ if ($gitCommand -and (Test-Path -LiteralPath (Join-Path $repoRoot '.git'))) {
 } else {
     # Release source bundles intentionally omit .git metadata. Scan the complete
     # source tree while excluding generated build outputs and downloaded toolchains.
-    $excludedRoots = @('toolchain', 'generated', 'Play', 'dist', 'engine/build', 'engine/build-deps', 'engine/third_party/ZArchive', 'engine/third_party/addrlib', 'engine/third_party/zlib', 'engine/third_party/SDL', 'engine/third_party/Vulkan-Headers', 'engine/third_party/zstd', 'engine/third_party/shaderc', 'engine/third_party/glslang', 'engine/third_party/spirv-headers', 'engine/third_party/spirv-tools', 'engine/third_party/stb')
+    $excludedRoots = @('toolchain', 'generated', 'Play', 'dist', 'engine/build', 'engine/build-deps', 'engine/build-prebuilt-runtime', 'engine/third_party/ZArchive', 'engine/third_party/addrlib', 'engine/third_party/zlib', 'engine/third_party/SDL', 'engine/third_party/Vulkan-Headers', 'engine/third_party/zstd', 'engine/third_party/shaderc', 'engine/third_party/glslang', 'engine/third_party/spirv-headers', 'engine/third_party/spirv-tools', 'engine/third_party/stb')
+    $binaryExtensions = @('.zip', '.exe', '.dll', '.a', '.obj', '.lib', '.pdb', '.png', '.ico', '.bin')
+
     $trackedFiles = @(Get-ChildItem -LiteralPath $repoRoot -File -Recurse -Force | Where-Object {
         $relative = $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
         $parts = $relative.Split('/')
         ($parts -notcontains '.git') -and
+        ([IO.Path]::GetExtension($_.Name) -notin $binaryExtensions) -and
         -not ($excludedRoots | Where-Object { $relative.StartsWith($_ + '/', [System.StringComparison]::OrdinalIgnoreCase) })
     } | ForEach-Object { $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/') })
 }
