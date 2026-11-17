@@ -109,10 +109,8 @@ find_package(Vulkan REQUIRED)
 find_package(SDL3 REQUIRED CONFIG)
 # GLSL -> SPIR-V at run time.
 find_library(SHADERC_LIBRARY NAMES shaderc_shared REQUIRED)
-target_link_libraries(cafe_runtime PUBLIC cemu_nex cafe_rpx cafe_title ${CAFE_HOST_LIBS} Threads::Threads ZArchive::zarchive amd_addrlib cafe_latte
+target_link_libraries(cafe_runtime ${CAFE_RUNTIME_LINK_SCOPE} cemu_nex cafe_rpx cafe_title ${CAFE_HOST_LIBS} Threads::Threads ZArchive::zarchive amd_addrlib cafe_latte
     Vulkan::Vulkan SDL3::SDL3 ${SHADERC_LIBRARY})
-# Vulkan structures are initialised with only their sType.
-target_compile_options(cafe_runtime PRIVATE -Wall -Wextra -Wpedantic -Wno-missing-field-initializers)
 
 if(NOT CAFE_RUNTIME_PREBUILT)
 # The runtime's own shaders, compiled to SPIR-V at build time (headers in the build folder).
