@@ -250,13 +250,135 @@ try {
         $sourceRevision = (Get-Content -LiteralPath (Join-Path $releaseAssetRoot 'source-revision.txt') -Raw).Trim()
         & $prebuiltRuntimeInstaller -ArchivePath $runtimeArchive -EngineRoot (Join-Path $repoRoot 'engine') -ExpectedSourceRevision $sourceRevision
         if ($LASTEXITCODE -ne 0) { throw 'Precompiled generic runtime verification or installation failed.' }
+    }
 
+    # Keep Ninja's object files outside the replaceable release folder. The key
+    # follows the launcher installation path, so updating the release in place
+    # reuses unchanged generated game objects instead of compiling everything again.
+    $cacheIdentityPath = if ([string]::IsNullOrWhiteSpace($LauncherDirectory)) {
+        $repoRoot
+    } else {
+        [IO.Path]::GetFullPath($LauncherDirectory)
+    }
+    $identityBytes = [Text.Encoding]::UTF8.GetBytes($cacheIdentityPath.ToUpperInvariant())
+    $identitySha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $cacheIdentity = [BitConverter]::ToString($identitySha.ComputeHash($identityBytes)).Replace('-', '').ToLowerInvariant().Substring(0, 20)
+    } finally {
+        $identitySha.Dispose()
+    }
+    $localCacheRoot = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:TEMP }
+    $cacheDirectory = Join-Path $localCacheRoot (Join-Path 'U Unlocked\BuildCache' $cacheIdentity)
+    $engineBuildDirectory = Join-Path $cacheDirectory 'engine-build'
+    New-Item -ItemType Directory -Force -Path $cacheDirectory | Out-Null
+
+    $toolchainManifestPath = Join-Path $toolchainRoot 'toolchain-manifest.json'
+    $compilerPath = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
+    $toolchainFingerprint = if (Test-Path -LiteralPath $toolchainManifestPath -PathType Leaf) {
+        (Get-FileHash -LiteralPath $toolchainManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    } elseif (Test-Path -LiteralPath $compilerPath -PathType Leaf) {
+        (Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    } else {
+        throw 'Cannot fingerprint the pinned Windows compiler for the persistent build cache.'
+    }
+    $dependencyLock = Join-Path $repoRoot 'engine\dependencies.lock.json'
+    $dependencyRecipe = Join-Path $repoRoot 'engine\tools\windows\build-deps.ps1'
+    $dependencyFingerprint = if ($releaseAssetRoot) {
+        (Get-FileHash -LiteralPath (Join-Path $releaseAssetRoot 'prebuilt-dependencies.zip') -Algorithm SHA256).Hash.ToLowerInvariant()
+    } else {
+        $dependencyBytes = [Text.Encoding]::UTF8.GetBytes(
+            (Get-FileHash -LiteralPath $dependencyLock -Algorithm SHA256).Hash.ToLowerInvariant() +
+            (Get-FileHash -LiteralPath $dependencyRecipe -Algorithm SHA256).Hash.ToLowerInvariant()
+        )
+        $dependencySha = [Security.Cryptography.SHA256]::Create()
+        try { [BitConverter]::ToString($dependencySha.ComputeHash($dependencyBytes)).Replace('-', '').ToLowerInvariant() }
+        finally { $dependencySha.Dispose() }
+    }
+    $runtimeManifestPath = Join-Path $repoRoot 'engine\build-prebuilt-runtime\runtime-manifest.json'
+    if (Test-Path -LiteralPath $runtimeManifestPath -PathType Leaf) {
+        $runtimeManifest = Get-Content -LiteralPath $runtimeManifestPath -Raw | ConvertFrom-Json
+        $runtimeFingerprintData = [ordered]@{
+            compiler_sha256 = $runtimeManifest.compiler_sha256
+            objects = @($runtimeManifest.objects | ForEach-Object { "$($_.path):$($_.sha256)" })
+            libraries = @($runtimeManifest.libraries | ForEach-Object { "$($_.path):$($_.sha256)" })
+            host_variants = @($runtimeManifest.host_variants | ForEach-Object {
+                $variant = $_.variant
+                @($_.objects | ForEach-Object { "$variant/$($_.path):$($_.sha256)" })
+            })
+        }
+        $runtimeFingerprintJson = $runtimeFingerprintData | ConvertTo-Json -Depth 8 -Compress
+        $runtimeBytes = [Text.Encoding]::UTF8.GetBytes($runtimeFingerprintJson)
+        $runtimeSha = [Security.Cryptography.SHA256]::Create()
+        try { $runtimeFingerprint = [BitConverter]::ToString($runtimeSha.ComputeHash($runtimeBytes)).Replace('-', '').ToLowerInvariant() }
+        finally { $runtimeSha.Dispose() }
+    } else {
+        $runtimeFingerprint = 'source-built-runtime'
+    }
+    $cmakeVersion = (& $cmake --version | Select-Object -First 1).Trim()
+    $ninjaVersion = (& $ninja --version | Out-String).Trim()
+    $sourceRevision = if ($releaseAssetRoot) { (Get-Content -LiteralPath (Join-Path $releaseAssetRoot 'source-revision.txt') -Raw).Trim() } else { 'working-tree' }
+    $cacheFingerprintData = [ordered]@{
+        schema_version = 1
+        engine_source_root = [IO.Path]::GetFullPath((Join-Path $repoRoot 'engine'))
+        compiler_sha256 = (Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        toolchain_manifest_sha256 = $toolchainFingerprint
+        dependency_fingerprint = $dependencyFingerprint
+        runtime_fingerprint = $runtimeFingerprint
+        cmake_version = $cmakeVersion
+        ninja_version = $ninjaVersion
+        configuration = 'Release'
+        linker_flags = '-static'
+        generated_architectures = @('x86-64-v3', 'x86-64-v2')
+    }
+    $cacheFingerprintJson = $cacheFingerprintData | ConvertTo-Json -Depth 8 -Compress
+    $cacheFingerprintBytes = [Text.Encoding]::UTF8.GetBytes($cacheFingerprintJson)
+    $cacheFingerprintSha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $cacheFingerprint = [BitConverter]::ToString($cacheFingerprintSha.ComputeHash($cacheFingerprintBytes)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $cacheFingerprintSha.Dispose()
+    }
+    $cacheStatePath = Join-Path $cacheDirectory 'build-cache-fingerprint.json'
+    $cacheReusable = $false
+    if ((Test-Path -LiteralPath $cacheStatePath -PathType Leaf) -and
+        (Test-Path -LiteralPath $engineBuildDirectory -PathType Container)) {
+        try {
+            $previousCacheState = Get-Content -LiteralPath $cacheStatePath -Raw | ConvertFrom-Json
+            $cacheReusable = $previousCacheState.schema_version -eq 1 -and
+                $previousCacheState.fingerprint_sha256 -eq $cacheFingerprint -and
+                $previousCacheState.engine_source_root -eq $cacheFingerprintData.engine_source_root
+        } catch {
+            $cacheReusable = $false
+        }
+    }
+    if (-not $cacheReusable -and (Test-Path -LiteralPath $engineBuildDirectory -PathType Container)) {
+        Write-Host 'Build toolchain/dependency fingerprint changed; safely rebuilding the local CMake object cache.' -ForegroundColor Yellow
+        Remove-Item -LiteralPath $engineBuildDirectory -Recurse -Force
+    } elseif ($cacheReusable) {
+        Write-Host 'Reusing the persistent local CMake/Ninja object cache; changed source files will rebuild incrementally.' -ForegroundColor Green
+    }
+    New-Item -ItemType Directory -Force -Path $engineBuildDirectory | Out-Null
+    $cacheState = [ordered]@{
+        schema_version = 1
+        fingerprint_sha256 = $cacheFingerprint
+        engine_source_root = $cacheFingerprintData.engine_source_root
+        source_revision = $sourceRevision
+        updated_utc = [DateTime]::UtcNow.ToString('o')
+    }
+    $cacheStateTemp = "$cacheStatePath.tmp"
+    $cacheState | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $cacheStateTemp -Encoding UTF8
+    Move-Item -LiteralPath $cacheStateTemp -Destination $cacheStatePath -Force
+    $env:U_UNLOCKED_ENGINE_BUILD_DIR = $engineBuildDirectory
+    Write-Host "Persistent build cache: $engineBuildDirectory"
+
+    if ($releaseAssetRoot) {
         $prebuiltRecompiler = Join-Path $releaseAssetRoot 'cafe-recomp.exe'
-        $recompilerDirectory = Join-Path $repoRoot 'engine\build\recomp'
+        $recompilerDirectory = Join-Path $engineBuildDirectory 'recomp'
         New-Item -ItemType Directory -Force -Path $recompilerDirectory | Out-Null
         Copy-Item -LiteralPath $prebuiltRecompiler -Destination (Join-Path $recompilerDirectory 'cafe-recomp.exe') -Force
-        Write-Host 'Installed verified precompiled dependencies and the release-matched generic recompiler.' -ForegroundColor Green
+        Write-Host 'Installed verified precompiled dependencies, runtime libraries, host objects, and the release-matched recompiler.' -ForegroundColor Green
     }
+
 
     & $verifyScript
     if ($LASTEXITCODE -ne 0) { throw "Source/toolchain verification failed with exit code $LASTEXITCODE." }
