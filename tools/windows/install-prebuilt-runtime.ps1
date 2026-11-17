@@ -106,6 +106,18 @@ try {
         throw 'The prebuilt runtime manifest does not match this release source or architecture.'
     }
 
+    $earlyHostVariantNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($variant in $manifest.host_variants) {
+        $variantName = [string]$variant.variant
+        if ($variantName -notin @('v2', 'v3') -or
+            -not $earlyHostVariantNames.Add($variantName) -or
+            -not ($variant.objects -is [array]) -or $variant.objects.Count -ne 3) {
+            throw 'The prebuilt runtime manifest has invalid host object variants.'
+        }
+    }
+    if ($earlyHostVariantNames.Count -ne 2) {
+        throw 'The prebuilt runtime manifest does not contain both host object variants.'
+    }
     $runtimeIdentityHash = Get-RuntimeIdentityHash -Manifest $manifest
     $archiveExpectedCount = $manifest.objects.Count + $manifest.libraries.Count + 6 + 1
     if ($archive.Entries.Count -ne $archiveExpectedCount) {
