@@ -314,6 +314,29 @@ def install_dependency_bundle(bundle_path, dependencies):
     bundle_path = Path(bundle_path)
     if not bundle_path.is_file():
         raise RuntimeError(f"Dependency bundle does not exist: {bundle_path}")
+    # The release bundle is immutable and its outer asset hash is checked by
+    # the launcher. Once its verified manifest and every pinned revision are
+    # installed, avoid unpacking and hashing hundreds of megabytes on each run.
+    with zipfile.ZipFile(bundle_path) as bundle:
+        manifest_bytes = bundle.read("bundle/dependency-manifest.json")
+    manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    try:
+        bundle_manifest = json.loads(manifest_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Dependency bundle integrity manifest is invalid: {error}") from error
+    expected_revisions = {name: dependency["revision"] for name, dependency in dependencies.items()}
+    if not isinstance(bundle_manifest, dict) or bundle_manifest.get("schema_version") != 1 or bundle_manifest.get("revisions") != expected_revisions:
+        raise RuntimeError("Dependency bundle lock revisions do not match dependencies.lock.json.")
+    sentinel = ROOT / "third_party" / ".u-unlocked-dependency-bundle.sha256"
+    if sentinel.is_file() and sentinel.read_text(encoding="ascii").strip() == manifest_digest:
+        installed = all(
+            (ROOT / "third_party" / name / MARKER).is_file()
+            and (ROOT / "third_party" / name / MARKER).read_text(encoding="ascii").strip() == dependency["revision"]
+            for name, dependency in dependencies.items()
+        )
+        if installed:
+            print("Pinned dependency sources are already installed and verified; skipping bundle extraction.")
+            return
     with tempfile.TemporaryDirectory(prefix="u-unlocked-dependency-bundle-") as temporary:
         extracted = Path(temporary)
         safe_extract(bundle_path, extracted)
@@ -379,6 +402,8 @@ def install_dependency_bundle(bundle_path, dependencies):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copytree(source, destination)
             print(f"{name}: {dependencies[name]['revision']} (installed from release bundle)")
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    sentinel.write_text(manifest_digest + "\n", encoding="ascii")
 
 def main():
     dependencies = json.loads((ROOT / "dependencies.lock.json").read_text(encoding="utf-8"))
