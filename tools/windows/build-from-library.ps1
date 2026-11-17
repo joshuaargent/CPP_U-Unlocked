@@ -63,6 +63,19 @@ function Resolve-TitleFolder {
     }
 }
 
+function Find-BuildTool {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [string[]]$Candidates = @()
+    )
+    foreach ($candidate in $Candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    $command = Get-Command $Name -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    return $null
+}
+
 function Copy-PreservedDirectory {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -118,6 +131,24 @@ try {
 
     & $environmentSetup
     if ($LASTEXITCODE -ne 0) { throw "Windows build environment setup failed with exit code $LASTEXITCODE." }
+
+    # Child PowerShell processes cannot modify this process's PATH. Resolve the
+    # just-installed tools again here before verify-checkout and the build scripts.
+    $toolchainRoot = Join-Path $repoRoot 'toolchain'
+    $cmake = Find-BuildTool 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
+    $ninja = Find-BuildTool 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
+    $python = Find-BuildTool 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
+    $compilerBin = Join-Path $toolchainRoot 'llvm-mingw\bin'
+    if (-not $cmake -or -not $ninja -or -not $python -or -not (Test-Path -LiteralPath (Join-Path $compilerBin 'x86_64-w64-mingw32-clang++.exe') -PathType Leaf)) {
+        throw 'The pinned CMake, Ninja, Python, or llvm-mingw compiler could not be located after bootstrap.'
+    }
+    $env:PATH = (@((Split-Path -Parent $python), (Split-Path -Parent $cmake), (Split-Path -Parent $ninja), $compilerBin, "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
+    try {
+        $memoryGb = [math]::Floor((Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory / 1GB)
+    } catch {
+        $memoryGb = 8
+    }
+    $env:U_UNLOCKED_BUILD_JOBS = if ($memoryGb -ge 32) { '4' } elseif ($memoryGb -ge 12) { '2' } else { '1' }
 
     & $verifyScript
     if ($LASTEXITCODE -ne 0) { throw "Source/toolchain verification failed with exit code $LASTEXITCODE." }
