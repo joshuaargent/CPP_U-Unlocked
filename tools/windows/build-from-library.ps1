@@ -156,8 +156,9 @@ $verifyScript = Join-Path $PSScriptRoot 'verify-checkout.ps1'
 $activationScript = Join-Path $PSScriptRoot 'runtime-activation.ps1'
 . (Join-Path $PSScriptRoot 'toolchain-path.ps1')
 $prebuiltDependencyInstaller = Join-Path $PSScriptRoot 'install-prebuilt-dependencies.ps1'
+$prebuiltRuntimeInstaller = Join-Path $PSScriptRoot 'install-prebuilt-runtime.ps1'
 
-foreach ($required in @($buildEntry, $environmentSetup, $verifyScript, $activationScript, $prebuiltDependencyInstaller)) {
+foreach ($required in @($buildEntry, $environmentSetup, $verifyScript, $activationScript, $prebuiltDependencyInstaller, $prebuiltRuntimeInstaller)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "A required local build script is missing: $required"
     }
@@ -194,7 +195,7 @@ try {
         $packageRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
         $buildKitRoot = Join-Path $packageRoot 'build-kit'
         if (Test-Path -LiteralPath (Join-Path $buildKitRoot 'build-kit-manifest.json') -PathType Leaf) {
-            foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip', 'toolchain-bundle.zip')) {
+            foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip', 'toolchain-bundle.zip', 'prebuilt-runtime.zip', 'source-revision.txt')) {
                 Assert-BuildKitFile -BuildKitDirectory $buildKitRoot -FileName $asset
             }
             $releaseAssetRoot = $buildKitRoot
@@ -244,6 +245,11 @@ try {
         $prebuiltArchive = Join-Path $releaseAssetRoot 'prebuilt-dependencies.zip'
         & $prebuiltDependencyInstaller -ArchivePath $prebuiltArchive -EngineRoot (Join-Path $repoRoot 'engine')
         if ($LASTEXITCODE -ne 0) { throw 'Precompiled dependency verification or installation failed.' }
+
+        $runtimeArchive = Join-Path $releaseAssetRoot 'prebuilt-runtime.zip'
+        $sourceRevision = (Get-Content -LiteralPath (Join-Path $releaseAssetRoot 'source-revision.txt' -Raw)).Trim()
+        & $prebuiltRuntimeInstaller -ArchivePath $runtimeArchive -EngineRoot (Join-Path $repoRoot 'engine') -ExpectedSourceRevision $sourceRevision
+        if ($LASTEXITCODE -ne 0) { throw 'Precompiled generic runtime verification or installation failed.' }
 
         $prebuiltRecompiler = Join-Path $releaseAssetRoot 'cafe-recomp.exe'
         $recompilerDirectory = Join-Path $repoRoot 'engine\build\recomp'
