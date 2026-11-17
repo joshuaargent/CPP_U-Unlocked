@@ -12,7 +12,8 @@ $env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $prefix 'bin'
 & $python (Join-Path $engineRoot 'tools\setup_deps.py')
 if ($LASTEXITCODE -ne 0) { throw 'setup_deps.py failed.' }
 
-$buildDirectory = Join-Path $engineRoot 'build'
+$buildDirectory = if (-not [string]::IsNullOrWhiteSpace($env:U_UNLOCKED_ENGINE_BUILD_DIR)) { [IO.Path]::GetFullPath($env:U_UNLOCKED_ENGINE_BUILD_DIR) } else { Join-Path $engineRoot 'build' }
+New-Item -ItemType Directory -Force -Path $buildDirectory | Out-Null
 & cmake -S $engineRoot -B $buildDirectory -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-clang++ -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_EXE_LINKER_FLAGS=-static
 if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
 
