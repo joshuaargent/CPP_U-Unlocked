@@ -135,6 +135,43 @@ jobs:
           ./engine/tools/windows/build-deps.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Pinned runtime dependency build failed.' }
 
+      - name: Package, relocate, and verify precompiled player dependencies
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'u-unlocked-prebuilt-dependencies.zip'
+          & ./engine/tools/windows/package-prebuilt-dependencies.ps1 -EngineRoot (Join-Path $PWD 'engine') -OutputArchive $archive
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'The precompiled dependency archive was not created.' }
+
+          $testEngine = Join-Path $env:RUNNER_TEMP 'relocated-engine'
+          New-Item -ItemType Directory -Force -Path (Join-Path $testEngine 'tools/windows') | Out-Null
+          Copy-Item -LiteralPath 'engine/dependencies.lock.json' -Destination $testEngine
+          Copy-Item -LiteralPath 'engine/tools/windows/build-deps.ps1' -Destination (Join-Path $testEngine 'tools/windows/build-deps.ps1')
+          & ./tools/windows/install-prebuilt-dependencies.ps1 -ArchivePath $archive -EngineRoot $testEngine
+          if (-not (Test-Path -LiteralPath (Join-Path $testEngine 'build-deps/prefix/lib/libvulkan-1.a') -PathType Leaf)) {
+            throw 'The relocated prebuilt Vulkan import library is missing.'
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $testEngine 'build-deps/prefix/bin/SDL3.dll') -PathType Leaf)) {
+            throw 'The relocated prebuilt SDL3 runtime is missing.'
+          }
+
+          $checkProject = Join-Path $env:RUNNER_TEMP 'prebuilt-sdl-cmake-check'
+          New-Item -ItemType Directory -Force -Path $checkProject | Out-Null
+          @'
+          cmake_minimum_required(VERSION 3.20)
+          project(PrebuiltSDLCheck LANGUAGES C CXX)
+          find_package(SDL3 REQUIRED CONFIG)
+          add_executable(prebuilt_sdl_check main.cpp)
+          target_link_libraries(prebuilt_sdl_check PRIVATE SDL3::SDL3)
+          '@ | Set-Content -LiteralPath (Join-Path $checkProject 'CMakeLists.txt') -Encoding UTF8
+          '#include <SDL3/SDL.h>' | Set-Content -LiteralPath (Join-Path $checkProject 'main.cpp') -Encoding UTF8
+          $compilerBin = (Resolve-Path 'toolchain/llvm-mingw/bin').Path
+          $env:PATH = "$compilerBin;$env:PATH"
+          $relocatedPrefix = Join-Path $testEngine 'build-deps/prefix'
+          cmake -S $checkProject -B (Join-Path $checkProject 'build') -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-clang++ "-DCMAKE_PREFIX_PATH=$relocatedPrefix"
+          if ($LASTEXITCODE -ne 0) { throw 'The relocated SDL3 CMake package did not configure.' }
+          cmake --build (Join-Path $checkProject 'build')
+          if ($LASTEXITCODE -ne 0) { throw 'The relocated SDL3 package did not compile and link.' }
+
       - name: Create and verify the pinned dependency release bundle
         shell: pwsh
         run: |
