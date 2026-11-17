@@ -92,14 +92,14 @@ Remove-Item -LiteralPath $dependencyBundle -Force
 # The player no longer needs WinGet or a separate 180 MB compiler download.
 $toolchainBundle = Join-Path $dist "$name-toolchain-bundle.zip"
 Remove-Item -LiteralPath $toolchainBundle -Force -ErrorAction SilentlyContinue
-& (Join-Path $repoRoot 'tools\\windows\\package-toolchain-bundle.ps1') -OutputArchive $toolchainBundle
+& (Join-Path $repoRoot 'tools\windows\package-toolchain-bundle.ps1') -OutputArchive $toolchainBundle
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $toolchainBundle -PathType Leaf)) {
     throw 'Creating the self-contained Windows toolchain bundle failed.'
 }
 Copy-Item -LiteralPath $toolchainBundle -Destination (Join-Path $buildKit 'toolchain-bundle.zip')
 Remove-Item -LiteralPath $toolchainBundle -Force
 
-foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\toolchain-path.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
+foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\toolchain-path.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json', 'tools\windows\package-toolchain-bundle.ps1')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
     }
