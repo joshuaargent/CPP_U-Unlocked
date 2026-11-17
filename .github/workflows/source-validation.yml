@@ -144,6 +144,8 @@ jobs:
       - name: Configure generated-code compile fixtures
         shell: pwsh
         run: |
+          $compilerBin = (Resolve-Path 'toolchain/llvm-mingw/bin').Path
+          $env:PATH = "$compilerBin;$env:PATH"
           $updateFixture = (Resolve-Path 'engine/tests/cmake_game_targets/fixtures/update').Path
           $baseFixture = (Resolve-Path 'engine/tests/cmake_game_targets/fixtures/base').Path
           cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-clang++ -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_EXE_LINKER_FLAGS=-static "-DSMASH_GENERATED_DIR=$updateFixture" "-DSMASH_BASE_GENERATED_DIR=$baseFixture"
