@@ -69,6 +69,30 @@ jobs:
           python engine/tools/setup_deps.py
           if ($LASTEXITCODE -ne 0) { throw 'Fetching pinned third-party sources failed.' }
 
+      - name: Bootstrap pinned Windows compiler
+        shell: pwsh
+        run: |
+          ./tools/windows/setup-build-environment.ps1 -UseSystemTools
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Windows compiler bootstrap failed.' }
+
+      - name: Compile pinned runtime dependencies for players
+        shell: pwsh
+        run: |
+          ./engine/tools/windows/build-deps.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Precompiled Windows dependency build failed.' }
+          if (-not (Test-Path 'engine/build-deps/prefix/lib/libvulkan-1.a')) {
+            throw 'The precompiled dependency prefix is incomplete.'
+          }
+
+      - name: Build the generic PowerPC recompiler for players
+        shell: pwsh
+        run: |
+          ./engine/tools/windows/build-recomp.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'The generic PowerPC recompiler build failed.' }
+          if (-not (Test-Path 'engine/build/recomp/cafe-recomp.exe')) {
+            throw 'The generic PowerPC recompiler executable is missing.'
+          }
+
       - name: Generate Windows application icon
         shell: pwsh
         run: |
@@ -148,7 +172,7 @@ jobs:
               if ($entries.ContainsKey($name)) { throw "Duplicate path in release ZIP: $name" }
               $entries.Add($name, $entry)
             }
-            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png', 'update-launcher.ps1', 'dependency-bundle.zip')) {
+            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png', 'update-launcher.ps1', 'dependency-bundle.zip', 'prebuilt-dependencies.zip', 'cafe-recomp.exe')) {
               if (-not $entries.ContainsKey($required)) { throw "Release ZIP is missing root entry: $required" }
             }
 
