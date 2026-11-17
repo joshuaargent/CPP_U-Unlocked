@@ -105,6 +105,9 @@ if (-not ($packageFiles | Where-Object { $_.Name -eq 'wua_extract.exe' })) {
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'title-logo.png' })) {
     throw 'The original U Unlocked title logo is missing from the package.'
 }
+if (-not ($packageFiles | Where-Object { $_.Name -eq 'dependency-bundle.zip' })) {
+    throw 'The verified third-party dependency bundle is missing from the package.'
+}
 $manifest = [ordered]@{
     schema_version = 1
     version = $Version
