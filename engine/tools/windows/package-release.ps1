@@ -78,7 +78,9 @@ $lockPath = Join-Path $engineRoot 'dependencies.lock.json'
 $prebuiltManifest = [ordered]@{
     schema_version = 1
     architecture = 'x86_64-windows'
+    toolchain_version = '20260616'
     dependency_lock_sha256 = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    build_recipe_sha256 = (Get-FileHash -LiteralPath (Join-Path $engineRoot 'tools\windows\build-deps.ps1') -Algorithm SHA256).Hash.ToLowerInvariant()
     files = @(
         foreach ($file in Get-ChildItem -LiteralPath (Join-Path $prebuiltStage 'prefix') -File -Recurse | Sort-Object FullName) {
             $relative = $file.FullName.Substring($prebuiltStage.Length + 1).Replace('\', '/')
