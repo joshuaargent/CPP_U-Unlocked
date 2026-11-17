@@ -297,7 +297,7 @@ uint64_t read_underlying(const File& file, uint64_t position, uint64_t size, voi
 std::optional<std::vector<uint8_t>> read_underlying(const std::string& relative, uint64_t limit) {
     File file;
     if (open_underlying(relative, file) != kOk) return std::nullopt;
-    std::vector<uint8_t> data(std::min(file.size, limit));
+    std::vector<uint8_t> data((std::min)(file.size, limit));
     const uint64_t n = read_underlying(file, 0, data.size(), data.data());
     if (file.fd >= 0) host::file_close(file.fd);
     if (n != data.size()) return std::nullopt;
@@ -488,7 +488,7 @@ Status read_file(int32_t handle, void* buffer, uint64_t size, std::optional<uint
     }
     transferred = 0;
     if (file.position < file.size) {
-        const uint64_t want = std::min(size, file.size - file.position);
+        const uint64_t want = (std::min)(size, file.size - file.position);
         if (file.overlay && file.overlay_index) {
             std::memcpy(buffer, file.overlay->ofs.data() + file.position, want);
             transferred = want;
@@ -498,7 +498,7 @@ Status read_file(int32_t handle, void* buffer, uint64_t size, std::optional<uint
                 const uint64_t at = file.position + transferred;
                 if (transferred >= want) break;
                 if (piece.at + piece.size <= at || piece.at > at) continue;
-                const uint64_t n = std::min(want - transferred, piece.at + piece.size - at);
+                const uint64_t n = (std::min)(want - transferred, piece.at + piece.size - at);
                 if (piece.data) {
                     std::memcpy(out + transferred, piece.data->data() + (at - piece.at), n);
                 } else if (read_underlying(file, piece.source + (at - piece.at), n, out + transferred) != n) {
@@ -548,7 +548,7 @@ Status write_file(int32_t handle, const void* buffer, uint64_t size, std::option
         transferred += static_cast<uint64_t>(n);
     }
     file.position += transferred;
-    file.size = std::max(file.size, file.position);
+    file.size = (std::max)(file.size, file.position);
     return kOk;
 }
 
