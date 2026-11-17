@@ -2,6 +2,7 @@ import hashlib
 import http.client
 import json
 import importlib.util
+import os
 from pathlib import Path
 import stat
 import tempfile
