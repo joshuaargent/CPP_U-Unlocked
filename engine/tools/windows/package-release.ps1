@@ -361,7 +361,7 @@ stb_image and stb_truetype (Sean Barrett): public domain or MIT, at your choice;
 @'
 This package contains the U Unlocked launcher, its bounded WUA extraction utility, and the complete source build kit.
 
-Select your base-game and update folders in the launcher, then choose BUILD RUNTIME (or select PLAY when no runtime has been built). The launcher runs the included build kit, which installs the precompiled third-party libraries, generic recompiler, and pinned Windows compiler/build tools supplied with this release. It reuses the precompiled native runtime and compiles only game-specific code from your own legally obtained game files, then links the four local game executables.
+Select your base-game and update folders in the launcher, then choose BUILD RUNTIME (or select PLAY when no runtime has been built). The launcher runs the included build kit, which installs the precompiled third-party libraries, generic recompiler, and pinned Windows compiler/build tools supplied with this release. It installs the pinned dependency sources from the included archive without network access, reuses the precompiled native runtime and shared host objects, and compiles only game-specific code from your own legally obtained game files before linking the four local game executables. A fingerprinted CMake/Ninja cache is kept under your local application data and reused across release updates when the toolchain and dependency inputs remain compatible.
 
 No Nintendo game data, console keys, saves, generated recompiled code, or game executable is included. Generated game code and executables remain on this PC.
 '@ | Set-Content -LiteralPath (Join-Path $stage 'RUNTIME-BUILD-REQUIRED.txt') -Encoding utf8
