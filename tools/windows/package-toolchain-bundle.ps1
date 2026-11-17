@@ -52,10 +52,10 @@ try {
     $ninjaDestination = Join-Path $stage 'ninja'
     New-Item -ItemType Directory -Force -Path $stage, $ninjaDestination | Out-Null
 
-    Copy-Item -LiteralPath $llvmRoot -Destination $llvmDestination -Recurse
-    Copy-Item -LiteralPath $cmakeRoot -Destination $cmakeDestination -Recurse
-    Copy-Item -LiteralPath $pythonRoot -Destination $pythonDestination -Recurse
-    Copy-Item -LiteralPath $ninjaExe -Destination (Join-Path $ninjaDestination 'ninja.exe')
+    Copy-Item -LiteralPath $llvmRoot -Destination $llvmDestination -Recurse -Force
+    Copy-Item -LiteralPath $cmakeRoot -Destination $cmakeDestination -Recurse -Force
+    Copy-Item -LiteralPath $pythonRoot -Destination $pythonDestination -Recurse -Force
+    Copy-Item -LiteralPath $ninjaExe -Destination (Join-Path $ninjaDestination 'ninja.exe') -Force
 
     $stagedCmake = Join-Path $cmakeDestination $cmakeRelative
     $stagedPython = Join-Path $pythonDestination $pythonRelative
