@@ -195,7 +195,7 @@ try {
 Copy-Item -LiteralPath $prebuiltRuntime -Destination (Join-Path $buildKit 'prebuilt-runtime.zip')
 Remove-Item -LiteralPath $prebuiltRuntime -Force
 
-foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\toolchain-path.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json', 'tools\windows\package-toolchain-bundle.ps1', 'engine\tools\windows\package-prebuilt-runtime.ps1', 'tools\windows\install-prebuilt-runtime.ps1')) {
+foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\toolchain-path.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json', 'tools\windows\package-toolchain-bundle.ps1', 'engine\tools\windows\package-prebuilt-runtime.ps1', 'tools\windows\install-prebuilt-runtime.ps1', 'LICENSES\NINJA-APACHE-2.0.txt')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
     }
