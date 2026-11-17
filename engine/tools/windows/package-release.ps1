@@ -217,6 +217,20 @@ try {
     }
     & (Join-Path $repoRoot 'tools\windows\install-prebuilt-runtime.ps1') -ArchivePath $prebuiltRuntime -EngineRoot $runtimeVerificationEngine -ExpectedSourceRevision $sourceRevision
     if ($LASTEXITCODE -ne 0) { throw 'The prebuilt runtime failed its repeated-install fast path.' }
+    
+    # The fast path must detect and repair a modified runtime object instead
+    # of trusting the marker and merely checking that the file still exists.
+    $runtimeManifest = Get-Content -LiteralPath (Join-Path $runtimeVerificationEngine 'build-prebuilt-runtime\runtime-manifest.json') -Raw | ConvertFrom-Json
+    $firstRuntimeObject = $runtimeManifest.objects | Select-Object -First 1
+    if (-not $firstRuntimeObject) { throw 'The runtime manifest contains no object to test cache repair.' }
+    $runtimeObjectPath = Join-Path (Join-Path $runtimeVerificationEngine 'build-prebuilt-runtime') ([string]$firstRuntimeObject.path).Replace('/', '\')
+    [IO.File]::WriteAllBytes($runtimeObjectPath, [byte[]](1, 2, 3, 4, 5))
+    & (Join-Path $repoRoot 'tools\windows\install-prebuilt-runtime.ps1') -ArchivePath $prebuiltRuntime -EngineRoot $runtimeVerificationEngine -ExpectedSourceRevision $sourceRevision
+    if ($LASTEXITCODE -ne 0) { throw 'The prebuilt runtime installer failed to repair a corrupted cached object.' }
+    $repairedRuntimeHash = (Get-FileHash -LiteralPath $runtimeObjectPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($repairedRuntimeHash -ne ([string]$firstRuntimeObject.sha256).ToLowerInvariant()) {
+        throw 'The prebuilt runtime installer did not restore the corrupted object from the verified archive.'
+    }
 
     # Configure and link all four CPU/game combinations against the imported
     # runtime objects and static libraries, proving players do not rebuild them.
