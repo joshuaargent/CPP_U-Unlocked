@@ -13,7 +13,9 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $EngineRoot = [IO.Path]::GetFullPath($EngineRoot)
 $repoRoot = Split-Path -Parent $EngineRoot
 $objectsRoot = Join-Path $EngineRoot 'build\runtime\CMakeFiles\cafe_runtime.dir'
-$compiler = Join-Path (Split-Path -Parent $EngineRoot) 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
+. (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1')
+$toolchainRoot = Get-UUnlockedToolchainRoot
+$compiler = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
 if (-not (Test-Path -LiteralPath $objectsRoot -PathType Container)) {
     throw "The compiled generic runtime object directory is missing: $objectsRoot"
 }
@@ -25,11 +27,6 @@ $git = Get-Command git.exe -ErrorAction Stop
 $revision = (& $git.Source -C $repoRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $revision -notmatch '^[0-9a-fA-F]{40}$') {
     throw 'Unable to resolve the exact source revision for the prebuilt runtime.'
-}
-if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
-    . (Join-Path (Split-Path -Parent $repoRoot) 'tools\windows\toolchain-path.ps1')
-    $toolchainRoot = Get-UUnlockedToolchainRoot
-    $compiler = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
 }
 if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
     throw 'The pinned compiler executable is missing while packaging the generic runtime.'
