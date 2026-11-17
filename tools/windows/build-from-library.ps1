@@ -381,7 +381,7 @@ try {
     if (-not (Test-Path -LiteralPath $newGeneratedCache -PathType Container) -and
         (Test-Path -LiteralPath $legacyGeneratedCache -PathType Container)) {
         Copy-Item -LiteralPath $legacyGeneratedCache -Destination $newGeneratedCache -Recurse -Force
-        Write-Host 'Migrated the existing verified generated-code cache into this installation’s persistent cache.' -ForegroundColor Green
+        Write-Host 'Migrated the existing verified generated-code cache into the persistent cache for this installation.' -ForegroundColor Green
     }
 
     $toolchainManifestPath = Join-Path $toolchainRoot 'toolchain-manifest.json'
