@@ -138,10 +138,14 @@ def download_archive(name, url, archive):
     attempts = 5
     last_error = None
     for attempt in range(1, attempts + 1):
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": "U-Unlocked-Dependency-Bootstrap", "Accept": "application/zip"}
-        )
+        headers = {
+            "User-Agent": "U-Unlocked-Dependency-Bootstrap",
+            "Accept": "application/zip",
+        }
+        github_token = os.environ.get("GITHUB_TOKEN", "").strip()
+        if github_token:
+            headers["Authorization"] = f"Bearer {github_token}"
+        request = urllib.request.Request(url, headers=headers)
         try:
             response = urllib.request.urlopen(request, timeout=90)
         except urllib.error.HTTPError as error:
