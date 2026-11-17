@@ -233,6 +233,34 @@ class DependencyArchiveTests(unittest.TestCase):
             self.assertEqual(urlopen.call_count, 2)
             self.assertEqual(archive.read_bytes(), b"abcdef")
 
+    def test_uses_optional_github_token_for_pinned_source_archives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "source.zip"
+            missing = setup_deps.urllib.error.HTTPError(
+                "https://github.com/example/repo/archive/revision.zip",
+                404,
+                "Not Found",
+                {},
+                None,
+            )
+
+            def reject_missing(request, timeout):
+                self.assertEqual(request.get_header("Authorization"), "Bearer test-token")
+                raise missing
+
+            with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "test-token"}):
+                with mock.patch.object(
+                    setup_deps.urllib.request, "urlopen", side_effect=reject_missing
+                ) as urlopen:
+                    with self.assertRaisesRegex(RuntimeError, "HTTP 404"):
+                        setup_deps.download_archive(
+                            "SDL",
+                            "https://github.com/example/repo/archive/revision.zip",
+                            archive,
+                        )
+            self.assertEqual(urlopen.call_count, 1)
+            self.assertFalse(archive.exists())
+
     def test_removes_partial_archive_after_all_download_attempts_fail(self):
         with tempfile.TemporaryDirectory() as temporary:
             archive = Path(temporary) / "source.zip"
