@@ -147,81 +147,17 @@ jobs:
         run: |
           ./engine/tools/windows/package-release.ps1 -Version "$env:U_UNLOCKED_VERSION"
           if ($LASTEXITCODE -ne 0) { throw 'Release package creation failed.' }
+          ./engine/tests/verify_release_package.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Complete release package and player installer verification failed.' }
+
           $zip = Join-Path $PWD "dist/U-Unlocked-v$env:U_UNLOCKED_VERSION-Windows-Launcher.zip"
           $checksum = "$zip.sha256"
-          if (-not (Test-Path -LiteralPath $zip -PathType Leaf) -or -not (Test-Path -LiteralPath $checksum -PathType Leaf)) {
-            throw 'The release ZIP or SHA-256 sidecar is missing.'
+          if (-not (Test-Path -LiteralPath $zip -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $checksum -PathType Leaf)) {
+            throw 'The verified release ZIP or SHA-256 sidecar is missing.'
           }
-          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\s+')[0]
-          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($expected -ne $actual) { throw 'The generated release checksum does not match the ZIP.' }
-
-          Add-Type -AssemblyName System.IO.Compression
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
-          try {
-            $entries = [Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)
-            foreach ($entry in $archive.Entries) {
-              $name = $entry.FullName.Replace([char]92, [char]47)
-              $parts = $name.Split([char]47)
-              if ([string]::IsNullOrWhiteSpace($name) -or $name.StartsWith('/') -or $name.Contains(':') -or
-                  ($parts -contains '..') -or ($parts -contains '.')) {
-                throw "Unsafe path in release ZIP: $name"
-              }
-              if ($entries.ContainsKey($name)) { throw "Duplicate path in release ZIP: $name" }
-              $entries.Add($name, $entry)
-            }
-            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png', 'update-launcher.ps1', 'dependency-bundle.zip', 'prebuilt-dependencies.zip', 'cafe-recomp.exe')) {
-              if (-not $entries.ContainsKey($required)) { throw "Release ZIP is missing root entry: $required" }
-            }
-
-            $reader = [IO.StreamReader]::new($entries['package-manifest.json'].Open())
-            try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
-            if ($manifest.schema_version -ne 1 -or $manifest.version -ne $env:U_UNLOCKED_VERSION) {
-              throw 'Release ZIP manifest schema or version is invalid.'
-            }
-            foreach ($file in $manifest.files) {
-              $name = [string]$file.name
-              if (-not $entries.ContainsKey($name) -or $name.Contains('/') -or $name.Contains([char]92) -or
-                  $file.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
-                throw "Invalid or missing manifest entry: $name"
-              }
-              $entryStream = $entries[$name].Open()
-              $sha = [Security.Cryptography.SHA256]::Create()
-              try {
-                $actualFileHash = [BitConverter]::ToString($sha.ComputeHash($entryStream)).Replace('-', '').ToLowerInvariant()
-              } finally {
-                $sha.Dispose()
-                $entryStream.Dispose()
-              }
-              if ($actualFileHash -ne ([string]$file.sha256).ToLowerInvariant()) {
-                throw "Manifest hash mismatch for $name"
-              }
-            }
-          } finally {
-            $archive.Dispose()
-          }
-
-          # Exercise the exact installer that runs on player machines using the
-          # archive extracted from the final, checksummed release package.
-          $releaseArchive = [System.IO.Compression.ZipFile]::OpenRead($zip)
-          $prebuiltTest = Join-Path $env:RUNNER_TEMP 'prebuilt-dependencies-test.zip'
-          try {
-            $prebuiltEntry = $releaseArchive.GetEntry('prebuilt-dependencies.zip')
-            if (-not $prebuiltEntry) { throw 'Prebuilt dependency archive is missing from the final package.' }
-            $input = $prebuiltEntry.Open()
-            $output = [IO.File]::Open($prebuiltTest, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
-            try { $input.CopyTo($output); $output.Flush($true) } finally { $output.Dispose(); $input.Dispose() }
-          } finally {
-            $releaseArchive.Dispose()
-          }
-          & ./tools/windows/install-prebuilt-dependencies.ps1 -ArchivePath $prebuiltTest -EngineRoot (Join-Path $PWD 'engine')
-          if ($LASTEXITCODE -ne 0) { throw 'Player prebuilt dependency installer validation failed.' }
-          Remove-Item -LiteralPath $prebuiltTest -Force
-
           "RELEASE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_CHECKSUM=$checksum" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
       - name: Publish GitHub release assets
         shell: pwsh
         env:
