@@ -64,10 +64,11 @@ std::optional<keymap::Watcher> g_keymap_file;
 // The keymap's numbers are SDL's scancodes: the defaults are these keys.
 static_assert(keymap::kKeyCount == SDL_SCANCODE_COUNT);
 constexpr SDL_Scancode kDefaultKeys[] = {
-    SDL_SCANCODE_W,      SDL_SCANCODE_S,         SDL_SCANCODE_A,    SDL_SCANCODE_D,     // D-pad
-    SDL_SCANCODE_I,      SDL_SCANCODE_K,         SDL_SCANCODE_J,    SDL_SCANCODE_L,     // X, B, Y, A
-    SDL_SCANCODE_H,      SDL_SCANCODE_SEMICOLON, SDL_SCANCODE_U,    SDL_SCANCODE_O,     // L, R, ZL, ZR
-    SDL_SCANCODE_UP,     SDL_SCANCODE_DOWN,      SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, // left stick
+    SDL_SCANCODE_UP,     SDL_SCANCODE_DOWN,      SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, // D-pad
+    SDL_SCANCODE_SPACE,  SDL_SCANCODE_I,         SDL_SCANCODE_N,    SDL_SCANCODE_Y,     // X, B, Y, A
+    SDL_SCANCODE_LSHIFT, SDL_SCANCODE_L,         SDL_SCANCODE_Q,    SDL_SCANCODE_E,     // L, R, ZL, ZR
+    SDL_SCANCODE_W,      SDL_SCANCODE_S,         SDL_SCANCODE_A,    SDL_SCANCODE_D,     // left stick
+    SDL_SCANCODE_U,      SDL_SCANCODE_J,         SDL_SCANCODE_H,    SDL_SCANCODE_K,     // right stick
     SDL_SCANCODE_RETURN, SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_HOME,                     // +, -, HOME
 };
 static_assert([] {
@@ -76,8 +77,8 @@ static_assert([] {
     }
     return std::size(kDefaultKeys) == keymap::kInputCount;
 }());
-static_assert(keymap::kReserved ==
-              std::array<uint16_t, 4>{SDL_SCANCODE_F11, SDL_SCANCODE_ESCAPE, SDL_SCANCODE_LGUI, SDL_SCANCODE_RGUI});
+static_assert(keymap::kReserved == std::array<uint16_t, 6>{
+    SDL_SCANCODE_F10, SDL_SCANCODE_F11, SDL_SCANCODE_ESCAPE, SDL_SCANCODE_F12, SDL_SCANCODE_LGUI, SDL_SCANCODE_RGUI});
 
 void reload_keymap() {
     if (!g_keymap_file) return;
@@ -325,7 +326,13 @@ void update_input() {
         state.buttons |= keymap::kInputs[i].button;
         state.left_x += keymap::kInputs[i].stick_x;
         state.left_y += keymap::kInputs[i].stick_y;
+        state.right_x += keymap::kInputs[i].right_stick_x;
+        state.right_y += keymap::kInputs[i].right_stick_y;
     }
+    state.left_x = std::clamp(state.left_x, -1.0f, 1.0f);
+    state.left_y = std::clamp(state.left_y, -1.0f, 1.0f);
+    state.right_x = std::clamp(state.right_x, -1.0f, 1.0f);
+    state.right_y = std::clamp(state.right_y, -1.0f, 1.0f);
 
     for (int i = 0; i < count; ++i) {
         SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);

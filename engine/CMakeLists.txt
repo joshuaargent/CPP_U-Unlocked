@@ -112,6 +112,7 @@ if(SMASH_GENERATED_DIR)
     # U Unlocked's launcher (launcher/smash/): the menu that runs the game targets.
     find_package(SDL3 REQUIRED CONFIG)
     add_executable(smash-launcher WIN32 launcher/smash/main.cpp runtime/src/host/display_settings.cpp
+        runtime/src/host/keymap.cpp
         runtime/src/host/controller_profiles.cpp runtime/src/host/controller_profile_import.cpp
         third_party/tinyxml2/tinyxml2.cpp
         # Pretendo sign-in (the Online page)
@@ -122,7 +123,7 @@ if(SMASH_GENERATED_DIR)
     set_target_properties(smash-launcher PROPERTIES OUTPUT_NAME "U Unlocked")
     # The historical RC file references an icon asset that is not present in the
     # source tree. Omit the optional executable icon resource so clean builds work.
-    target_include_directories(smash-launcher PRIVATE runtime/src third_party/tinyxml2)
+    target_include_directories(smash-launcher PRIVATE runtime/src runtime/include third_party/tinyxml2)
     target_include_directories(smash-launcher SYSTEM PRIVATE third_party/stb)
     target_compile_features(smash-launcher PRIVATE cxx_std_20)
     target_link_libraries(smash-launcher PRIVATE SDL3::SDL3 $<$<PLATFORM_ID:Windows>:winhttp bcrypt ws2_32>)

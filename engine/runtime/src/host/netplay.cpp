@@ -823,7 +823,7 @@ os::ProPadState local_pad() {
     // shortcut: the default keys only (not the player's keyboard.ini); read it here if guests ask.
     static const keymap::Keys keys = keymap::default_keys();
     const bool* down = SDL_GetKeyboardState(nullptr);
-    float kx = 0, ky = 0;
+    float kx = 0, ky = 0, krx = 0, kry = 0;
     for (size_t i = 0; i < keymap::kInputCount; ++i) {
         if (!down[keys[i]]) continue;
         for (const auto& [vpad, pro] : kAsPro) {
@@ -831,8 +831,11 @@ os::ProPadState local_pad() {
         }
         kx += keymap::kInputs[i].stick_x;
         ky += keymap::kInputs[i].stick_y;
+        krx += keymap::kInputs[i].right_stick_x;
+        kry += keymap::kInputs[i].right_stick_y;
     }
     if (kx != 0 || ky != 0) s.left_x = std::clamp(kx, -1.0f, 1.0f), s.left_y = std::clamp(ky, -1.0f, 1.0f);
+    if (krx != 0 || kry != 0) s.right_x = std::clamp(krx, -1.0f, 1.0f), s.right_y = std::clamp(kry, -1.0f, 1.0f);
     // U_UNLOCKED_NETPLAY_TEST_A=1: A for a tenth of a second every two seconds (trying netplay without a pad).
     static const bool test_a = std::getenv("U_UNLOCKED_NETPLAY_TEST_A") != nullptr;
     if (test_a && SDL_GetTicks() % 2000 < 100) s.buttons |= os::pro::kA;

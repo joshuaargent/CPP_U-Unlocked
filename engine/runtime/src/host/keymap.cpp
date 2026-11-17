@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <iterator>
 
@@ -76,6 +77,14 @@ fs::path home() {
 
 } // namespace
 
+static bool is_regular_file(const host::FileStat& st) {
+#ifdef _WIN32
+    return (st.st_mode & _S_IFMT) == _S_IFREG;
+#else
+    return S_ISREG(st.st_mode);
+#endif
+}
+
 bool reserved(uint16_t key) { return std::find(kReserved.begin(), kReserved.end(), key) != kReserved.end(); }
 
 Keys default_keys() {
@@ -91,9 +100,9 @@ Parsed parse(std::string_view text, const Resolver& resolve) {
     size_t number = 0;
     while (!text.empty()) {
         ++number;
-        const size_t end = std::min(text.find('\n'), text.size());
+        const size_t end = (std::min)(text.find('\n'), text.size());
         const std::string_view line = trim(strip_comment(text.substr(0, end)));
-        text.remove_prefix(std::min(end + 1, text.size()));
+        text.remove_prefix((std::min)(end + 1, text.size()));
         if (line.empty()) continue;
 
         const size_t equals = line.find('=');
@@ -149,7 +158,7 @@ Loaded load(const fs::path& file, const Resolver& resolve) {
         return loaded;
     }
     // Never open a pipe or a device: that could wait forever.
-    if (!S_ISREG(st.st_mode)) {
+    if (!is_regular_file(st)) {
         loaded.log.push_back("keyboard: defaults (" + name + " is not a file)");
         return loaded;
     }
@@ -189,7 +198,7 @@ Watcher::Stamp Watcher::stamp() const {
     host::FileStat st{};
     if (host::file_stat(file_, st) != 0) return {};
 #ifdef _WIN32
-    const auto ns = [](time_t t) { return int64_t{t} * 1'000'000'000; };
+    const auto ns = [](std::time_t t) { return int64_t{t} * 1'000'000'000; };
     return {true, st.st_dev, st.st_ino, static_cast<uint64_t>(st.st_size), ns(st.st_mtime), ns(st.st_ctime)};
 #else
     const auto ns = [](const timespec& t) { return int64_t{t.tv_sec} * 1'000'000'000 + t.tv_nsec; };

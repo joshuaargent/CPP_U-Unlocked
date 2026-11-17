@@ -192,7 +192,7 @@ try {
 
         # Rebuilding the runtime must never discard saves, online credentials,
         # user fonts, logs, or display settings from the previous installation.
-        foreach ($name in @('save', 'online', 'fonts', 'logs')) {
+        foreach ($name in @('save', 'online', 'fonts', 'logs', 'cache')) {
             $stagedData = Join-Path $runtimeStage $name
             Copy-PreservedDirectory -Source (Join-Path $runtimeTarget $name) -Destination $stagedData
             if (-not (Test-Path -LiteralPath $stagedData -PathType Container)) {

@@ -15,6 +15,7 @@
 #include "os/online_identity.h"
 #include "host/paint.h" // before the stb_truetype implementation below
 #include "host/controller_profile_import.h"
+#include "host/keymap.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -64,6 +65,7 @@ namespace display = cafe::host::display;
 namespace online = cafe::os::online;
 namespace act_server = cafe::os::act_server;
 namespace controller_profiles = cafe::host::controller_profiles;
+namespace keymap = cafe::host::keymap;
 using namespace cafe::host::paint;
 
 namespace {
@@ -593,17 +595,31 @@ public:
         if (capture_binding_) {
             if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
                 capture_binding_ = false;
+                capture_keyboard_ = false;
                 controls_status_ = "Binding cancelled.";
                 return;
             }
-            if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && e.gbutton.which == control_device_ && !capture_axis_) {
+            if (capture_keyboard_ && e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
+                const uint16_t scancode = static_cast<uint16_t>(e.key.scancode);
+                if (scancode < keymap::kFirstKey || scancode >= keymap::kKeyCount) return;
+                if (keymap::reserved(scancode)) {
+                    controls_status_ = "That key is reserved by U Unlocked. Press another key or Escape to cancel.";
+                    return;
+                }
+                keyboard_keys_[control_keyboard_action_] = scancode;
+                capture_binding_ = false;
+                capture_keyboard_ = false;
+                controls_status_ = "Keyboard key captured. Save keyboard bindings to keep it.";
+                return;
+            }
+            if (e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && e.gbutton.which == control_device_ && !capture_axis_ && !capture_keyboard_) {
                 control_profile_.buttons[control_button_action_] = static_cast<int16_t>(e.gbutton.button);
                 capture_binding_ = false;
                 controls_status_ = "Button binding captured. Save the profile to keep it.";
                 return;
             }
             if (e.type == SDL_EVENT_GAMEPAD_AXIS_MOTION && e.gaxis.which == control_device_ &&
-                capture_axis_ && std::abs(e.gaxis.value) > 16000) {
+                capture_axis_ && !capture_keyboard_ && std::abs(e.gaxis.value) > 16000) {
                 control_profile_.axes[control_axis_action_] = static_cast<int8_t>(e.gaxis.axis);
                 capture_binding_ = false;
                 controls_status_ = "Axis binding captured. Save the profile to keep it.";
@@ -693,6 +709,7 @@ public:
         time_ += dt;
         if (capture_binding_ && time_ - capture_started_ >= 10.0f) {
             capture_binding_ = false;
+            capture_keyboard_ = false;
             controls_status_ = "Binding timed out. Select Bind again to retry.";
         }
         // The stick moves the selection, repeating while held.
@@ -1076,35 +1093,52 @@ private:
             break;
         }
         case Screen::kControls: {
-            const char* device = "No controller connected";
-            if (SDL_Gamepad* pad = selected_control_gamepad()) {
-                if (const char* name = SDL_GetGamepadName(pad)) device = name;
+            if (control_keyboard_) {
+                static const std::array<const char*, keymap::kInputCount> names = {
+                    "D-PAD UP", "D-PAD DOWN", "D-PAD LEFT", "D-PAD RIGHT",
+                    "FACE TOP (X)", "FACE BOTTOM (B)", "FACE LEFT (Y)", "FACE RIGHT (A)",
+                    "L", "R", "ZL", "ZR", "LEFT STICK UP", "LEFT STICK DOWN",
+                    "LEFT STICK LEFT", "LEFT STICK RIGHT", "RIGHT STICK UP", "RIGHT STICK DOWN",
+                    "RIGHT STICK LEFT", "RIGHT STICK RIGHT", "PLUS", "MINUS", "HOME"};
+                const uint16_t scancode = keyboard_keys_[control_keyboard_action_];
+                const char* key_name = SDL_GetScancodeName(static_cast<SDL_Scancode>(scancode));
+                list_ = {{"INPUT DEVICE", "Keyboard (Player 1)"},
+                         {"BUTTON", names[control_keyboard_action_]},
+                         {"BIND KEY", capture_binding_ && capture_keyboard_ ? "Press a key..." : (key_name && *key_name ? key_name : "Unbound")},
+                         {"SAVE KEYBOARD", "Save"},
+                         {"RESET KEYBOARD", "Defaults"},
+                         {"BACK"}};
+            } else {
+                const char* device = "No controller connected";
+                if (SDL_Gamepad* pad = selected_control_gamepad()) {
+                    if (const char* name = SDL_GetGamepadName(pad)) device = name;
+                }
+                const int button = control_profile_.buttons[control_button_action_];
+                const int axis = control_profile_.axes[control_axis_action_];
+                const char* button_name = button >= 0 ? SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(button)) : "Unbound";
+                const char* axis_name = axis >= 0 ? SDL_GetGamepadStringForAxis(static_cast<SDL_GamepadAxis>(axis)) : "Unbound";
+                const std::string player_slot = control_profile_.player_slot < 0
+                    ? "Automatic" : "Player " + std::to_string(static_cast<int>(control_profile_.player_slot) + 1);
+                char dead_zone[16]{}, threshold[16]{};
+                std::snprintf(dead_zone, sizeof(dead_zone), "%.2f", control_profile_.dead_zones[control_axis_action_]);
+                std::snprintf(threshold, sizeof(threshold), "%.2f", control_profile_.trigger_threshold);
+                list_ = {{"INPUT DEVICE", device},
+                         {"PLAYER SLOT", player_slot},
+                         {"BUTTON", control_button_names()[control_button_action_]},
+                         {"BIND BUTTON", capture_binding_ && !capture_axis_ ? "Waiting..." : (button_name ? button_name : "Unbound")},
+                         {"STICK AXIS", control_axis_names()[control_axis_action_]},
+                         {"BIND AXIS", capture_binding_ && capture_axis_ ? "Waiting..." : (axis_name ? axis_name : "Unbound")},
+                         {"AXIS DEAD ZONE", dead_zone},
+                         {"INVERT AXIS", control_axis_action_ >= static_cast<size_t>(controller_profiles::AxisAction::kLeftTrigger)
+                             ? "N/A" : (control_profile_.axis_inverted[control_axis_action_] ? "On" : "Off")},
+                         {"TRIGGER THRESHOLD", threshold},
+                         {"IMPORT CEMU PROFILE", cemu_profile_count_ == 0
+                             ? "Find Cemu XML..." : std::to_string(cemu_profile_count_) + " found"},
+                         {"LIVE TEST", "Open"},
+                         {"SAVE PROFILE", "Save"},
+                         {"RESET PROFILE", "Defaults"},
+                         {"BACK"}};
             }
-            const int button = control_profile_.buttons[control_button_action_];
-            const int axis = control_profile_.axes[control_axis_action_];
-            const char* button_name = button >= 0 ? SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(button)) : "Unbound";
-            const char* axis_name = axis >= 0 ? SDL_GetGamepadStringForAxis(static_cast<SDL_GamepadAxis>(axis)) : "Unbound";
-            const std::string player_slot = control_profile_.player_slot < 0
-                ? "Automatic" : "Player " + std::to_string(static_cast<int>(control_profile_.player_slot) + 1);
-            char dead_zone[16]{}, threshold[16]{};
-            std::snprintf(dead_zone, sizeof(dead_zone), "%.2f", control_profile_.dead_zones[control_axis_action_]);
-            std::snprintf(threshold, sizeof(threshold), "%.2f", control_profile_.trigger_threshold);
-            list_ = {{"CONTROLLER", device},
-                     {"PLAYER SLOT", player_slot},
-                     {"BUTTON", control_button_names()[control_button_action_]},
-                     {"BIND BUTTON", capture_binding_ && !capture_axis_ ? "Waiting..." : (button_name ? button_name : "Unbound")},
-                     {"STICK AXIS", control_axis_names()[control_axis_action_]},
-                     {"BIND AXIS", capture_binding_ && capture_axis_ ? "Waiting..." : (axis_name ? axis_name : "Unbound")},
-                     {"AXIS DEAD ZONE", dead_zone},
-                     {"INVERT AXIS", control_axis_action_ >= static_cast<size_t>(controller_profiles::AxisAction::kLeftTrigger)
-                         ? "N/A" : (control_profile_.axis_inverted[control_axis_action_] ? "On" : "Off")},
-                     {"TRIGGER THRESHOLD", threshold},
-                     {"IMPORT CEMU PROFILE", cemu_profile_count_ == 0
-                         ? "Find Cemu XML..." : std::to_string(cemu_profile_count_) + " found"},
-                     {"LIVE TEST", "Open"},
-                     {"SAVE PROFILE", "Save"},
-                     {"RESET PROFILE", "Defaults"},
-                     {"BACK"}};
             break;
         }
         case Screen::kControlTest: {
@@ -1179,6 +1213,12 @@ private:
         return pad ? pad : SDL_OpenGamepad(control_device_);
     }
     void load_control_profile() {
+        const keymap::Loaded keyboard = keymap::load(keymap::file_path(), [](const std::string& name) {
+            return static_cast<uint16_t>(SDL_GetScancodeFromName(name.c_str()));
+        });
+        keyboard_keys_ = keyboard.keys;
+        for (const std::string& line : keyboard.log) std::fprintf(stderr, "launcher: %s\n", line.c_str());
+
         int count = 0;
         SDL_JoystickID* ids = SDL_GetGamepads(&count);
         control_device_ = count > 0 ? ids[0] : 0;
@@ -1186,35 +1226,90 @@ private:
             if (!SDL_GetGamepadFromID(ids[i])) SDL_OpenGamepad(ids[i]);
         }
         SDL_free(ids);
-        if (SDL_Gamepad* pad = selected_control_gamepad()) {
-            control_profile_ = controller_profiles::for_device(pad);
-            const char* name = SDL_GetGamepadName(pad);
-            controls_status_ = "Editing the profile for " + std::string(name ? name : "Controller");
-        } else {
-            control_profile_ = controller_profiles::default_profile();
-            controls_status_ = "Connect a controller to configure it.";
-        }
+        control_keyboard_ = true;
+        controls_status_ = "Editing keyboard controls for Player 1. Physical controllers are Players 2-8.";
+        if (SDL_Gamepad* pad = selected_control_gamepad()) control_profile_ = controller_profiles::for_device(pad);
+        else control_profile_ = controller_profiles::default_profile();
     }
     void select_control_device(int direction) {
         int count = 0;
         SDL_JoystickID* ids = SDL_GetGamepads(&count);
-        if (count <= 0) {
-            control_device_ = 0;
-            SDL_free(ids);
-            controls_status_ = "No controller is connected.";
-            return;
+        int current = 0; // Keyboard is always the first entry (Player 1).
+        if (!control_keyboard_) {
+            for (int i = 0; i < count; ++i) if (ids[i] == control_device_) current = i + 1;
         }
-        int current = 0;
-        for (int i = 0; i < count; ++i) if (ids[i] == control_device_) current = i;
-        current = (current + direction + count) % count;
-        control_device_ = ids[current];
-        if (!SDL_GetGamepadFromID(control_device_)) SDL_OpenGamepad(control_device_);
+        const int option_count = count + 1;
+        const int next = (current + direction + option_count) % option_count;
+        if (next == 0) {
+            control_keyboard_ = true;
+            controls_status_ = "Editing keyboard controls for Player 1.";
+        } else {
+            control_keyboard_ = false;
+            control_device_ = ids[next - 1];
+            if (!SDL_GetGamepadFromID(control_device_)) SDL_OpenGamepad(control_device_);
+            if (SDL_Gamepad* pad = selected_control_gamepad()) {
+                control_profile_ = controller_profiles::for_device(pad);
+                const char* name = SDL_GetGamepadName(pad);
+                controls_status_ = "Editing the profile for " + std::string(name ? name : "Controller");
+            }
+        }
         SDL_free(ids);
-        if (SDL_Gamepad* pad = selected_control_gamepad()) {
-            control_profile_ = controller_profiles::for_device(pad);
-            const char* name = SDL_GetGamepadName(pad);
-            controls_status_ = "Editing the profile for " + std::string(name ? name : "Controller");
+    }
+    bool save_keyboard_profile() {
+        const fs::path destination = keymap::file_path();
+        std::error_code ec;
+        fs::create_directories(destination.parent_path(), ec);
+        if (ec) {
+            controls_status_ = "Could not create keyboard settings folder: " + ec.message();
+            return false;
         }
+        fs::path temporary = destination;
+        temporary += ".tmp";
+        {
+            std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+            if (!out) {
+                controls_status_ = "Could not create the temporary keyboard settings file.";
+                return false;
+            }
+            out << "# U Unlocked keyboard bindings for Player 1\n";
+            for (size_t i = 0; i < keymap::kInputCount; ++i) {
+                const uint16_t scancode = keyboard_keys_[i];
+                if (scancode < keymap::kFirstKey || scancode >= keymap::kKeyCount || keymap::reserved(scancode)) {
+                    controls_status_ = "A keyboard binding is invalid or reserved.";
+                    out.close();
+                    fs::remove(temporary, ec);
+                    return false;
+                }
+                // Store numeric SDL scancodes so locale-specific key names and
+                // names containing comment characters cannot corrupt the file.
+                out << keymap::kInputs[i].id << " = " << scancode << "\n";
+            }
+            out.flush();
+            if (!out) {
+                controls_status_ = "Could not write the keyboard settings file.";
+                out.close();
+                fs::remove(temporary, ec);
+                return false;
+            }
+        }
+#ifdef _WIN32
+        if (!MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            const DWORD error = GetLastError();
+            fs::remove(temporary, ec);
+            controls_status_ = "Could not save keyboard settings (Windows error " + std::to_string(error) + ").";
+            return false;
+        }
+#else
+        fs::rename(temporary, destination, ec);
+        if (ec) {
+            const std::string message = ec.message();
+            fs::remove(temporary, ec);
+            controls_status_ = "Could not save keyboard settings: " + message;
+            return false;
+        }
+#endif
+        controls_status_ = "Player 1 keyboard bindings saved. They will apply when the game starts.";
+        return true;
     }
 
     void select(int i) {
@@ -1253,10 +1348,13 @@ private:
             return;
         }
         if (screen_ == Screen::kControls) {
-            if (selected_ == 0) select_control_device(d);
-            else if (selected_ == 1) {
-                // Player 1 is permanently the keyboard/Wii U GamePad. Physical
-                // controllers can be automatic or explicitly assigned to players 2-8.
+            if (selected_ == 0) {
+                select_control_device(d);
+            } else if (control_keyboard_) {
+                if (selected_ == 1) {
+                    control_keyboard_action_ = (control_keyboard_action_ + d + keymap::kInputCount) % keymap::kInputCount;
+                }
+            } else if (selected_ == 1) {
                 const int current = control_profile_.player_slot < 0 ? 0 : control_profile_.player_slot;
                 const int next = (current + d + 8) % 8;
                 control_profile_.player_slot = static_cast<int8_t>(next == 0 ? -1 : next);
@@ -1421,45 +1519,64 @@ private:
             else change(1);
             break;
         case Screen::kControls:
-            switch (selected_) {
-            case 3:
-                if (selected_control_gamepad()) {
+            if (control_keyboard_) {
+                switch (selected_) {
+                case 2:
                     capture_axis_ = false;
+                    capture_keyboard_ = true;
                     capture_binding_ = true;
                     capture_started_ = time_;
-                    controls_status_ = "Press the physical button on the selected controller within 10 seconds. Escape cancels.";
-                } else controls_status_ = "Connect a controller before binding inputs.";
-                break;
-            case 5:
-                if (selected_control_gamepad()) {
-                    capture_axis_ = true;
-                    capture_binding_ = true;
-                    capture_started_ = time_;
-                    controls_status_ = "Move the desired stick or trigger axis within 10 seconds. Escape cancels.";
-                } else controls_status_ = "Connect a controller before binding inputs.";
-                break;
-            case 9:
-                choose_cemu_profile();
-                break;
-            case 10:
-                go(Screen::kControlTest);
-                controls_status_ = "Move the sticks and press buttons to verify the selected mapping.";
-                break;
-            case 11: {
-                std::string error;
-                if (SDL_Gamepad* pad = selected_control_gamepad()) {
-                    if (controller_profiles::save_for_device(pad, control_profile_, &error)) controls_status_ = "Controller profile saved.";
-                    else controls_status_ = "Could not save profile: " + error;
-                } else controls_status_ = "Connect a controller before saving its profile.";
-                break;
-            }
-            case 12:
-                control_profile_ = controller_profiles::default_profile();
-                if (SDL_Gamepad* pad = selected_control_gamepad()) control_profile_.device_guid = controller_profiles::device_info(pad).guid;
-                controls_status_ = "Default bindings restored. Save to keep them.";
-                break;
-            case 13: back(); break;
-            default: change(1); break;
+                    controls_status_ = "Press the new keyboard key for Player 1 within 10 seconds. Escape cancels.";
+                    break;
+                case 3: save_keyboard_profile(); break;
+                case 4:
+                    keyboard_keys_ = keymap::default_keys();
+                    controls_status_ = "Default Player 1 keyboard bindings restored. Save to keep them.";
+                    break;
+                case 5: back(); break;
+                default: change(1); break;
+                }
+            } else {
+                switch (selected_) {
+                case 3:
+                    if (selected_control_gamepad()) {
+                        capture_keyboard_ = false;
+                        capture_axis_ = false;
+                        capture_binding_ = true;
+                        capture_started_ = time_;
+                        controls_status_ = "Press the physical button on the selected controller within 10 seconds. Escape cancels.";
+                    } else controls_status_ = "Connect a controller before binding inputs.";
+                    break;
+                case 5:
+                    if (selected_control_gamepad()) {
+                        capture_keyboard_ = false;
+                        capture_axis_ = true;
+                        capture_binding_ = true;
+                        capture_started_ = time_;
+                        controls_status_ = "Move the desired stick or trigger axis within 10 seconds. Escape cancels.";
+                    } else controls_status_ = "Connect a controller before binding inputs.";
+                    break;
+                case 9: choose_cemu_profile(); break;
+                case 10:
+                    go(Screen::kControlTest);
+                    controls_status_ = "Move the sticks and press buttons to verify the selected mapping.";
+                    break;
+                case 11: {
+                    std::string error;
+                    if (SDL_Gamepad* pad = selected_control_gamepad()) {
+                        if (controller_profiles::save_for_device(pad, control_profile_, &error)) controls_status_ = "Controller profile saved.";
+                        else controls_status_ = "Could not save profile: " + error;
+                    } else controls_status_ = "Connect a controller before saving its profile.";
+                    break;
+                }
+                case 12:
+                    control_profile_ = controller_profiles::default_profile();
+                    if (SDL_Gamepad* pad = selected_control_gamepad()) control_profile_.device_guid = controller_profiles::device_info(pad).guid;
+                    controls_status_ = "Default bindings restored. Save to keep them.";
+                    break;
+                case 13: back(); break;
+                default: change(1); break;
+                }
             }
             break;
         case Screen::kControlTest:
@@ -2415,12 +2532,14 @@ private:
             const std::string line = screen_ == Screen::kControlTest
                 ? "Live input monitor: press each button and move each stick; Back returns to Controls."
                 : (controls_status_.empty()
-                    ? "Select a control, bind a physical input, then save the profile."
+                    ? (control_keyboard_ ? "Player 1 uses the keyboard. Select a button, bind a key, then save."
+                                         : "Select a control, bind a physical input, then save the profile.")
                     : controls_status_);
             font_.draw(r_, x, y, fit(line, px * 0.85f, layout_.w * 0.65f), px * 0.85f,
                        capture_binding_ ? kGold : kDim);
             font_.draw(r_, x, y + H * 0.045f,
-                       "Profiles are stored per controller in the U Unlocked configuration folder.",
+                       control_keyboard_ ? "Keyboard bindings are stored in the U Unlocked configuration folder."
+                                         : "Controller profiles are stored per device in the U Unlocked configuration folder.",
                        px * 0.75f, kDim);
             return;
         }
@@ -3016,8 +3135,10 @@ private:
     Screen screen_ = Screen::kMain;
     controller_profiles::Profile control_profile_ = controller_profiles::default_profile();
     SDL_JoystickID control_device_ = 0;
-    size_t control_button_action_ = 0, control_axis_action_ = 0;
-    bool capture_binding_ = false, capture_axis_ = false;
+    keymap::Keys keyboard_keys_ = keymap::default_keys();
+    size_t control_button_action_ = 0, control_axis_action_ = 0, control_keyboard_action_ = 0;
+    bool control_keyboard_ = true;
+    bool capture_binding_ = false, capture_axis_ = false, capture_keyboard_ = false;
     float capture_started_ = 0.0f;
     std::string controls_status_;
     std::string diagnostics_status_;

@@ -64,13 +64,26 @@ if ($UseSystemTools) {
         throw "Python 3.9 or newer is required; found '$pythonVersion'."
     }
 } else {
-    $cmake = Find-Executable 'cmake.exe'
+    # Match the CI contract: any installed CMake >= 3.20 is supported. Do not
+    # force an exact-version WinGet upgrade when a compatible CMake is already present.
+    $cmakeCandidates = @(
+        "$env:ProgramFiles\CMake\bin\cmake.exe",
+        "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe"
+    )
+    $cmake = Find-Executable 'cmake.exe' $cmakeCandidates
     $cmakeVersionLine = if ($cmake) { (& $cmake --version | Select-Object -First 1) } else { '' }
-    if (-not $cmakeVersionLine.Contains('3.31.6')) {
+    $cmakeMatch = [regex]::Match($cmakeVersionLine, '([0-9]+\.[0-9]+\.[0-9]+)')
+    $cmakeVersionNumber = if ($cmakeMatch.Success) { [version]$cmakeMatch.Groups[1].Value } else { [version]'0.0.0' }
+    if (-not $cmake -or $cmakeVersionNumber -lt [version]'3.20.0') {
         Invoke-WingetInstall -Id 'Kitware.CMake' -Version '3.31.6'
-        $cmake = Find-Executable 'cmake.exe' @("$env:ProgramFiles\CMake\bin\cmake.exe", "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe")
+        $cmake = Find-Executable 'cmake.exe' $cmakeCandidates
+        $cmakeVersionLine = if ($cmake) { (& $cmake --version | Select-Object -First 1) } else { '' }
+        $cmakeMatch = [regex]::Match($cmakeVersionLine, '([0-9]+\.[0-9]+\.[0-9]+)')
+        $cmakeVersionNumber = if ($cmakeMatch.Success) { [version]$cmakeMatch.Groups[1].Value } else { [version]'0.0.0' }
     }
-    if (-not $cmake) { throw 'CMake 3.31.6 was installed but cmake.exe could not be located.' }
+    if (-not $cmake -or $cmakeVersionNumber -lt [version]'3.20.0') {
+        throw "CMake 3.20 or newer is required; found '$cmakeVersionLine'."
+    }
 
     $ninja = Find-Executable 'ninja.exe' @("$env:LOCALAPPDATA\Microsoft\WinGet\Links\ninja.exe", "$env:LOCALAPPDATA\Programs\Ninja-build\Ninja\ninja.exe")
     $ninjaVersionLine = if ($ninja) { (& $ninja --version | Out-String).Trim() } else { '' }

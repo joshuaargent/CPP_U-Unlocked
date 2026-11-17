@@ -46,6 +46,7 @@
 - [x] Implement press-to-bind buttons and axes, including Escape cancellation and a 10-second timeout.
 - [x] Implement configurable stick dead zones and trigger thresholds.
 - [x] Reserve player 1 (Wii U GamePad) for keyboard input; assign physical controllers only to Pro Controller slots for players 2-8, including validation that rejects saved profiles targeting player 1.
+- [x] Add per-action keyboard binding for all 23 GamePad actions, including both sticks, with atomic keyboard.ini persistence and reserved runtime-hotkey protection.
 - [x] Implement per-axis dead zones and stick-axis inversion.
 - [x] Add a live controller input monitor for all mapped buttons, sticks, and triggers.
 - [ ] Implement full stick/trigger calibration and saturation.
