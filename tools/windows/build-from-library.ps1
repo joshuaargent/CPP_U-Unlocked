@@ -300,6 +300,13 @@ try {
     $cacheDirectory = Join-Path $localCacheRoot (Join-Path 'U Unlocked\BuildCache' $cacheIdentity)
     $engineBuildDirectory = Join-Path $cacheDirectory 'engine-build'
     New-Item -ItemType Directory -Force -Path $cacheDirectory | Out-Null
+    $legacyGeneratedCache = Join-Path $localCacheRoot 'U Unlocked\BuildCache\generated'
+    $newGeneratedCache = Join-Path $cacheDirectory 'generated'
+    if (-not (Test-Path -LiteralPath $newGeneratedCache -PathType Container) -and
+        (Test-Path -LiteralPath $legacyGeneratedCache -PathType Container)) {
+        Copy-Item -LiteralPath $legacyGeneratedCache -Destination $newGeneratedCache -Recurse -Force
+        Write-Host 'Migrated the existing verified generated-code cache into this installation’s persistent cache.' -ForegroundColor Green
+    }
 
     $toolchainManifestPath = Join-Path $toolchainRoot 'toolchain-manifest.json'
     $compilerPath = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
