@@ -18,13 +18,109 @@ $recipePath = Join-Path $EngineRoot 'tools\windows\build-deps.ps1'
 foreach ($required in @(
     (Join-Path $prefix 'lib\libvulkan-1.a'),
     (Join-Path $prefix 'include\vulkan\vulkan.h'),
+    (Join-Path $prefix 'include\SDL3\SDL.h'),
     (Join-Path $prefix 'bin\SDL3.dll'),
+    (Join-Path $prefix 'include\shaderc\shaderc.h'),
+    (Join-Path $prefix 'bin\libshaderc_shared.dll'),
+    (Join-Path $prefix 'bin\libSPIRV-Tools-shared.dll'),
+    (Join-Path $prefix 'include\zlib.h'),
+    (Join-Path $prefix 'include\zstd.h'),
     $lockPath,
     $recipePath
 )) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "A required prebuilt dependency input is missing: $required"
     }
+}
+$shadercImportLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -match 'shaderc_shared' })
+$sdlImportLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -match 'SDL3' })
+$zlibLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -match '^libz(\.dll)?\.a
+$outputDirectory = Split-Path -Parent $OutputArchive
+New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
+$stage = Join-Path $outputDirectory ('.prebuilt-dependencies-' + [guid]::NewGuid().ToString('N'))
+$archive = $null
+$completed = $false
+
+try {
+    $stagePrefix = Join-Path $stage 'prefix'
+    New-Item -ItemType Directory -Force -Path $stagePrefix | Out-Null
+
+    $allItems = @(Get-ChildItem -LiteralPath $prefix -Force -Recurse)
+    foreach ($item in $allItems) {
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Refusing to package a reparse point in the dependency prefix: $($item.FullName)"
+        }
+    }
+
+    $sourceFiles = @(Get-ChildItem -LiteralPath $prefix -File -Recurse -Force | Sort-Object FullName)
+    if ($sourceFiles.Count -lt 3 -or $sourceFiles.Count -gt 50000) {
+        throw "Precompiled dependency prefix has an invalid file count: $($sourceFiles.Count)"
+    }
+
+    [int64]$totalBytes = 0
+    $fileEntries = @(
+        foreach ($file in $sourceFiles) {
+            $relative = $file.FullName.Substring($prefix.Length + 1).Replace('\', '/')
+            $parts = $relative.Split([char]47)
+            if ([string]::IsNullOrWhiteSpace($relative) -or $relative.Contains(':') -or
+                ($parts -contains '') -or ($parts -contains '.') -or ($parts -contains '..')) {
+                throw "Unsafe path in precompiled dependency prefix: $relative"
+            }
+            $totalBytes += $file.Length
+            if ($totalBytes -gt 2GB) { throw 'Precompiled dependency prefix exceeds the 2 GiB package limit.' }
+            [ordered]@{
+                path = 'prefix/' + $relative
+                sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+        }
+    )
+
+    $manifest = [ordered]@{
+        schema_version = 1
+        architecture = 'x86_64-windows'
+        toolchain_version = '20260616'
+        dependency_lock_sha256 = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        build_recipe_sha256 = (Get-FileHash -LiteralPath $recipePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        files = $fileEntries
+    }
+    $manifestPath = Join-Path $stage 'prebuilt-manifest.json'
+    $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+
+    Remove-Item -LiteralPath $OutputArchive -Force -ErrorAction SilentlyContinue
+    $archive = [IO.Compression.ZipFile]::Open($OutputArchive, [IO.Compression.ZipArchiveMode]::Create)
+    foreach ($file in $sourceFiles) {
+        $relative = $file.FullName.Substring($prefix.Length + 1).Replace('\', '/')
+        $entry = $archive.CreateEntry('prefix/' + $relative, [IO.Compression.CompressionLevel]::Optimal)
+        $input = [IO.File]::OpenRead($file.FullName)
+        $output = $entry.Open()
+        try { $input.CopyTo($output) } finally { $output.Dispose(); $input.Dispose() }
+    }
+    $manifestEntry = $archive.CreateEntry('prebuilt-manifest.json', [IO.Compression.CompressionLevel]::Optimal)
+    $manifestInput = [IO.File]::OpenRead($manifestPath)
+    $manifestOutput = $manifestEntry.Open()
+    try { $manifestInput.CopyTo($manifestOutput) } finally { $manifestOutput.Dispose(); $manifestInput.Dispose() }
+    $archive.Dispose()
+    $archive = $null
+
+    if (-not (Test-Path -LiteralPath $OutputArchive -PathType Leaf) -or (Get-Item -LiteralPath $OutputArchive).Length -eq 0) {
+        throw 'Precompiled dependency archive was not created.'
+    }
+    $completed = $true
+    Write-Host "Created relocatable precompiled dependency archive: $OutputArchive" -ForegroundColor Green
+} finally {
+    if ($archive) { $archive.Dispose() }
+    if (Test-Path -LiteralPath $stage -PathType Container) {
+        Remove-Item -LiteralPath $stage -Recurse -Force
+    }
+    if (-not $completed -and (Test-Path -LiteralPath $OutputArchive -PathType Leaf)) {
+        Remove-Item -LiteralPath $OutputArchive -Force
+    }
+}
+ })
+$zstdLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -match 'zstd' })
+if ($shadercImportLibraries.Count -eq 0 -or $sdlImportLibraries.Count -eq 0 -or
+    $zlibLibraries.Count -eq 0 -or $zstdLibraries.Count -eq 0) {
+    throw 'One or more required shaderc, SDL3, zlib, or zstd link libraries are missing from the prebuilt prefix.'
 }
 
 $outputDirectory = Split-Path -Parent $OutputArchive
