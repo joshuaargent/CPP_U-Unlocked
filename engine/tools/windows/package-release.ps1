@@ -97,11 +97,15 @@ $previousHttpProxy = $env:HTTP_PROXY
 $previousHttpsProxy = $env:HTTPS_PROXY
 $previousHttpProxyLower = $env:http_proxy
 $previousHttpsProxyLower = $env:https_proxy
+$previousNoProxy = $env:NO_PROXY
+$previousNoProxyLower = $env:no_proxy
 try {
     $env:HTTP_PROXY = 'http://127.0.0.1:9'
     $env:HTTPS_PROXY = 'http://127.0.0.1:9'
     $env:http_proxy = 'http://127.0.0.1:9'
     $env:https_proxy = 'http://127.0.0.1:9'
+    $env:NO_PROXY = ''
+    $env:no_proxy = ''
     & $python.Source (Join-Path $dependencyVerificationEngine 'tools\setup_deps.py') --bundle-archive $dependencyBundle
     if ($LASTEXITCODE -ne 0) { throw 'The dependency source bundle failed its clean, network-blocked installation test.' }
     $dependencyLockData = Get-Content -LiteralPath (Join-Path $dependencyVerificationEngine 'dependencies.lock.json') -Raw | ConvertFrom-Json
@@ -118,7 +122,9 @@ try {
         @{ Name = 'HTTP_PROXY'; Value = $previousHttpProxy },
         @{ Name = 'HTTPS_PROXY'; Value = $previousHttpsProxy },
         @{ Name = 'http_proxy'; Value = $previousHttpProxyLower },
-        @{ Name = 'https_proxy'; Value = $previousHttpsProxyLower }
+        @{ Name = 'https_proxy'; Value = $previousHttpsProxyLower },
+        @{ Name = 'NO_PROXY'; Value = $previousNoProxy },
+        @{ Name = 'no_proxy'; Value = $previousNoProxyLower }
     )) {
         if ([string]::IsNullOrWhiteSpace([string]$proxy.Value)) {
             Remove-Item "Env:\$($proxy.Name)" -ErrorAction SilentlyContinue
