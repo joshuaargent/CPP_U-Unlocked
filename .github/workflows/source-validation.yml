@@ -240,6 +240,12 @@ jobs:
             }
           }
 
+      - name: Test prebuilt dependency installer integrity and rollback
+        shell: pwsh
+        run: |
+          & pwsh -NoProfile -File engine/tests/prebuilt_dependency_installer_tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Prebuilt dependency installer tests failed.' }
+
       - name: Test runtime activation recovery and rollback
         shell: pwsh
         run: |
