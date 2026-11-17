@@ -198,13 +198,11 @@ try {
                 Assert-BuildKitFile -BuildKitDirectory $buildKitRoot -FileName $asset
             }
             $releaseAssetRoot = $buildKitRoot
-            if (Test-Path -LiteralPath (Join-Path $packageRoot 'package-manifest.json') -PathType Leaf) {
-                foreach ($asset in @('U Unlocked.exe', 'wua_extract.exe')) {
-                    Assert-RootPackageFile -PackageDirectory $packageRoot -BuildKitDirectory $buildKitRoot -FileName $asset
-                }
-                $env:U_UNLOCKED_PREBUILT_LAUNCHER = Join-Path $packageRoot 'U Unlocked.exe'
-                $env:U_UNLOCKED_PREBUILT_WUA_EXTRACTOR = Join-Path $packageRoot 'wua_extract.exe'
+            foreach ($asset in @('U Unlocked.exe', 'wua_extract.exe')) {
+                Assert-RootPackageFile -PackageDirectory $packageRoot -BuildKitDirectory $buildKitRoot -FileName $asset
             }
+            $env:U_UNLOCKED_PREBUILT_LAUNCHER = Join-Path $packageRoot 'U Unlocked.exe'
+            $env:U_UNLOCKED_PREBUILT_WUA_EXTRACTOR = Join-Path $packageRoot 'wua_extract.exe'
         }
     }
     Write-Host 'Installing build prerequisites and preparing pinned dependencies. The first build can take a while.'
