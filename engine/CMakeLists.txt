@@ -123,7 +123,7 @@ if(SMASH_GENERATED_DIR)
     set_target_properties(smash-launcher PROPERTIES OUTPUT_NAME "U Unlocked")
     # The historical RC file references an icon asset that is not present in the
     # source tree. Omit the optional executable icon resource so clean builds work.
-    target_include_directories(smash-launcher PRIVATE runtime/src third_party/tinyxml2)
+    target_include_directories(smash-launcher PRIVATE runtime/src runtime/include third_party/tinyxml2)
     target_include_directories(smash-launcher SYSTEM PRIVATE third_party/stb)
     target_compile_features(smash-launcher PRIVATE cxx_std_20)
     target_link_libraries(smash-launcher PRIVATE SDL3::SDL3 $<$<PLATFORM_ID:Windows>:winhttp bcrypt ws2_32>)
