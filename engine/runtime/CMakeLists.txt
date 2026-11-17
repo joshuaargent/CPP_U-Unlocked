@@ -135,28 +135,43 @@ endif()
 
 # The title's file formats and the pictures and texts made from them
 # (title/): no runtime, so tests use them on synthetic data.
-add_library(cafe_title STATIC
-    src/title/archive.cpp
-    src/title/draw.cpp
-    src/title/font.cpp
-    src/title/image.cpp
-    src/title/text.cpp
-    src/title/title_screen.cpp)
-target_include_directories(cafe_title PUBLIC src)
-target_compile_features(cafe_title PUBLIC cxx_std_20)
-target_link_libraries(cafe_title PUBLIC ZLIB::ZLIB)
-target_compile_options(cafe_title PRIVATE -Wall -Wextra -Wpedantic)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    add_library(cafe_title STATIC IMPORTED GLOBAL)
+    set_target_properties(cafe_title PROPERTIES
+        IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libcafe_title.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(cafe_title INTERFACE ZLIB::ZLIB)
+else()
+    add_library(cafe_title STATIC
+        src/title/archive.cpp
+        src/title/draw.cpp
+        src/title/font.cpp
+        src/title/image.cpp
+        src/title/text.cpp
+        src/title/title_screen.cpp)
+    target_include_directories(cafe_title PUBLIC src)
+    target_compile_features(cafe_title PUBLIC cxx_std_20)
+    target_link_libraries(cafe_title PUBLIC ZLIB::ZLIB)
+    target_compile_options(cafe_title PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 # Latte shader decoding and translation, shared by the runtime and tools.
-add_library(cafe_latte STATIC
-    src/latte/isa.cpp
-    src/latte/decode.cpp
-    src/latte/disassemble.cpp
-    src/latte/environment.cpp
-    src/latte/translate.cpp)
-target_include_directories(cafe_latte PUBLIC src)
-target_compile_features(cafe_latte PUBLIC cxx_std_20)
-target_compile_options(cafe_latte PRIVATE -Wall -Wextra -Wpedantic)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    add_library(cafe_latte STATIC IMPORTED GLOBAL)
+    set_target_properties(cafe_latte PROPERTIES
+        IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libcafe_latte.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src")
+else()
+    add_library(cafe_latte STATIC
+        src/latte/isa.cpp
+        src/latte/decode.cpp
+        src/latte/disassemble.cpp
+        src/latte/environment.cpp
+        src/latte/translate.cpp)
+    target_include_directories(cafe_latte PUBLIC src)
+    target_compile_features(cafe_latte PUBLIC cxx_std_20)
+    target_compile_options(cafe_latte PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 add_executable(cafe-shader src/latte/cafe_shader_main.cpp)
 target_link_libraries(cafe-shader PRIVATE cafe_latte ${SHADERC_LIBRARY})
