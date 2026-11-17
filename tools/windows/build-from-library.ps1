@@ -132,6 +132,20 @@ try {
     Write-Host 'Installing build prerequisites and preparing pinned dependencies. The first build can take a while.'
     Write-Host 'Game files remain in their selected locations. Generated code and executables stay on this PC.'
 
+    # Prefer the checksum-verified dependency bundle shipped beside the launcher.
+    # setup_deps.py validates every embedded revision marker before installing it.
+    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
+        $bundleRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
+        $bundlePath = Join-Path $bundleRoot 'dependency-bundle.zip'
+        if (Test-Path -LiteralPath $bundlePath -PathType Leaf) {
+            $env:U_UNLOCKED_DEPENDENCY_BUNDLE = $bundlePath
+            Write-Host "Using the bundled pinned dependency sources: $bundlePath" -ForegroundColor Green
+        } else {
+            Remove-Item Env:\U_UNLOCKED_DEPENDENCY_BUNDLE -ErrorAction SilentlyContinue
+            Write-Host 'No local dependency bundle found; the build will use the verified online fallback.' -ForegroundColor Yellow
+        }
+    }
+
     & $environmentSetup
     if ($LASTEXITCODE -ne 0) { throw "Windows build environment setup failed with exit code $LASTEXITCODE." }
 
