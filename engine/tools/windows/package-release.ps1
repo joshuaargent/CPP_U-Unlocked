@@ -101,21 +101,36 @@ Remove-Item -LiteralPath $toolchainBundle -Force
 
 # Ship the generic native runtime objects built by CI. These contain no game data;
 # the player only compiles the locally generated RPX code and links the targets.
-$prebuiltRuntime = Join-Path $dist "$name-prebuilt-runtime.zip"
-Remove-Item -LiteralPath $prebuiltRuntime -Force -ErrorAction SilentlyContinue
-& (Join-Path $engineRoot 'tools\windows\package-prebuilt-runtime.ps1') -EngineRoot $engineRoot -OutputArchive $prebuiltRuntime
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $prebuiltRuntime -PathType Leaf)) {
-    throw 'Creating the precompiled generic runtime bundle failed.'
-}
-Copy-Item -LiteralPath $prebuiltRuntime -Destination (Join-Path $buildKit 'prebuilt-runtime.zip')
-Remove-Item -LiteralPath $prebuiltRuntime -Force
-
 $git = Get-Command git.exe -ErrorAction Stop
 $sourceRevision = (& $git.Source -C $repoRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-fA-F]{40}$') {
     throw 'Unable to record the source revision for the release build kit.'
 }
 $sourceRevision | Set-Content -LiteralPath (Join-Path $buildKit 'source-revision.txt') -Encoding ASCII
+
+$prebuiltRuntime = Join-Path $dist "$name-prebuilt-runtime.zip"
+Remove-Item -LiteralPath $prebuiltRuntime -Force -ErrorAction SilentlyContinue
+& (Join-Path $engineRoot 'tools\windows\package-prebuilt-runtime.ps1') -EngineRoot $engineRoot -OutputArchive $prebuiltRuntime
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $prebuiltRuntime -PathType Leaf)) {
+    throw 'Creating the precompiled generic runtime bundle failed.'
+}
+
+# Exercise the same hash-checked installer used by players before shipping the archive.
+$runtimeVerificationRoot = Join-Path $dist ('.runtime-package-verification-' + [guid]::NewGuid().ToString('N'))
+$runtimeVerificationEngine = Join-Path $runtimeVerificationRoot 'engine'
+New-Item -ItemType Directory -Force -Path $runtimeVerificationEngine | Out-Null
+try {
+    & (Join-Path $repoRoot 'tools\windows\install-prebuilt-runtime.ps1') -ArchivePath $prebuiltRuntime -EngineRoot $runtimeVerificationEngine -ExpectedSourceRevision $sourceRevision
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $runtimeVerificationEngine 'build-prebuilt-runtime\runtime-manifest.json') -PathType Leaf)) {
+        throw 'The prebuilt runtime archive failed its clean-directory installation test.'
+    }
+} finally {
+    if (Test-Path -LiteralPath $runtimeVerificationRoot) {
+        Remove-Item -LiteralPath $runtimeVerificationRoot -Recurse -Force
+    }
+}
+Copy-Item -LiteralPath $prebuiltRuntime -Destination (Join-Path $buildKit 'prebuilt-runtime.zip')
+Remove-Item -LiteralPath $prebuiltRuntime -Force
 
 foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\toolchain-path.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json', 'tools\windows\package-toolchain-bundle.ps1', 'engine\tools\windows\package-prebuilt-runtime.ps1', 'tools\windows\install-prebuilt-runtime.ps1')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
