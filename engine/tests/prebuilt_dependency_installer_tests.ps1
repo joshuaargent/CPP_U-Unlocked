@@ -19,6 +19,7 @@ function New-TestArchive {
         [string]$Path,
         [string]$Root,
         [string]$LockHash,
+        [string]$RecipeHash,
         [switch]$Tamper,
         [switch]$Traversal
     )
@@ -33,7 +34,9 @@ function New-TestArchive {
     $manifest = [ordered]@{
         schema_version = 1
         architecture = 'x86_64-windows'
+        toolchain_version = '20260616'
         dependency_lock_sha256 = $LockHash
+        build_recipe_sha256 = $RecipeHash
         files = $files
     }
 
@@ -85,6 +88,10 @@ try {
     $lockPath = Join-Path $engineRoot 'dependencies.lock.json'
     Set-Content -LiteralPath $lockPath -Value '{"SDL":{"revision":"0123456789abcdef0123456789abcdef01234567"}}' -Encoding UTF8
     $lockHash = Get-TestHash $lockPath
+    $recipePath = Join-Path $engineRoot 'tools\windows\build-deps.ps1'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $recipePath) | Out-Null
+    Set-Content -LiteralPath $recipePath -Value '# pinned dependency build recipe test fixture' -Encoding UTF8
+    $recipeHash = Get-TestHash $recipePath
 
     $libDirectory = Join-Path $sourceRoot 'lib'
     $headerDirectory = Join-Path $sourceRoot 'include\vulkan'
@@ -93,7 +100,7 @@ try {
     Set-Content -LiteralPath (Join-Path $headerDirectory 'vulkan.h') -Value '#pragma once' -Encoding ASCII
 
     $validArchive = Join-Path $temporary 'valid.zip'
-    New-TestArchive -Path $validArchive -Root $sourceRoot -LockHash $lockHash
+    New-TestArchive -Path $validArchive -Root $sourceRoot -LockHash $lockHash -RecipeHash $recipeHash
     & $installer -ArchivePath $validArchive -EngineRoot $engineRoot
     foreach ($required in @('lib\libvulkan-1.a', 'include\vulkan\vulkan.h')) {
         if (-not (Test-Path -LiteralPath (Join-Path $engineRoot ('build-deps\prefix\' + $required)) -PathType Leaf)) {
