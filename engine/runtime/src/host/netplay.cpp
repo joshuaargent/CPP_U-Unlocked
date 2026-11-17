@@ -69,12 +69,14 @@ uint32_t le32(const uint8_t* p) {
     return v;
 }
 
-void start_winsock() {
+bool start_winsock() {
     static std::once_flag once;
+    static int startup_result = WSASYSNOTREADY;
     std::call_once(once, [] {
-        WSADATA data;
-        WSAStartup(MAKEWORD(2, 2), &data);
+        WSADATA data{};
+        startup_result = WSAStartup(MAKEWORD(2, 2), &data);
     });
+    return startup_result == 0;
 }
 
 sockaddr_in address_of(Endpoint e) {
@@ -90,8 +92,19 @@ Endpoint endpoint_of(const sockaddr_in& a) { return {ntohl(a.sin_addr.s_addr), n
 // The game's UDP socket (one a process), with STUN for its public address.
 class Socket {
 public:
+    Socket() = default;
+    Socket(const Socket&) = delete;
+    Socket& operator=(const Socket&) = delete;
+
+    ~Socket() {
+        if (s_ != INVALID_SOCKET) {
+            closesocket(s_);
+            s_ = INVALID_SOCKET;
+        }
+    }
+
     bool open(uint16_t port) {
-        start_winsock();
+        if (!start_winsock()) return false;
         s_ = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (s_ == INVALID_SOCKET) return false;
         sockaddr_in a{};
