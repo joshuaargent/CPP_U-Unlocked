@@ -31,9 +31,9 @@ struct Input {
 
 // In the launcher's order. The defaults go by position, as on a US QWERTY
 // keyboard: W/S/A/D for the D-pad; I/K/J/L for X/B/Y/A (the GamePad's
-// diamond, by place: I top, K bottom, J left, L right); H/; for L/R, U/O
-// for ZL/ZR; the arrows the left stick; Enter Plus, Backspace Minus, the
-// Home key HOME.
+// diamond, by place: I top, K bottom, J left, L right); Q/E for L/R, U/O
+// for ZL/ZR; the arrows the left stick; T/G/F/H the right stick; Enter Plus,
+// Backspace Minus, the Home key HOME.
 inline constexpr std::array<Input, 23> kInputs{{
     {"dpad_up", os::vpad::kUp, 0, 0, 0, 0, 26},
     {"dpad_down", os::vpad::kDown, 0, 0, 0, 0, 22},
@@ -43,8 +43,8 @@ inline constexpr std::array<Input, 23> kInputs{{
     {"face_bottom", os::vpad::kB, 0, 0, 0, 0, 14},
     {"face_left", os::vpad::kY, 0, 0, 0, 0, 13},
     {"face_right", os::vpad::kA, 0, 0, 0, 0, 15},
-    {"l", os::vpad::kL, 0, 0, 0, 0, 11},
-    {"r", os::vpad::kR, 0, 0, 0, 0, 51},
+    {"l", os::vpad::kL, 0, 0, 0, 0, 20},
+    {"r", os::vpad::kR, 0, 0, 0, 0, 8},
     {"zl", os::vpad::kZL, 0, 0, 0, 0, 24},
     {"zr", os::vpad::kZR, 0, 0, 0, 0, 18},
     {"stick_up", 0, 0, 1, 0, 0, 82},
