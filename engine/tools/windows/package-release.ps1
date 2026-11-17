@@ -63,6 +63,7 @@ Remove-Item -LiteralPath $buildKitArchive -Force
 # archive downloads or the user's network connection.
 # Package the compiled dependency prefix using the same tested packager as CI.
 $prebuiltArchive = Join-Path $dist "$name-prebuilt-dependencies.zip"
+Remove-Item -LiteralPath $prebuiltArchive -Force -ErrorAction SilentlyContinue
 & (Join-Path $engineRoot 'tools\windows\package-prebuilt-dependencies.ps1') -EngineRoot $engineRoot -OutputArchive $prebuiltArchive
 if (-not (Test-Path -LiteralPath $prebuiltArchive -PathType Leaf)) {
     throw 'Precompiled dependency archive was not created.'
