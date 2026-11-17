@@ -121,26 +121,53 @@ $configureArgs = @(
 & cmake @configureArgs
 if ($LASTEXITCODE) { throw 'CMake configuration of the complete U Unlocked runtime failed.' }
 
+$prebuiltLauncher = $env:U_UNLOCKED_PREBUILT_LAUNCHER
+$prebuiltWuaExtractor = $env:U_UNLOCKED_PREBUILT_WUA_EXTRACTOR
+if (-not [string]::IsNullOrWhiteSpace($prebuiltLauncher) -and
+    -not (Test-Path -LiteralPath $prebuiltLauncher -PathType Leaf)) {
+    throw "The verified release launcher is missing: $prebuiltLauncher"
+}
+if (-not [string]::IsNullOrWhiteSpace($prebuiltWuaExtractor) -and
+    -not (Test-Path -LiteralPath $prebuiltWuaExtractor -PathType Leaf)) {
+    throw "The verified release WUA extractor is missing: $prebuiltWuaExtractor"
+}
+
 $targets = @(
     'smash_update_v3',
     'smash_update_v2',
     'smash_base_v3',
-    'smash_base_v2',
-    'smash-launcher',
-    'wua_extract'
+    'smash_base_v2'
 )
-Write-Host 'Building the Vulkan runtime, launcher, and all four game executables...' -ForegroundColor Cyan
+if ([string]::IsNullOrWhiteSpace($prebuiltLauncher)) { $targets += 'smash-launcher' }
+if ([string]::IsNullOrWhiteSpace($prebuiltWuaExtractor)) { $targets += 'wua_extract' }
+
+if (-not [string]::IsNullOrWhiteSpace($prebuiltLauncher) -and
+    -not [string]::IsNullOrWhiteSpace($prebuiltWuaExtractor)) {
+    Write-Host 'Building the Vulkan runtime and four game executables; reusing the verified release launcher and WUA extractor.' -ForegroundColor Cyan
+} else {
+    Write-Host 'Building the Vulkan runtime, launcher, WUA extractor, and all four game executables...' -ForegroundColor Cyan
+}
 & ninja -j $buildJobs -C $build @targets
 if ($LASTEXITCODE) { throw 'The complete U Unlocked build failed.' }
 
 New-Item -ItemType Directory -Force $play | Out-Null
+$launcherSource = if ([string]::IsNullOrWhiteSpace($prebuiltLauncher)) {
+    Join-Path $build 'U Unlocked.exe'
+} else {
+    $prebuiltLauncher
+}
+$wuaExtractorSource = if ([string]::IsNullOrWhiteSpace($prebuiltWuaExtractor)) {
+    Join-Path $build 'wua_extract.exe'
+} else {
+    $prebuiltWuaExtractor
+}
 $outputs = @(
     @{ Source = (Join-Path $build 'smash.exe'); Destination = 'smash.exe' },
     @{ Source = (Join-Path $build 'smash-compat.exe'); Destination = 'smash-compat.exe' },
     @{ Source = (Join-Path $build 'smash-base.exe'); Destination = 'smash-base.exe' },
     @{ Source = (Join-Path $build 'smash-base-compat.exe'); Destination = 'smash-base-compat.exe' },
-    @{ Source = (Join-Path $build 'U Unlocked.exe'); Destination = 'U Unlocked.exe' },
-    @{ Source = (Join-Path $build 'wua_extract.exe'); Destination = 'wua_extract.exe' }
+    @{ Source = $launcherSource; Destination = 'U Unlocked.exe' },
+    @{ Source = $wuaExtractorSource; Destination = 'wua_extract.exe' }
 )
 foreach ($output in $outputs) {
     if (-not (Test-Path -LiteralPath $output.Source -PathType Leaf)) {
