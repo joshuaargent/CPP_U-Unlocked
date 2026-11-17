@@ -18,6 +18,8 @@ $requiredSource = @(
     (Join-Path $enginePath 'recomp\src\recompile_main.cpp'),
     (Join-Path $enginePath 'tools\setup_deps.py'),
     (Join-Path $enginePath 'tools\windows\build-smash.ps1'),
+    (Join-Path $repoRoot 'tools\windows\build-from-library.ps1'),
+    (Join-Path $repoRoot 'tools\windows\setup-build-environment.ps1'),
     (Join-Path $enginePath 'tools\windows\package-release.ps1'),
     (Join-Path $repoRoot 'tools\windows\update-launcher.ps1'),
     (Join-Path $enginePath 'third_party\cemu_nex\LICENSE.txt'),
@@ -42,9 +44,22 @@ if ($launcherMain -notmatch '~Launcher\s*\(') {
 # Keep the retired upstream project name out of all tracked source and documentation.
 # Split the token so this guard does not match itself.
 $legacyName = 'Smash' + '4PC'
-$trackedFiles = @(git -C $repoRoot ls-files)
-if ($LASTEXITCODE -ne 0) {
-    throw 'Unable to enumerate tracked files for the legacy-reference check.'
+$gitCommand = Get-Command git -ErrorAction SilentlyContinue
+if ($gitCommand -and (Test-Path -LiteralPath (Join-Path $repoRoot '.git'))) {
+    $trackedFiles = @(git -C $repoRoot ls-files)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Unable to enumerate tracked files for the legacy-reference check.'
+    }
+} else {
+    # Release source bundles intentionally omit .git metadata. Scan the complete
+    # source tree while excluding generated build outputs and downloaded toolchains.
+    $excludedRoots = @('toolchain', 'generated', 'Play', 'dist', 'engine/build', 'engine/build-deps', 'engine/third_party/ZArchive', 'engine/third_party/addrlib', 'engine/third_party/zlib', 'engine/third_party/SDL', 'engine/third_party/Vulkan-Headers', 'engine/third_party/zstd', 'engine/third_party/shaderc', 'engine/third_party/glslang', 'engine/third_party/spirv-headers', 'engine/third_party/spirv-tools', 'engine/third_party/stb')
+    $trackedFiles = @(Get-ChildItem -LiteralPath $repoRoot -File -Recurse -Force | Where-Object {
+        $relative = $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
+        $parts = $relative.Split('/')
+        ($parts -notcontains '.git') -and
+        -not ($excludedRoots | Where-Object { $relative.StartsWith($_ + '/', [System.StringComparison]::OrdinalIgnoreCase) })
+    } | ForEach-Object { $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/') })
 }
 $legacyPaths = @($trackedFiles | Where-Object {
     $_.IndexOf($legacyName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
@@ -72,15 +87,12 @@ if ($legacyMatches.Count -gt 0) {
 }
 
 if (-not $SkipToolchainCheck) {
-    $requiredToolchain = @(
-        (Join-Path $repoRoot 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'),
-        (Join-Path $repoRoot 'toolchain\Ninja\ninja.exe'),
-        (Join-Path $repoRoot 'toolchain\CMake\bin\cmake.exe')
-    )
-    $missingToolchain = @($requiredToolchain | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) })
-    if ($missingToolchain.Count -gt 0) {
-        $missingToolchain | ForEach-Object { Write-Host "Missing tool: $_" -ForegroundColor Yellow }
-        throw 'The Windows toolchain is incomplete. See the README build requirements.'
+    $compiler = Join-Path $repoRoot 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
+    $missingCommands = @('cmake', 'ninja', 'python') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) }
+    if (-not (Test-Path -LiteralPath $compiler -PathType Leaf) -or $missingCommands.Count -gt 0) {
+        if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { Write-Host "Missing compiler: $compiler" -ForegroundColor Yellow }
+        if ($missingCommands.Count -gt 0) { Write-Host "Missing commands: $($missingCommands -join ', ')" -ForegroundColor Yellow }
+        throw 'The Windows build environment is incomplete. Run setup-build-environment.ps1.'
     }
 }
 

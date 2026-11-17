@@ -536,7 +536,7 @@ public:
         if (!logo_.texture) {
             std::fprintf(stderr, "launcher: project title logo is missing; using the text fallback\\n");
         }
-        display::set_file(dir_ / "display.ini", "U Unlocked");
+        display::set_file(data_dir() / "display.ini", "U Unlocked");
         settings_ = display::load(display::file_path()).settings;
         const auto ini = read_ini(dir_ / "launcher.ini");
         for (int s = 0; s < kSlots; ++s) {
@@ -547,9 +547,9 @@ public:
         if (auto it = ini.find("netplay_name"); it != ini.end()) netplay_name_ = it->second;
         if (auto it = ini.find("netplay_address"); it != ini.end()) netplay_address_ = it->second;
         if (auto it = ini.find("update_channel"); it != ini.end() && it->second == "beta") update_channel_ = "beta";
-        online::load(dir_ / "online");
+        online::load(data_dir() / "online");
         refresh();
-        font_.open({dir_ / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/segoeui.ttf",
+        font_.open({data_dir() / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf", "C:/Windows/Fonts/segoeui.ttf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf"});
 
         // Check in the background on startup; installation remains an explicit user action.
@@ -568,6 +568,12 @@ public:
         if (sign_in_thread_.joinable()) sign_in_thread_.join();
         if (update_check_thread_.joinable()) update_check_thread_.join();
         if (wua_thread_.joinable()) wua_thread_.join();
+        if (build_process_) {
+            int code = 0;
+            SDL_WaitProcess(build_process_, true, &code);
+            SDL_DestroyProcess(build_process_);
+            build_process_ = nullptr;
+        }
         if (!wua_stage_path_.empty()) {
             std::error_code cleanup_error;
             fs::remove_all(wua_stage_path_, cleanup_error);
@@ -705,6 +711,31 @@ public:
         repeat(stick_x_, held_x_, [&](int d) { change(d); });
         selection_y_ = ease(selection_y_, float(selected_), dt, 18);
         fade_ = std::min(1.0f, fade_ + dt * 5.5f);
+        if (build_process_) {
+            int code = 0;
+            if (SDL_WaitProcess(build_process_, false, &code)) {
+                SDL_DestroyProcess(build_process_);
+                build_process_ = nullptr;
+                building_runtime_ = false;
+                refresh();
+                std::error_code build_ec;
+                const fs::path built_runtime = dir_ / "runtime";
+                const auto output_exists = [&](const char* name) {
+                    build_ec.clear();
+                    return fs::is_regular_file(built_runtime / name, build_ec) && !build_ec;
+                };
+                const bool all_runtimes = output_exists("smash.exe") && output_exists("smash-compat.exe") &&
+                    output_exists("smash-base.exe") && output_exists("smash-base-compat.exe");
+                if (code == 0 && all_runtimes) {
+                    reload_runtime_data_paths();
+                    build_status_ = "Runtime built. Select Play.";
+                    launch_error_.clear();
+                } else {
+                    build_status_ = "Build failed (exit " + std::to_string(code) + "). Open BuildLogs in Local AppData.";
+                    launch_error_ = build_status_;
+                }
+            }
+        }
         if (process_) {
             int code = 0;
             if (SDL_WaitProcess(process_, false, &code)) {
@@ -882,7 +913,7 @@ public:
 
 private:
     // The main menu: Play, the game / update / DLC folders, Settings, Mods, Quit.
-    enum MainItem { kPlay, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kLibraryItem, kUpdatesItem, kDiagnosticsItem, kQuitItem };
+    enum MainItem { kPlay, kBuildItem, kGameItem, kUpdateItem, kDlcItem, kOnlineItem, kNetplayItem, kControlsItem, kSettingsItem, kModsItem, kLibraryItem, kUpdatesItem, kDiagnosticsItem, kQuitItem };
     // The Netplay page (host/netplay.h: the host's game streamed to its guests): hosting, a name, joining.
     // Then the open rooms (or a line saying there are none), then Back.
     enum NetplayItem { kHostSwitch, kNameField, kAddressField, kFirstRoom };
@@ -931,6 +962,7 @@ private:
         switch (screen_) {
         case Screen::kMain:
             list_ = {{"PLAY"},
+                     {"BUILD RUNTIME", building_runtime_ ? "Building locally..." : build_status_},
                      {"GAME", folder_value(kGame)},
                      {"UPDATE", folder_value(kUpdate)},
                      {"DLC", folder_value(kDlc)},
@@ -1223,8 +1255,11 @@ private:
         if (screen_ == Screen::kControls) {
             if (selected_ == 0) select_control_device(d);
             else if (selected_ == 1) {
-                const int next = (static_cast<int>(control_profile_.player_slot) + 1 + d + 9) % 9;
-                control_profile_.player_slot = static_cast<int8_t>(next - 1);
+                // Player 1 is permanently the keyboard/Wii U GamePad. Physical
+                // controllers can be automatic or explicitly assigned to players 2-8.
+                const int current = control_profile_.player_slot < 0 ? 0 : control_profile_.player_slot;
+                const int next = (current + d + 8) % 8;
+                control_profile_.player_slot = static_cast<int8_t>(next == 0 ? -1 : next);
             } else if (selected_ == 2) {
                 control_button_action_ = (control_button_action_ + d + controller_profiles::kButtonCount) % controller_profiles::kButtonCount;
             } else if (selected_ == 4) {
@@ -1324,6 +1359,7 @@ private:
         switch (screen_) {
         case Screen::kMain:
             if (selected_ == kPlay) play();
+            if (selected_ == kBuildItem) build_runtime();
             if (const auto slot = folder_slot(selected_)) choose_folder(*slot);
             if (selected_ == kOnlineItem) go(Screen::kOnline);
             if (selected_ == kNetplayItem) go(Screen::kNetplay);
@@ -1564,17 +1600,86 @@ private:
         return std::nullopt;
     }
 
+    // The local game runtime is isolated from the launcher so its MinGW DLLs
+    // cannot replace the launcher's own SDL runtime. Keep game data beside it.
+    fs::path data_dir() const {
+        const fs::path runtime_dir = dir_ / "runtime";
+        std::error_code ec;
+        for (const char* name : {"smash.exe", "smash-compat.exe", "smash-base.exe", "smash-base-compat.exe"}) {
+            ec.clear();
+            if (fs::is_regular_file(runtime_dir / name, ec) && !ec) return runtime_dir;
+        }
+        return dir_;
+    }
+
+    void reload_runtime_data_paths() {
+        const fs::path data = data_dir();
+        display::set_file(data / "display.ini", "U Unlocked");
+        settings_ = display::load(display::file_path()).settings;
+        online::load(data / "online");
+        font_.open({data / "fonts" / "launcher.ttf", "C:/Windows/Fonts/bahnschrift.ttf",
+                    "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf"});
+    }
+
     // The game's program: smash.exe is the update's (v304), smash-base.exe the game's own (v1.0);
     // smash-compat.exe is the update's for processors without AVX2/FMA.
     fs::path game_exe() const {
+        const fs::path runtime_dir = data_dir();
         if (!valid_[kUpdate]) {
-            return dir_ / (cafe::host::cpu_has_x86_64_v3() ? "smash-base.exe" : "smash-base-compat.exe");
+            return runtime_dir / (cafe::host::cpu_has_x86_64_v3() ? "smash-base.exe" : "smash-base-compat.exe");
         }
-        return dir_ / (cafe::host::cpu_has_x86_64_v3() ? "smash.exe" : "smash-compat.exe");
+        return runtime_dir / (cafe::host::cpu_has_x86_64_v3() ? "smash.exe" : "smash-compat.exe");
+    }
+
+    void build_runtime() {
+        if (process_ || build_process_) return;
+        if (!valid_[kGame]) {
+            build_status_ = "Select a valid base-game folder first.";
+            choose_folder(kGame);
+            return;
+        }
+        if (!valid_[kUpdate]) {
+            build_status_ = "Select the game update folder to build the updated runtime.";
+            choose_folder(kUpdate);
+            return;
+        }
+
+        fs::path script = dir_ / "build-kit" / "tools" / "windows" / "build-from-library.ps1";
+        if (!fs::is_regular_file(script)) {
+            script = dir_.parent_path() / "tools" / "windows" / "build-from-library.ps1";
+        }
+        std::error_code ec;
+        if (!fs::is_regular_file(script, ec) || ec) {
+            build_status_ = "Build kit missing. Reinstall the complete release package.";
+            launch_error_ = "The local build kit is missing beside the launcher. Download the complete U Unlocked release package again.";
+            return;
+        }
+
+        const std::vector<std::string> words = {
+            "powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass",
+            "-File", script.string(),
+            "-GameDirectory", paths_[kGame].string(),
+            "-UpdateDirectory", paths_[kUpdate].string(),
+            "-LauncherDirectory", dir_.string()
+        };
+        std::vector<const char*> args;
+        args.reserve(words.size() + 1);
+        for (const std::string& word : words) args.push_back(word.c_str());
+        args.push_back(nullptr);
+
+        build_status_ = "Preparing local Vulkan runtime...";
+        launch_error_.clear();
+        build_process_ = SDL_CreateProcess(args.data(), false);
+        if (build_process_) {
+            building_runtime_ = true;
+        } else {
+            build_status_ = std::string("Build could not start: ") + SDL_GetError();
+            launch_error_ = build_status_;
+        }
     }
 
     void play() {
-        if (process_) return;
+        if (process_ || building_runtime_) return;
         if (!valid_[kGame] || (!asked_[kUpdate] && !valid_[kUpdate]) || (!asked_[kDlc] && !valid_[kDlc])) {
             // Ask for what is missing, one folder after another (once per run for the optional ones).
             prompting_ = true;
@@ -1586,8 +1691,8 @@ private:
         }
         if (!ready()) return;
         std::error_code ec;
-        if (!fs::exists(game_exe(), ec)) {
-            launch_error_ = "missing " + game_exe().filename().string();
+        if (ec || !fs::is_regular_file(game_exe(), ec) || ec) {
+            build_runtime();
             return;
         }
         launch_error_.clear();
@@ -1647,13 +1752,27 @@ private:
     }
 
     void launch_guest(const std::string& target) {
-        if (process_) return;
+        if (process_ || building_runtime_) return;
         if (target.empty()) {
             launch_error_ = "Enter a host IP address or select an open room.";
             return;
         }
+        if (!valid_[kGame]) {
+            choose_folder(kGame);
+            return;
+        }
+        if (!valid_[kUpdate]) {
+            choose_folder(kUpdate);
+            return;
+        }
+        std::error_code runtime_ec;
+        const fs::path executable = game_exe();
+        if (!fs::is_regular_file(executable, runtime_ec) || runtime_ec) {
+            build_runtime();
+            return;
+        }
         save_launcher_ini();
-        const std::string exe = (dir_ / "smash.exe").string();
+        const std::string exe = executable.string();
         const std::string name = netplay_name_.empty() ? "Player" : netplay_name_;
         const char* args[] = {exe.c_str(), "--join", target.c_str(), name.c_str(), nullptr};
         SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SMASH_LOG", (dir_ / "smash.log").string().c_str(), true);
@@ -1941,7 +2060,7 @@ private:
         load_mods();
         std::error_code ec;
         shaders_ = 0;
-        for (const auto& entry : fs::directory_iterator(dir_ / "cache" / "spirv", ec)) shaders_ += entry.is_regular_file(ec);
+        for (const auto& entry : fs::directory_iterator(data_dir() / "cache" / "spirv", ec)) shaders_ += entry.is_regular_file(ec);
     }
     void save_display() {
         std::ofstream(display::file_path(), std::ios::binary) << display::format(settings_);
@@ -2178,15 +2297,20 @@ private:
         font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.145f,
                    "SUPER SMASH BROS. FOR WII U", H * 0.035f, mix_alpha(white, 1.0f));
         const bool game_ready = ready();
+        std::error_code runtime_ec;
+        const bool runtime_ready = game_ready && fs::is_regular_file(game_exe(), runtime_ec) && !runtime_ec;
         const std::string game_state = process_ ? "GAME RUNNING"
-                                      : game_ready ? "GAME FILES VERIFIED"
-                                                   : "SET UP YOUR GAME FILES";
-        const Color state_color = process_ ? kGold : game_ready ? kGood : kBad;
+                                      : !game_ready ? "SET UP YOUR GAME FILES"
+                                      : runtime_ready ? "RUNTIME READY"
+                                                      : "RUNTIME BUILD REQUIRED";
+        const Color state_color = process_ ? kGold : runtime_ready ? kGood : game_ready ? kGold : kBad;
         font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.195f,
                    game_state, H * 0.019f, mix_alpha(state_color, 1.0f));
-        std::string detail = game_ready
-            ? (valid_[kUpdate] ? "Update v" + std::to_string(update_version_) : "Base game only")
-            : "Select your legally obtained game folder to get started.";
+        std::string detail = !game_ready
+            ? "Select your legally obtained game folder to get started."
+            : !runtime_ready
+                ? "Game files found. Build the local Vulkan runtime before launching."
+                : (valid_[kUpdate] ? "Update v" + std::to_string(update_version_) : "Base game only");
         font_.draw(r_, hero_x + H * 0.035f, hero_y + H * 0.245f,
                    fit(detail, H * 0.019f, hero_w * 0.72f), H * 0.019f, mix_alpha(muted, 1.0f));
 
@@ -2357,8 +2481,15 @@ private:
             paint_.cross(ix, y - px * 0.7f, icon * 0.8f, H * 0.0035f, c);
             line = "The game closed with an error (" + std::to_string(exit_code_) + "). Details: smash.log";
         } else if (ready()) {
-            paint_.check(ix, y - px * 0.78f, icon, H * 0.0035f, c);
-            line = "Game ready.";
+            std::error_code runtime_ec;
+            if (fs::is_regular_file(game_exe(), runtime_ec) && !runtime_ec) {
+                paint_.check(ix, y - px * 0.78f, icon, H * 0.0035f, c);
+                line = "Game runtime ready.";
+            } else {
+                c = kGold;
+                paint_.cross(ix, y - px * 0.7f, icon * 0.8f, H * 0.0035f, c);
+                line = "Game files verified; local Vulkan runtime build required.";
+            }
         } else {
             c = kBad;
             paint_.cross(ix, y - px * 0.7f, icon * 0.8f, H * 0.0035f, c);
@@ -2552,7 +2683,7 @@ private:
             online_ok_ = false;
             return;
         }
-        const fs::path dir = dir_ / "online";
+        const fs::path dir = data_dir() / "online";
         fs::create_directories(dir, ec);
         fs::copy_file(otp, dir / "otp.bin", fs::copy_options::overwrite_existing, ec);
         fs::copy_file(seeprom, dir / "seeprom.bin", fs::copy_options::overwrite_existing, ec);
@@ -2631,15 +2762,15 @@ private:
         a.mii = r.mii;
         a.mii_name = r.mii_name;
         a.us = r.country.empty() || r.country == "US";
-        online_ok_ = online::save_account(dir_ / "online", a);
+        online_ok_ = online::save_account(data_dir() / "online", a);
         online_status_ = online_ok_ ? "Signed in as " + r.user_id + ". Smash's online modes use this account."
                                     : "Signed in, but the account could not be saved.";
     }
 
     void sign_out() {
         std::error_code ec;
-        fs::remove(dir_ / "online" / "account.dat", ec);
-        online::load(dir_ / "online");
+        fs::remove(data_dir() / "online" / "account.dat", ec);
+        online::load(data_dir() / "online");
         online_ok_ = true;
         online_status_ = "Signed out. The console files stay; sign in again any time.";
     }
@@ -2863,7 +2994,7 @@ private:
 
     SDL_Window* window_;
     SDL_Renderer* r_;
-    std::array<SDL_FRect, 13> main_rects_{};
+    std::array<SDL_FRect, 14> main_rects_{};
     fs::path cemu_profiles_dir_ = cemu_profiles_directory();
     size_t cemu_profile_count_ = count_cemu_profiles(cemu_profiles_dir_);
     std::string cemu_dialog_directory_;
@@ -2895,6 +3026,9 @@ private:
     float selection_y_ = 0, fade_ = 0, time_ = 0;
     float stick_x_ = 0, stick_y_ = 0, held_x_ = 0, held_y_ = 0;
     SDL_Process* process_ = nullptr;
+    SDL_Process* build_process_ = nullptr;
+    bool building_runtime_ = false;
+    std::string build_status_ = "Not built";
     int exit_code_ = 0;
     std::string launch_error_;
     std::mutex dialog_mutex_;

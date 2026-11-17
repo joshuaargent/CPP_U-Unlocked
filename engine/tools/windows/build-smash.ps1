@@ -26,7 +26,7 @@ $prefix = Join-Path $engineRoot 'build-deps\prefix'
 $play = Join-Path $root 'Play'
 $updateGenerated = Join-Path $root 'generated\smash'
 $baseGenerated = Join-Path $root 'generated\smash-base'
-
+$buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^[0-9]+$') { [int]$env:U_UNLOCKED_BUILD_JOBS } else { 2 }
 $stbHeader = Join-Path $engineRoot 'third_party\stb\stb_truetype.h'
 if (-not (Test-Path -LiteralPath $stbHeader -PathType Leaf)) {
     $python = (Get-Command python).Source
@@ -40,7 +40,7 @@ if (-not (Test-Path (Join-Path $prefix 'lib\libvulkan-1.a'))) {
 & (Join-Path $PSScriptRoot 'build-recomp.ps1')
 if ($LASTEXITCODE) { throw 'Building the recompilation tools failed.' }
 
-$env:PATH = @((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $toolchain 'Ninja'), (Join-Path $toolchain 'CMake\bin'), "$env:SystemRoot\System32") -join ';'
+$env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $prefix 'bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
 $recompiler = Join-Path $build 'recomp\cafe-recomp.exe'
 if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) {
     throw "The cafe-recomp executable was not built: $recompiler"
@@ -76,7 +76,7 @@ $targets = @(
     'wua_extract'
 )
 Write-Host 'Building the Vulkan runtime, launcher, and all four game executables...' -ForegroundColor Cyan
-& ninja -C $build @targets
+& ninja -j $buildJobs -C $build @targets
 if ($LASTEXITCODE) { throw 'The complete U Unlocked build failed.' }
 
 New-Item -ItemType Directory -Force $play | Out-Null
@@ -107,6 +107,14 @@ if ($dlls.Count -eq 0) {
     throw "No runtime dependency DLLs were found in $dllDirectory"
 }
 foreach ($dll in $dlls) {
+    Copy-Item -LiteralPath $dll.FullName -Destination $play -Force
+}
+
+# SDL3 and other shared dependencies are built with llvm-mingw and can depend on
+# compiler runtime DLLs. Keep these beside the game executables in the runtime folder.
+$compilerDllDirectory = Join-Path $toolchain 'llvm-mingw\bin'
+$compilerDlls = @(Get-ChildItem -LiteralPath $compilerDllDirectory -Filter '*.dll' -File)
+foreach ($dll in $compilerDlls) {
     Copy-Item -LiteralPath $dll.FullName -Destination $play -Force
 }
 

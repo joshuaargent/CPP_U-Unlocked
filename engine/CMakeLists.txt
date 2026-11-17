@@ -66,6 +66,28 @@ endif()
 # Function-level PowerPC -> C++ recompiler for the standalone port.
 add_subdirectory(recomp)
 add_subdirectory(runtime)
+
+if(WIN32)
+    # Compile the game-host translation units in CI even when no copyrighted
+    # generated game sources are available. Real game targets use these same
+    # sources with the v2/v3 CPU-specific compile definitions.
+    function(add_smash_host_compile_check target compatibility)
+        add_library(${target} OBJECT EXCLUDE_FROM_ALL
+            runtime/src/smash_main.cpp
+            runtime/src/smash_logo.cpp
+            runtime/src/smash_overlay.cpp)
+        target_include_directories(${target} PRIVATE runtime/src third_party/tinyxml2)
+        target_include_directories(${target} SYSTEM PRIVATE third_party/stb)
+        target_compile_features(${target} PRIVATE cxx_std_20)
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(${target} PRIVATE cafe_runtime)
+        if(${compatibility})
+            target_compile_definitions(${target} PRIVATE SMASH_COMPAT)
+        endif()
+    endfunction()
+    add_smash_host_compile_check(smash_host_compile_check_v3 FALSE)
+    add_smash_host_compile_check(smash_host_compile_check_v2 TRUE)
+endif()
 if(UNIX)
     enable_testing()
     add_subdirectory(tests)
@@ -98,9 +120,8 @@ if(SMASH_GENERATED_DIR)
         # Netplay's room list (the Netplay page)
         runtime/src/host/rooms.cpp)
     set_target_properties(smash-launcher PROPERTIES OUTPUT_NAME "U Unlocked")
-    if(WIN32)
-        target_sources(smash-launcher PRIVATE runtime/res/smash.rc)
-    endif()
+    # The historical RC file references an icon asset that is not present in the
+    # source tree. Omit the optional executable icon resource so clean builds work.
     target_include_directories(smash-launcher PRIVATE runtime/src third_party/tinyxml2)
     target_include_directories(smash-launcher SYSTEM PRIVATE third_party/stb)
     target_compile_features(smash-launcher PRIVATE cxx_std_20)

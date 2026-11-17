@@ -195,13 +195,13 @@ bool parse_profile(std::string_view json, Profile& profile, std::string& error) 
     int player_slot = -1;
     if (!parse_version(json, parsed.schema_version) || parsed.schema_version != kSchemaVersion ||
         !parse_string(json, "name", parsed.name) || !parse_string(json, "device_guid", parsed.device_guid) ||
-        !parse_integer_field(json, "player_slot", player_slot) || player_slot < -1 || player_slot > 7 ||
+        !parse_integer_field(json, "player_slot", player_slot) || player_slot < -1 || player_slot == 0 || player_slot > 7 ||
         !parse_array(json, "buttons", button_values, int_parser) ||
         !parse_array(json, "axes", axis_values, int_parser) ||
         !parse_array(json, "axis_inverted", parsed.axis_inverted, bool_parser) ||
         !parse_array(json, "dead_zones", parsed.dead_zones, float_parser) ||
         !parse_number_field(json, "trigger_threshold", parsed.trigger_threshold)) {
-        error = "Profile is malformed or uses an unsupported schema.";
+        error = "Profile is malformed or uses an unsupported schema. Player 1 is reserved for the keyboard; controller slots are 2-8.";
         return false;
     }
 
@@ -373,8 +373,8 @@ bool save_to_file(const std::string& guid, const Profile& profile, std::string* 
     validated.device_guid = guid;
     if (validated.schema_version != kSchemaVersion || validated.name.empty() || validated.name.size() > 64 ||
         validated.trigger_threshold < 0.05f || validated.trigger_threshold > 0.95f ||
-        validated.player_slot < -1 || validated.player_slot > 7) {
-        if (error) *error = "Profile metadata is invalid.";
+        validated.player_slot < -1 || validated.player_slot == 0 || validated.player_slot > 7) {
+        if (error) *error = "Profile metadata is invalid. Player 1 is reserved for the keyboard; controller slots are 2-8.";
         return false;
     }
     for (size_t i = 0; i < kButtonCount; ++i) {

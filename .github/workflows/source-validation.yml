@@ -115,12 +115,64 @@ jobs:
           cmake --build build/launcher-release --config Release --parallel 2
           if ($LASTEXITCODE -ne 0) { throw 'The redistributable launcher failed to compile or link.' }
 
+  windows-vulkan-runtime-build:
+    name: Compile complete Vulkan runtime without game data
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Bootstrap compiler and use runner build utilities
+        shell: pwsh
+        run: |
+          ./tools/windows/setup-build-environment.ps1 -UseSystemTools
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime toolchain bootstrap failed.' }
+
+      - name: Fetch and build pinned Vulkan/runtime dependencies
+        shell: pwsh
+        run: |
+          ./engine/tools/windows/build-deps.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned runtime dependency build failed.' }
+
+      - name: Build recompiler and runtime build utilities
+        shell: pwsh
+        run: |
+          ./engine/tools/windows/build-recomp.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Recompiler and function finder build failed.' }
+
+      - name: Configure generated-code compile fixtures
+        shell: pwsh
+        run: |
+          $compilerBin = (Resolve-Path 'toolchain/llvm-mingw/bin').Path
+          $env:PATH = "$compilerBin;$env:PATH"
+          $updateFixture = (Resolve-Path 'engine/tests/cmake_game_targets/fixtures/update').Path
+          $baseFixture = (Resolve-Path 'engine/tests/cmake_game_targets/fixtures/base').Path
+          cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-clang++ -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_EXE_LINKER_FLAGS=-static "-DSMASH_GENERATED_DIR=$updateFixture" "-DSMASH_BASE_GENERATED_DIR=$baseFixture"
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configuration with generated game compile fixtures failed.' }
+
+      - name: Compile Vulkan runtime, game host, CPU variants, launcher, and WUA tool
+        shell: pwsh
+        run: |
+          $compilerBin = (Resolve-Path 'toolchain/llvm-mingw/bin').Path
+          $env:PATH = "$compilerBin;$env:PATH"
+          ninja -j 2 -C engine/build cafe_runtime smash_host_compile_check_v3 smash_host_compile_check_v2 smash_update_generated_v3 smash_update_generated_v2 smash_base_generated_v3 smash_base_generated_v2 smash-launcher wua_extract
+          if ($LASTEXITCODE -ne 0) { throw 'The complete Vulkan runtime, host, CPU variants, launcher, or WUA extractor failed to compile/link.' }
+
   validate:
     name: Validate source tree and project scripts
     runs-on: windows-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Test pinned dependency archive validation
+        shell: pwsh
+        run: |
+          python -m py_compile engine/tools/setup_deps.py
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency bootstrap Python syntax check failed.' }
+          python -m unittest discover -s engine/tests -p 'test_setup_deps.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned dependency archive security tests failed.' }
 
       - name: Verify in-repository native source
         shell: pwsh

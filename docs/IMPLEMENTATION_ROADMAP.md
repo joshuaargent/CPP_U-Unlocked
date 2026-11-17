@@ -19,9 +19,11 @@
 - [x] Integrate WUA archive selection into the launcher Library workflow, with private staging, cleanup on failure, Smash title-folder validation, preservation of the original archive, and activation into the local game library.
 - [ ] Run end-to-end tests against real WUA dumps and verify interrupted-import recovery on Windows.
 - [x] Add a local developer build pipeline that recompiles user-supplied base/update RPX files into separate ignored output directories and builds update/base executables for x86-64-v3 and x86-64-v2 in one CMake configuration, sharing the native runtime and launcher; keep all game-derived code and data on the user's machine and out of CI/release assets.
-- [ ] Integrate that local pipeline into the launcher's first-run Build workflow; a developer script is still required.
-- [ ] Complete first-run build UX: toolchain/dependency checks, progress and logs, cancellation, interrupted-build recovery, and incremental rebuilds.
-- [ ] Verify the launcher starts the locally generated game runtime after a clean WUA import, without requiring a developer checkout or manually run build script.
+- [x] Integrate the local pipeline into the launcher's first-run Build Runtime action; Play starts the same build automatically when the selected runtime is missing.
+- [x] Embed a clean, game-data-free source build kit in the launcher package and bootstrap pinned llvm-mingw, CMake, Ninja, Python, and pinned third-party source archives without requiring Git or a developer checkout.
+- [x] Validate separate base/update folders and RPX title IDs before building; capture timestamped build logs; limit build parallelism based on physical RAM; verify all four CPU/title executables; stage and atomically activate the runtime in a separate directory without replacing the running launcher.
+- [ ] Add visible build progress, cancellation, and interrupted-build recovery. The current launcher reports the build state while the PowerShell build process displays detailed output.
+- [ ] Verify the launcher starts the locally generated game runtime after a clean separate-folder setup and after a clean WUA import on Windows with real user-owned game files.
 - [x] Add a game-update management page for selecting and removing the locally installed update dump.
 - [x] Add a Diagnostics page for platform, CPU core count, system memory, CPU optimisation path, SDL renderer, game/update validation, active mods, shader-cache count, log path, and clipboard export.
 - [x] Own and join the launcher's background workers for mod installation, Pretendo sign-in, room discovery, and application update checks; contain worker exceptions and clear the sign-in password buffer after use.
@@ -43,7 +45,7 @@
 - [x] Discover connected controllers and select a physical device to configure.
 - [x] Implement press-to-bind buttons and axes, including Escape cancellation and a 10-second timeout.
 - [x] Implement configurable stick dead zones and trigger thresholds.
-- [x] Implement explicit player-slot assignment (automatic, Wii U GamePad, and Pro Controller slots).
+- [x] Reserve player 1 (Wii U GamePad) for keyboard input; assign physical controllers only to Pro Controller slots for players 2-8, including validation that rejects saved profiles targeting player 1.
 - [x] Implement per-axis dead zones and stick-axis inversion.
 - [x] Add a live controller input monitor for all mapped buttons, sticks, and triggers.
 - [ ] Implement full stick/trigger calibration and saturation.
@@ -90,7 +92,7 @@
 - [x] Filter Vulkan adapters by the renderer's required Vulkan 1.3 features and a combined graphics/compute queue before preferring a discrete GPU, allowing fallback to a compatible integrated GPU.
 - [ ] Capture and compare repeatable GPU/CPU frame-time baselines on the Intel Iris Xe target and a discrete GPU.
 - [x] Bound startup Vulkan pipeline prewarming to at most four workers, seed worker-local caches from the persisted driver cache, merge them after compilation, and serialize shared runtime-cache access.
-- [ ] Compile the complete Vulkan runtime in CI with the pinned Vulkan headers, shaderc, SDL3, and runtime dependencies; current source-validation CI does not compile the Vulkan renderer.
+- [ ] Pass the new Windows CI job that compiles the complete Vulkan runtime with pinned Vulkan headers, shaderc, SDL3, and runtime dependencies; the job has been added but has not yet completed successfully.
 - [ ] Audit and implement the Smash Wii U GX2 paths exercised by the game, including unsupported geometry-shader/tessellation/stream-out draws, blend/ROP3 modes, and any unsupported target or texture formats found in real-game logs.
 - [ ] Verify boot, title screen, character select, full match, pause, results, and repeated scene transitions with Vulkan validation enabled; fix every reproducible rendering or synchronization error.
 - [ ] Validate the Vulkan backend against identical deterministic Smash Wii U scenes on the target integrated GPU and at least one discrete GPU. Alternative graphics backends are deferred until after the first complete playable release.
@@ -109,8 +111,8 @@
 
 ## Release engineering
 
-- [ ] Add Windows build validation for the complete native game-runtime targets.
+- [ ] Pass Windows CI for the complete Vulkan runtime build; a dedicated compile job has been added and is awaiting its first successful run.
 - [x] Add Windows CI that compiles and links the redistributable launcher target and compiles the bounded WUA extractor.
-- [x] Add a launcher-only Windows package with a file manifest and SHA-256 sidecar; game runtime binaries and user game data remain excluded.
+- [x] Add a Windows launcher package with a file manifest and SHA-256 sidecar; embed the game-data-free local build kit while excluding game runtime binaries, generated game code, and user game data.
 - [x] Add a tag-triggered versioned release workflow that verifies the launcher version, package root layout, and per-file manifest hashes before publishing the ZIP and checksum assets.
 - [ ] Test clean installation, upgrade, rollback, and user-data preservation on a clean Windows machine.

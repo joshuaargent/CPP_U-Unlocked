@@ -230,19 +230,24 @@ std::array<SDL_JoystickID, 1 + os::pro::kChannels> g_pad_slots{};
 constexpr SDL_JoystickID kGuestSlot = 0xFFFFFFFFu;
 
 void assign_pad_slots(const SDL_JoystickID* ids, int count) {
+    // The keyboard permanently owns the Wii U GamePad (player 1). Physical
+    // gamepads are Pro Controllers only and may occupy player slots 2-8.
+    // Never allow automatic assignment, saved profiles or netplay to claim slot 0.
+    g_pad_slots[0] = 0;
+
     for (size_t slot = 1; slot < g_pad_slots.size(); ++slot) {
         os::ProPadState unused;
         const bool guest = netplay::remote_pad(static_cast<int>(slot - 1), unused);
-        if (guest) g_pad_slots[slot] = kGuestSlot; // (a host pad there moves below)
+        if (guest) g_pad_slots[slot] = kGuestSlot;
         else if (g_pad_slots[slot] == kGuestSlot) g_pad_slots[slot] = 0;
     }
-    for (SDL_JoystickID& slot : g_pad_slots) {
-        if (slot != 0 && slot != kGuestSlot && std::find(ids, ids + count, slot) == ids + count) slot = 0;
+    for (auto it = g_pad_slots.begin() + 1; it != g_pad_slots.end(); ++it) {
+        if (*it != 0 && *it != kGuestSlot && std::find(ids, ids + count, *it) == ids + count) *it = 0;
     }
 
-    // Explicit player-slot preferences take precedence over automatic assignment. A slot occupied
-    // by a remote player is never overwritten by a local controller.
-    for (size_t slot_index = 0; slot_index < g_pad_slots.size(); ++slot_index) {
+    // Explicit player-slot preferences take precedence. Player 1 is reserved
+    // for the keyboard, so only profile slots 1-7 are valid here.
+    for (size_t slot_index = 1; slot_index < g_pad_slots.size(); ++slot_index) {
         SDL_JoystickID& slot = g_pad_slots[slot_index];
         if (slot == 0 || slot == kGuestSlot) continue;
         SDL_Gamepad* pad = SDL_GetGamepadFromID(slot);
@@ -257,40 +262,19 @@ void assign_pad_slots(const SDL_JoystickID* ids, int count) {
         if (pad == nullptr) pad = SDL_OpenGamepad(ids[i]);
         if (pad == nullptr) continue;
         const int preferred = controller_profiles::for_device(pad).player_slot;
-        if (preferred < 0 || preferred >= static_cast<int>(g_pad_slots.size())) continue;
+        if (preferred < 1 || preferred >= static_cast<int>(g_pad_slots.size())) continue;
         if (g_pad_slots[static_cast<size_t>(preferred)] == 0) {
             g_pad_slots[static_cast<size_t>(preferred)] = ids[i];
         }
     }
 
     for (int i = 0; i < count; ++i) {
-        if (std::find(g_pad_slots.begin(), g_pad_slots.end(), ids[i]) != g_pad_slots.end()) continue;
+        if (std::find(g_pad_slots.begin() + 1, g_pad_slots.end(), ids[i]) != g_pad_slots.end()) continue;
         SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
         if (pad == nullptr) pad = SDL_OpenGamepad(ids[i]);
         if (pad == nullptr || controller_profiles::for_device(pad).player_slot >= 0) continue;
-        const auto free = std::find(g_pad_slots.begin(), g_pad_slots.end(), SDL_JoystickID{0});
+        const auto free = std::find(g_pad_slots.begin() + 1, g_pad_slots.end(), SDL_JoystickID{0});
         if (free != g_pad_slots.end()) *free = ids[i];
-    }
-
-    // Automatic assignments may promote the first active pad to the GamePad slot. Explicit player
-    // assignments are stable and are never silently moved to another player.
-    SDL_Gamepad* assigned_gamepad = g_pad_slots[0] && g_pad_slots[0] != kGuestSlot
-        ? SDL_GetGamepadFromID(g_pad_slots[0]) : nullptr;
-    if (assigned_gamepad && controller_profiles::for_device(assigned_gamepad).player_slot == 0) return;
-    static SDL_JoystickID used = 0;
-    if (g_pad_slots[0] != 0 && g_pad_slots[0] == used) return;
-    for (size_t slot = 0; slot < g_pad_slots.size(); ++slot) {
-        SDL_Gamepad* pad = g_pad_slots[slot] && g_pad_slots[slot] != kGuestSlot
-            ? SDL_GetGamepadFromID(g_pad_slots[slot]) : nullptr;
-        if (pad == nullptr || controller_profiles::for_device(pad).player_slot >= 0) continue;
-        bool pressed = false;
-        for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT && !pressed; ++b) {
-            pressed = SDL_GetGamepadButton(pad, static_cast<SDL_GamepadButton>(b));
-        }
-        if (!pressed) continue;
-        used = g_pad_slots[slot];
-        if (slot != 0) std::swap(g_pad_slots[0], g_pad_slots[slot]);
-        break;
     }
 }
 
