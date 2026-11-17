@@ -109,7 +109,8 @@ void test_inputs() {
     for (size_t i = 0; i < std::size(names) && i < keymap::kInputCount; ++i) {
         check(sdl_name(names[i]) == defaults[i], std::string("SDL's name of the default key ") + names[i]);
     }
-    check(keymap::reserved(68) && keymap::reserved(41) && keymap::reserved(227) && keymap::reserved(231) &&
+    check(keymap::reserved(67) && keymap::reserved(68) && keymap::reserved(41) &&
+              keymap::reserved(69) && keymap::reserved(227) && keymap::reserved(231) &&
               !keymap::reserved(4),
           "reserved keys");
 }
@@ -202,19 +203,17 @@ void test_bad() {
 }
 
 void test_reserved() {
-    const keymap::Parsed parsed = keymap::parse("dpad_up = 68\n"
-                                                "dpad_down = Escape\n"
-                                                "dpad_left = Left GUI\n"
-                                                "dpad_right = 231\n"
-                                                "plus = F11\n"
+    const keymap::Parsed parsed = keymap::parse("dpad_up = F10\n"
+                                                "dpad_down = 68\n"
+                                                "dpad_left = Escape\n"
+                                                "dpad_right = Left GUI\n"
+                                                "plus = 231\n"
                                                 "minus = F12\n",
                                                 sdl_name);
-    for (size_t line = 1; line <= 5; ++line) {
+    for (size_t line = 1; line <= 6; ++line) {
         check(has_warning(parsed, line, "is a reserved key"), "reserved key refused on line " + std::to_string(line));
     }
-    keymap::Keys expected = keymap::default_keys();
-    expected[index_of("minus")] = 69;
-    check(parsed.keys == expected && parsed.assigned == 1, "reserved keys keep the defaults");
+    check(parsed.keys == keymap::default_keys() && parsed.assigned == 0, "reserved keys keep the defaults");
 }
 
 void test_duplicates() {
