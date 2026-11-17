@@ -29,7 +29,7 @@ function Resolve-CommandPath {
 }
 
 $cmakeExe = Resolve-CommandPath 'cmake.exe'
-$ninjaExe = Join-Path $toolchainRoot 'ninja\\ninja.exe'
+$ninjaExe = Join-Path $toolchainRoot 'ninja\ninja.exe'
 if (-not (Test-Path -LiteralPath $ninjaExe -PathType Leaf)) {
     throw "The pinned standalone Ninja executable is missing: $ninjaExe"
 }
