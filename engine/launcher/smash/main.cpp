@@ -68,7 +68,7 @@ using namespace cafe::host::paint;
 
 namespace {
 
-constexpr const char* kVersion = "0.1.0-dev";
+constexpr const char* kVersion = "0.2.0-dev";
 constexpr const char* kUpdateId = "0005000E10144F00"; // v304
 constexpr const char* kGameId = "0005000010144F00";   // USA
 
