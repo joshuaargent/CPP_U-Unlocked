@@ -101,7 +101,7 @@ git clone https://github.com/joshuaargent/CPP_U-Unlocked.git
 cd CPP_U-Unlocked
 ```
 
-The first build bootstraps the pinned Windows toolchain into the local `toolchain\` directory. The setup uses the official llvm-mingw release archive with a checked SHA-256 digest, plus version-pinned CMake, Ninja, and Python packages. Official launcher releases include a separate dependency bundle containing all 11 locked third-party source revisions. The build kit verifies the bundle's per-file SHA-256 manifest and pinned revision markers, then installs those sources locally before building. This avoids dependency downloads on the normal release path. If the bundle is absent (for example, when building from a Git checkout), the build kit fetches immutable GitHub commit archives with bounded retries. Git is not required for the local build kit.
+The first build bootstraps the pinned Windows toolchain into the local `toolchain\` directory. The setup uses the official llvm-mingw release archive with a checked SHA-256 digest, plus version-pinned CMake, Ninja, and Python packages. Official launcher releases include a separate dependency bundle containing all 11 locked third-party source revisions. The build kit verifies the bundle's per-file SHA-256 manifest and pinned revision markers, then installs those sources locally before building. This avoids dependency-source downloads on the normal release path. The first build still needs an internet connection to install or download the pinned compiler toolchain. If the bundle is absent (for example, when building from a Git checkout), the build kit fetches immutable GitHub commit archives with bounded retries. Git is not required for the local build kit.
 
 ### Game files
 
