@@ -1378,7 +1378,7 @@ private:
             else if (selected_ >= 4 && selected_ <= 6) {
                 const Slot slot = static_cast<Slot>(selected_ - 4);
                 if (paths_[slot].empty()) wua_status_ = "Choose this folder first.";
-                else SDL_OpenURL((std::string("file:///") + paths_[slot].generic_string()).c_str());
+                else SDL_OpenURL((std::string("file:///") + path_utf8(paths_[slot])).c_str());
             } else back();
             break;
         case Screen::kUpdates:
@@ -1494,7 +1494,7 @@ private:
             } else if (selected_ == n + 1) {
                 std::error_code ec;
                 fs::create_directories(dir_ / "mods", ec);
-                SDL_OpenURL(("file:///" + (dir_ / "mods").generic_string()).c_str());
+                SDL_OpenURL(("file:///" + path_utf8(dir_ / "mods")).c_str());
             } else {
                 back();
             }
@@ -1691,7 +1691,8 @@ private:
         for (const std::string& w : words) args.push_back(w.c_str());
         args.push_back(nullptr);
         // The game's messages, for when it closes with an error.
-        SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SMASH_LOG", (dir_ / "smash.log").string().c_str(), true);
+        const std::string log_path = path_utf8(dir_ / "smash.log");
+        SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SMASH_LOG", log_path.c_str(), true);
         process_ = SDL_CreateProcess(args.data(), false);
         if (process_) {
             exit_code_ = 0;
@@ -2014,7 +2015,7 @@ private:
         SDL_SetWindowTitle(window_, titles[slot]);
         fs::path start = paths_[slot];
         for (int s = 0; s < kSlots && start.empty(); ++s) start = paths_[s].parent_path();
-        const std::string s = start.string();
+        const std::string s = path_utf8(start);
         SDL_ShowOpenFolderDialog(callback, this, window_, s.empty() ? nullptr : s.c_str(), false);
     }
 
@@ -2034,7 +2035,7 @@ private:
         std::ofstream out(dir_ / "launcher.ini", std::ios::binary);
         out << "# U Unlocked's launcher: the game (0005000010144F00), its update (0005000E10144F00) and DLC\n"
                "# (0005000C10144F00) folders, as chosen in the menu. Only the game is needed.\n";
-        for (int s = 0; s < kSlots; ++s) out << kSlotKeys[s] << " = " << paths_[s].string() << "\n";
+        for (int s = 0; s < kSlots; ++s) out << kSlotKeys[s] << " = " << path_utf8(paths_[s]) << "\n";
         out << "netplay_host = " << (netplay_host_ ? "yes" : "no") << "\nnetplay_name = " << netplay_name_
             << "\nnetplay_address = " << netplay_address_ << "\nupdate_channel = " << update_channel_ << "\n";
     }
