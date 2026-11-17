@@ -335,6 +335,7 @@ jobs:
         run: |
           $required = @(
             'LICENSES/RECOMPILATION-MIT-LICENSE.txt',
+            'LICENSES/NINJA-APACHE-2.0.txt',
             'engine/third_party/cemu_nex/LICENSE.txt',
             'engine/third_party/tinyxml2/LICENSE.txt'
           )
