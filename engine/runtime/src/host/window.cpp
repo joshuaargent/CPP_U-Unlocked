@@ -77,8 +77,8 @@ static_assert([] {
     }
     return std::size(kDefaultKeys) == keymap::kInputCount;
 }());
-static_assert(keymap::kReserved ==
-              std::array<uint16_t, 4>{SDL_SCANCODE_F11, SDL_SCANCODE_ESCAPE, SDL_SCANCODE_LGUI, SDL_SCANCODE_RGUI});
+static_assert(keymap::kReserved == std::array<uint16_t, 6>{
+    SDL_SCANCODE_F10, SDL_SCANCODE_F11, SDL_SCANCODE_ESCAPE, SDL_SCANCODE_F12, SDL_SCANCODE_LGUI, SDL_SCANCODE_RGUI});
 
 void reload_keymap() {
     if (!g_keymap_file) return;
