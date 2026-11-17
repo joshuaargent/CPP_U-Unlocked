@@ -223,8 +223,9 @@ jobs:
           ./engine/tools/windows/package-release.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Complete player release packaging failed.' }
 
-          $version = [regex]::Match((Get-Content -LiteralPath 'engine/launcher/smash/main.cpp' -Raw), 'kVersion\s*=\s*"([^"]+)"').Groups[1].Value
-          if ([string]::IsNullOrWhiteSpace($version)) { throw 'Unable to resolve the launcher version for package validation.' }
+          $versionMatch = [regex]::Match((Get-Content -LiteralPath 'engine/launcher/smash/main.cpp' -Raw), 'kVersion\s*=\s*"([^"]+)"')
+          if (-not $versionMatch.Success) { throw 'Unable to resolve the launcher version for package validation.' }
+          $version = $versionMatch.Groups[1].Value
           $zip = Join-Path $PWD "dist/U-Unlocked-v$version-Windows-Launcher.zip"
           $checksum = "$zip.sha256"
           if (-not (Test-Path -LiteralPath $zip -PathType Leaf) -or -not (Test-Path -LiteralPath $checksum -PathType Leaf)) {
@@ -237,10 +238,10 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [IO.Compression.ZipFile]::OpenRead($zip)
+          $buildKitPath = Join-Path $env:RUNNER_TEMP 'verified-build-kit.zip'
           try {
             $required = @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png',
-              'update-launcher.ps1', 'build-kit.zip', 'dependency-bundle.zip',
-              'prebuilt-dependencies.zip', 'cafe-recomp.exe', 'RUNTIME-BUILD-REQUIRED.txt')
+              'update-launcher.ps1', 'build-kit.zip', 'RUNTIME-BUILD-REQUIRED.txt')
             $names = @($archive.Entries | ForEach-Object { $_.FullName })
             foreach ($name in $required) {
               if ($names -cnotcontains $name) { throw "Release package is missing $name." }
@@ -255,7 +256,55 @@ jobs:
             foreach ($file in $manifest.files) {
               $name = [string]$file.name
               $entry = $archive.GetEntry($name)
-              if (-not $entry -or $name.Contains('/') -or $file.sha256 -notmatch '^[0-9a-fA-F]{64}
+              if (-not $entry -or $name.Contains('/') -or $file.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+                throw "Release manifest contains an invalid or missing asset: $name"
+              }
+              $stream = $entry.Open()
+              $sha = [Security.Cryptography.SHA256]::Create()
+              try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+              finally { $sha.Dispose(); $stream.Dispose() }
+              if ($hash -ne ([string]$file.sha256).ToLowerInvariant()) {
+                throw "Release manifest SHA-256 mismatch: $name"
+              }
+            }
+
+            $buildKitEntry = $archive.GetEntry('build-kit.zip')
+            $input = $buildKitEntry.Open()
+            $output = [IO.File]::Open($buildKitPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            try { $input.CopyTo($output); $output.Flush($true) } finally { $output.Dispose(); $input.Dispose() }
+          } finally { $archive.Dispose() }
+
+          $buildKitArchive = [IO.Compression.ZipFile]::OpenRead($buildKitPath)
+          try {
+            $buildKitNames = @($buildKitArchive.Entries | ForEach-Object { $_.FullName })
+            foreach ($name in @('build-kit-manifest.json', 'prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip',
+              'tools/windows/build-from-library.ps1', 'tools/windows/install-prebuilt-dependencies.ps1')) {
+              if ($buildKitNames -cnotcontains $name) { throw "Embedded build kit is missing $name." }
+            }
+            $innerManifestEntry = $buildKitArchive.GetEntry('build-kit-manifest.json')
+            $innerReader = [IO.StreamReader]::new($innerManifestEntry.Open())
+            try { $innerManifest = $innerReader.ReadToEnd() | ConvertFrom-Json } finally { $innerReader.Dispose() }
+            if ($innerManifest.schema_version -ne 1 -or $innerManifest.version -ne $version) {
+              throw 'Embedded build-kit manifest schema or version is invalid.'
+            }
+            foreach ($asset in $innerManifest.files) {
+              $name = [string]$asset.name
+              $entry = $buildKitArchive.GetEntry($name)
+              if (-not $entry -or $asset.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
+                throw "Embedded build-kit manifest contains an invalid asset: $name"
+              }
+              $stream = $entry.Open()
+              $sha = [Security.Cryptography.SHA256]::Create()
+              try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+              finally { $sha.Dispose(); $stream.Dispose() }
+              if ($hash -ne ([string]$asset.sha256).ToLowerInvariant()) {
+                throw "Embedded build-kit asset SHA-256 mismatch: $name"
+              }
+            }
+          } finally { $buildKitArchive.Dispose() }
+          Remove-Item -LiteralPath $buildKitPath -Force
+
+          Write-Host "Complete player release package verified: $zip" -ForegroundColor Green
   validate:
     name: Validate source tree and project scripts
     runs-on: windows-latest
