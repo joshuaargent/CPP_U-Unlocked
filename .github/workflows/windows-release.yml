@@ -148,7 +148,7 @@ jobs:
               if ($entries.ContainsKey($name)) { throw "Duplicate path in release ZIP: $name" }
               $entries.Add($name, $entry)
             }
-            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png', 'update-launcher.ps1')) {
+            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png', 'update-launcher.ps1', 'dependency-bundle.zip')) {
               if (-not $entries.ContainsKey($required)) { throw "Release ZIP is missing root entry: $required" }
             }
 
