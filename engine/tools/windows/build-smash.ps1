@@ -22,10 +22,10 @@ $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot
 . (Join-Path $root 'tools\windows\toolchain-path.ps1')
 $toolchain = Get-UUnlockedToolchainRoot
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$build = Join-Path $engineRoot 'build'
+$build = if (-not [string]::IsNullOrWhiteSpace($env:U_UNLOCKED_ENGINE_BUILD_DIR)) { [IO.Path]::GetFullPath($env:U_UNLOCKED_ENGINE_BUILD_DIR) } else { Join-Path $engineRoot 'build' }
 $prefix = Join-Path $engineRoot 'build-deps\prefix'
 $play = Join-Path $root 'Play'
-$cacheBase = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'U Unlocked\BuildCache' } else { Join-Path $env:TEMP 'U Unlocked\BuildCache' }
+$cacheBase = if (-not [string]::IsNullOrWhiteSpace($env:U_UNLOCKED_BUILD_CACHE_ROOT)) { [IO.Path]::GetFullPath($env:U_UNLOCKED_BUILD_CACHE_ROOT) } elseif ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'U Unlocked\BuildCache' } else { Join-Path $env:TEMP 'U Unlocked\BuildCache' }
 $updateGenerated = Join-Path $cacheBase 'generated\smash'
 $baseGenerated = Join-Path $cacheBase 'generated\smash-base'
 $buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^[0-9]+$') { [int]$env:U_UNLOCKED_BUILD_JOBS } else { 2 }
