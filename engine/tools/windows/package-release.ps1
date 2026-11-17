@@ -85,6 +85,51 @@ if (-not $python) { throw 'Python is required to package the verified dependency
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $dependencyBundle -PathType Leaf)) {
     throw 'Creating the verified dependency bundle failed.'
 }
+
+# Install every dependency from the archive into a clean source tree with all
+# network traffic deliberately blocked. Missing bundle content must fail here.
+$dependencyVerificationRoot = Join-Path $dist ('.dependency-bundle-verification-' + [guid]::NewGuid().ToString('N'))
+$dependencyVerificationEngine = Join-Path $dependencyVerificationRoot 'engine'
+New-Item -ItemType Directory -Force -Path (Join-Path $dependencyVerificationEngine 'tools') | Out-Null
+Copy-Item -LiteralPath (Join-Path $engineRoot 'tools\setup_deps.py') -Destination (Join-Path $dependencyVerificationEngine 'tools\setup_deps.py')
+Copy-Item -LiteralPath (Join-Path $engineRoot 'dependencies.lock.json') -Destination (Join-Path $dependencyVerificationEngine 'dependencies.lock.json')
+$previousHttpProxy = $env:HTTP_PROXY
+$previousHttpsProxy = $env:HTTPS_PROXY
+$previousHttpProxyLower = $env:http_proxy
+$previousHttpsProxyLower = $env:https_proxy
+try {
+    $env:HTTP_PROXY = 'http://127.0.0.1:9'
+    $env:HTTPS_PROXY = 'http://127.0.0.1:9'
+    $env:http_proxy = 'http://127.0.0.1:9'
+    $env:https_proxy = 'http://127.0.0.1:9'
+    & $python.Source (Join-Path $dependencyVerificationEngine 'tools\setup_deps.py') --bundle-archive $dependencyBundle
+    if ($LASTEXITCODE -ne 0) { throw 'The dependency source bundle failed its clean, network-blocked installation test.' }
+    $dependencyLockData = Get-Content -LiteralPath (Join-Path $dependencyVerificationEngine 'dependencies.lock.json') -Raw | ConvertFrom-Json
+    foreach ($dependency in $dependencyLockData.PSObject.Properties) {
+        $installedDependency = Join-Path $dependencyVerificationEngine (Join-Path 'third_party' $dependency.Name)
+        $markerPath = Join-Path $installedDependency '.u-unlocked-revision'
+        if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf) -or
+            (Get-Content -LiteralPath $markerPath -Raw).Trim() -ne [string]$dependency.Value.revision) {
+            throw "The dependency bundle did not install the locked $($dependency.Name) revision."
+        }
+    }
+} finally {
+    foreach ($proxy in @(
+        @{ Name = 'HTTP_PROXY'; Value = $previousHttpProxy },
+        @{ Name = 'HTTPS_PROXY'; Value = $previousHttpsProxy },
+        @{ Name = 'http_proxy'; Value = $previousHttpProxyLower },
+        @{ Name = 'https_proxy'; Value = $previousHttpsProxyLower }
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string]$proxy.Value)) {
+            Remove-Item "Env:\$($proxy.Name)" -ErrorAction SilentlyContinue
+        } else {
+            Set-Item "Env:\$($proxy.Name)" -Value $proxy.Value
+        }
+    }
+    if (Test-Path -LiteralPath $dependencyVerificationRoot) {
+        Remove-Item -LiteralPath $dependencyVerificationRoot -Recurse -Force
+    }
+}
 Copy-Item -LiteralPath $dependencyBundle -Destination (Join-Path $buildKit 'dependency-bundle.zip')
 Remove-Item -LiteralPath $dependencyBundle -Force
 
