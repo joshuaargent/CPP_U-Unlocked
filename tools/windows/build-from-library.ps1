@@ -194,7 +194,7 @@ try {
         $packageRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
         $buildKitRoot = Join-Path $packageRoot 'build-kit'
         if (Test-Path -LiteralPath (Join-Path $buildKitRoot 'build-kit-manifest.json') -PathType Leaf) {
-            foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip')) {
+            foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip', 'toolchain-bundle.zip')) {
                 Assert-BuildKitFile -BuildKitDirectory $buildKitRoot -FileName $asset
             }
             $releaseAssetRoot = $buildKitRoot
@@ -209,10 +209,13 @@ try {
     Write-Host 'Game files remain in their selected locations. Generated code and executables stay on this PC.'
 
     if ($releaseAssetRoot) {
+        $toolchainBundlePath = Join-Path $releaseAssetRoot 'toolchain-bundle.zip'
+        $env:U_UNLOCKED_TOOLCHAIN_BUNDLE = $toolchainBundlePath
         $bundlePath = Join-Path $releaseAssetRoot 'dependency-bundle.zip'
         $env:U_UNLOCKED_DEPENDENCY_BUNDLE = $bundlePath
         Write-Host "Using the bundled pinned dependency sources: $bundlePath" -ForegroundColor Green
     } else {
+        Remove-Item Env:\U_UNLOCKED_TOOLCHAIN_BUNDLE -ErrorAction SilentlyContinue
         Remove-Item Env:\U_UNLOCKED_DEPENDENCY_BUNDLE -ErrorAction SilentlyContinue
     }
 
