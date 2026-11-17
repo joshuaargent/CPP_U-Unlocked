@@ -43,7 +43,7 @@ function(add_smash_executable target_name output_name generated_target compatibi
             target_compile_definitions(${target_name} PRIVATE SMASH_COMPAT)
         endif()
     endif()
-    set_target_properties(${target_name} PROPERTIES OUTPUT_NAME "${output_name}")
+    set_target_properties(${target_name} PROPERTIES OUTPUT_NAME "${output_name}" LINKER_LANGUAGE CXX)
 endfunction()
 
 function(add_smash_game_pair prefix generated_dir output_v3 output_v2)
