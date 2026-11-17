@@ -174,10 +174,25 @@ try {
     $installer = Join-Path $buildKitDirectory 'tools\windows\install-prebuilt-dependencies.ps1'
     $prebuiltArchive = Join-Path $buildKitDirectory 'prebuilt-dependencies.zip'
     & $installer -ArchivePath $prebuiltArchive -EngineRoot (Join-Path $testEngine 'engine')
-    foreach ($required in @('lib\libvulkan-1.a', 'include\vulkan\vulkan.h', 'bin\SDL3.dll')) {
-        if (-not (Test-Path -LiteralPath (Join-Path $testEngine "engine\build-deps\prefix\$required") -PathType Leaf)) {
+    $installedPrefix = Join-Path $testEngine 'engine\build-deps\prefix'
+    foreach ($required in @(
+        'lib\libvulkan-1.a', 'include\vulkan\vulkan.h',
+        'include\SDL3\SDL.h', 'bin\SDL3.dll',
+        'include\shaderc\shaderc.h', 'bin\libshaderc_shared.dll',
+        'bin\libSPIRV-Tools-shared.dll', 'include\zlib.h', 'include\zstd.h'
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $installedPrefix $required) -PathType Leaf)) {
             throw "The packaged prebuilt dependency archive did not install $required."
         }
+    }
+    foreach ($pattern in @('*shaderc_shared*', '*SDL3*', '*zstd*')) {
+        if (-not (Get-ChildItem -LiteralPath (Join-Path $installedPrefix 'lib') -File | Where-Object { $_.Name -like $pattern })) {
+            throw "The packaged prebuilt dependency archive is missing link library $pattern."
+        }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $installedPrefix 'lib\libz.a') -PathType Leaf) -and
+        -not (Test-Path -LiteralPath (Join-Path $installedPrefix 'lib\libz.dll.a') -PathType Leaf)) {
+        throw 'The packaged prebuilt dependency archive is missing the zlib link library.'
     }
 
     Write-Host "Complete release package, embedded build kit, and player dependency installation verified: $packagePath" -ForegroundColor Green
