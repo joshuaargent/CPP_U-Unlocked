@@ -164,7 +164,7 @@ try {
     foreach($file in $files) {
         $name=[string]$file.name
         $hash=[string]$file.sha256
-        $allowed = $name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|title-logo[.]png|build-kit[.]zip|dependency-bundle[.]zip|[A-Za-z0-9_.+-]+[.]dll)$'
+        $allowed = $name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|title-logo[.]png|build-kit[.]zip|dependency-bundle[.]zip|prebuilt-dependencies[.]zip|cafe-recomp[.]exe|[A-Za-z0-9_.+-]+[.]dll)$'
         if(-not $allowed -or $name.Contains('..') -or -not $seen.Add($name) -or $hash -notmatch '^[0-9a-fA-F]{64}$') {
             throw "Invalid file in update manifest: $name"
         }
@@ -201,7 +201,7 @@ try {
         } finally { $buildKitArchive.Dispose() }
         $buildKitStage=Join-Path $newFiles 'build-kit'
         Expand-Archive -LiteralPath $buildKitArchivePath -DestinationPath $buildKitStage -Force
-        foreach($required in @('tools/windows/build-from-library.ps1','tools/windows/setup-build-environment.ps1','engine/tools/setup_deps.py','engine/dependencies.lock.json')) {
+        foreach($required in @('tools/windows/build-from-library.ps1','tools/windows/setup-build-environment.ps1','engine/tools/setup_deps.py','engine/dependencies.lock.json','tools/windows/install-prebuilt-dependencies.ps1')) {
             if(-not(Test-Path -LiteralPath (Join-Path $buildKitStage $required) -PathType Leaf)) {
                 throw "Updated build kit is incomplete: $required"
             }
