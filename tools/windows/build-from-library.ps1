@@ -276,10 +276,12 @@ try {
 
     $toolchainManifestPath = Join-Path $toolchainRoot 'toolchain-manifest.json'
     $compilerPath = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
-    $toolchainFingerprint = if (Test-Path -LiteralPath $toolchainManifestPath -PathType Leaf) {
-        (Get-FileHash -LiteralPath $toolchainManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($releaseAssetRoot -and (Test-Path -LiteralPath (Join-Path $releaseAssetRoot 'toolchain-bundle.zip') -PathType Leaf)) {
+        $toolchainFingerprint = (Get-FileHash -LiteralPath (Join-Path $releaseAssetRoot 'toolchain-bundle.zip') -Algorithm SHA256).Hash.ToLowerInvariant()
+    } elseif (Test-Path -LiteralPath $toolchainManifestPath -PathType Leaf) {
+        $toolchainFingerprint = (Get-FileHash -LiteralPath $toolchainManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
     } elseif (Test-Path -LiteralPath $compilerPath -PathType Leaf) {
-        (Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $toolchainFingerprint = (Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant()
     } else {
         throw 'Cannot fingerprint the pinned Windows compiler for the persistent build cache.'
     }
