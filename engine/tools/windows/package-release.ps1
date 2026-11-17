@@ -170,9 +170,9 @@ try {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
             throw "The clean-root toolchain bootstrap did not install: $required"
         }
+    }
     & (Join-Path $repoRoot 'tools\windows\setup-build-environment.ps1')
     if ($LASTEXITCODE -ne 0) { throw 'The already-installed toolchain failed its repeated-bootstrap fast path.' }
-    }
 } finally {
     if ([string]::IsNullOrWhiteSpace($previousToolchainRoot)) {
         Remove-Item Env:\U_UNLOCKED_TOOLCHAIN_ROOT -ErrorAction SilentlyContinue
