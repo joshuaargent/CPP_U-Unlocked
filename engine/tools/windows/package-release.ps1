@@ -57,6 +57,20 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $buildKitArchive -PathT
 Expand-Archive -LiteralPath $buildKitArchive -DestinationPath $buildKit -Force
 Copy-Item -LiteralPath $buildKitArchive -Destination (Join-Path $stage 'build-kit.zip')
 Remove-Item -LiteralPath $buildKitArchive -Force
+
+# The release workflow has already fetched every locked source revision. Package
+# those exact, marker-verified trees so first-run builds do not depend on GitHub
+# archive downloads or the user's network connection.
+$dependencyBundle = Join-Path $dist "$name-dependency-bundle.zip"
+Remove-Item -LiteralPath $dependencyBundle -Force -ErrorAction SilentlyContinue
+$python = Get-Command python.exe -ErrorAction SilentlyContinue
+if (-not $python) { throw 'Python is required to package the verified dependency bundle.' }
+& $python.Source (Join-Path $engineRoot 'tools\setup_deps.py') --bundle-output $dependencyBundle
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $dependencyBundle -PathType Leaf)) {
+    throw 'Creating the verified dependency bundle failed.'
+}
+Copy-Item -LiteralPath $dependencyBundle -Destination (Join-Path $stage 'dependency-bundle.zip')
+Remove-Item -LiteralPath $dependencyBundle -Force
 foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
@@ -79,7 +93,7 @@ foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $sta
 # infers install targets from arbitrary archive paths.
 $packageFiles = @(
     Get-ChildItem -LiteralPath $stage -File |
-        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Name -eq 'build-kit.zip' -or $_.Extension -eq '.dll' } |
+        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Name -eq 'build-kit.zip' -or $_.Name -eq 'dependency-bundle.zip' -or $_.Extension -eq '.dll' } |
         Sort-Object Name
 )
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'U Unlocked.exe' })) {
