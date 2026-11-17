@@ -19,31 +19,31 @@ function(add_smash_executable target_name output_name generated_target compatibi
         endif()
         # The common host translation units are shipped as verified objects.
         # Only the per-title generated code and final executable link remain local.
-        add_executable(\${target_name})
-        target_sources(\${target_name} PRIVATE "\${SMASH_ENGINE_ROOT}/runtime/res/smash.rc")
-        target_include_directories(\${target_name} PRIVATE "\${SMASH_ENGINE_ROOT}/runtime/res")
-        target_link_libraries(\${target_name} PRIVATE cafe_runtime \${generated_target} \${host_target}
+        add_executable(${target_name})
+        target_sources(${target_name} PRIVATE "${SMASH_ENGINE_ROOT}/runtime/res/smash.rc")
+        target_include_directories(${target_name} PRIVATE "${SMASH_ENGINE_ROOT}/runtime/res")
+        target_link_libraries(${target_name} PRIVATE cafe_runtime ${generated_target} ${host_target}
             $<$<PLATFORM_ID:Windows>:winmm>)
     else()
-        add_executable(\${target_name}
-            "\${SMASH_ENGINE_ROOT}/runtime/src/smash_main.cpp"
-            "\${SMASH_ENGINE_ROOT}/runtime/src/smash_logo.cpp"
-            "\${SMASH_ENGINE_ROOT}/runtime/src/smash_overlay.cpp")
-        target_include_directories(\${target_name} SYSTEM PRIVATE "\${SMASH_ENGINE_ROOT}/third_party/stb")
+        add_executable(${target_name}
+            "${SMASH_ENGINE_ROOT}/runtime/src/smash_main.cpp"
+            "${SMASH_ENGINE_ROOT}/runtime/src/smash_logo.cpp"
+            "${SMASH_ENGINE_ROOT}/runtime/src/smash_overlay.cpp")
+        target_include_directories(${target_name} SYSTEM PRIVATE "${SMASH_ENGINE_ROOT}/third_party/stb")
         if(WIN32)
-            target_sources(\${target_name} PRIVATE "\${SMASH_ENGINE_ROOT}/runtime/res/smash.rc")
+            target_sources(${target_name} PRIVATE "${SMASH_ENGINE_ROOT}/runtime/res/smash.rc")
             # windres/llvm-rc resolves ICON paths against its include search path,
             # not the directory containing smash.rc.
-            target_include_directories(\${target_name} PRIVATE "\${SMASH_ENGINE_ROOT}/runtime/res")
+            target_include_directories(${target_name} PRIVATE "${SMASH_ENGINE_ROOT}/runtime/res")
         endif()
-        target_link_libraries(\${target_name} PRIVATE cafe_runtime \${generated_target}
+        target_link_libraries(${target_name} PRIVATE cafe_runtime ${generated_target}
             $<$<PLATFORM_ID:Windows>:winmm>)
-        target_compile_options(\${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
         if(compatibility)
-            target_compile_definitions(\${target_name} PRIVATE SMASH_COMPAT)
+            target_compile_definitions(${target_name} PRIVATE SMASH_COMPAT)
         endif()
     endif()
-    set_target_properties(\${target_name} PROPERTIES OUTPUT_NAME "\${output_name}")
+    set_target_properties(${target_name} PROPERTIES OUTPUT_NAME "${output_name}")
 endfunction()
 
 function(add_smash_game_pair prefix generated_dir output_v3 output_v2)
