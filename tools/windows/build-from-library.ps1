@@ -581,7 +581,8 @@ try {
         Write-Host "Local game runtime activated: $runtimeTarget" -ForegroundColor Green
     }
 
-    Write-Host "Build verified. Launcher: $(Join-Path $playDirectory 'U Unlocked.exe')" -ForegroundColor Green
+    $launcherOutput = Join-Path $playDirectory 'U Unlocked.exe'
+    Write-Host "Build verified. Launcher: $launcherOutput" -ForegroundColor Green
     Write-Host "Build log: $logPath"
 } catch {
     Write-Host "BUILD FAILED: $($_.Exception.Message)" -ForegroundColor Red
