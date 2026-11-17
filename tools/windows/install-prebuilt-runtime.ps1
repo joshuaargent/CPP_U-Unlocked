@@ -29,7 +29,7 @@ try {
     $archive = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
     $entries = [Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)
     [int64]$totalBytes = 0
-    if ($archive.Entries.Count -lt 2 -or $archive.Entries.Count -gt 215) {
+    if ($archive.Entries.Count -lt 2 -or $archive.Entries.Count -gt 220) {
         throw "The prebuilt runtime archive has an invalid entry count: $($archive.Entries.Count)"
     }
     foreach ($entry in $archive.Entries) {
@@ -41,7 +41,7 @@ try {
             throw "Unsafe path in prebuilt runtime archive: $name"
         }
         if ($entries.ContainsKey($name)) { throw "Duplicate path in prebuilt runtime archive: $name" }
-        if ($name -ne 'runtime-manifest.json' -and -not $name.StartsWith('objects/') -and -not $name.StartsWith('libraries/')) {
+        if ($name -ne 'runtime-manifest.json' -and -not $name.StartsWith('objects/') -and -not $name.StartsWith('libraries/') -and -not $name.StartsWith('host/')) {
             throw "Unexpected path in prebuilt runtime archive: $name"
         }
         $totalBytes += $entry.Length
@@ -60,10 +60,11 @@ try {
         $manifest.objects.Count -gt 200 -or [int]$manifest.object_count -ne $manifest.objects.Count -or
         -not ($manifest.libraries -is [array]) -or $manifest.libraries.Count -ne 6 -or
         [int]$manifest.library_count -ne $manifest.libraries.Count -or
+        -not ($manifest.host_variants -is [array]) -or $manifest.host_variants.Count -ne 2 -or
         [string]$manifest.compiler_sha256 -notmatch '^[0-9a-fA-F]{64} {
         throw 'The prebuilt runtime manifest does not match this release source or architecture.'
     }
-    if ($entries.Count -ne ($manifest.objects.Count + $manifest.libraries.Count + 1)) {
+    if ($entries.Count -ne ($manifest.objects.Count + $manifest.libraries.Count + 7)) {
         throw 'The prebuilt runtime archive contains unlisted or missing files.'
     }
 
@@ -165,6 +166,197 @@ try {
             throw "A listed prebuilt runtime object is missing or has the wrong size: $relative"
         }
         $expected.Add($relative, $hash.ToLowerInvariant())
+    }
+    $hostVariantNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($variant in $manifest.host_variants) {
+        $variantName = [string]$variant.variant
+        if ($variantName -notin @('v2', 'v3') -or -not $hostVariantNames.Add($variantName) -or
+            -not ($variant.objects -is [array]) -or $variant.objects.Count -ne 3) {
+            throw 'The prebuilt runtime manifest has invalid host object variants.'
+        }
+        foreach ($record in $variant.objects) {
+            $relative = [string]$record.path
+            $hash = [string]$record.sha256
+            if (-not $relative.StartsWith("host/$variantName/") -or $relative.Contains('..') -or
+                [IO.Path]::IsPathRooted($relative) -or $hash -notmatch '^[0-9a-fA-F]{64}
+        $name = $entry.FullName.Replace([char]92, [char]47)
+        if ($name -eq 'runtime-manifest.json') { continue }
+        if (-not $expected.ContainsKey($name)) { throw "Unlisted prebuilt runtime object: $name" }
+        $relative = $name.Replace('/', '\')
+        $target = Join-Path $stage $relative
+        $targetDirectory = Split-Path -Parent $target
+        New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+        $input = $entry.Open()
+        $output = [IO.File]::Create($target)
+        try { $input.CopyTo($output) } finally { $output.Dispose(); $input.Dispose() }
+        $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $expected[$name]) {
+            throw "Prebuilt runtime object failed SHA-256 verification: $name"
+        }
+    }
+    $manifestInput = $entries['runtime-manifest.json'].Open()
+    $manifestOutput = [IO.File]::Create((Join-Path $stage 'runtime-manifest.json'))
+    try { $manifestInput.CopyTo($manifestOutput) } finally { $manifestOutput.Dispose(); $manifestInput.Dispose() }
+    $archive.Dispose()
+    $archive = $null
+
+    if (Test-Path -LiteralPath $destination) {
+        Move-Item -LiteralPath $destination -Destination $backup
+    }
+    try {
+        Move-Item -LiteralPath $stage -Destination $destination
+        $installed = $true
+    } catch {
+        if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $destination }
+        throw
+    }
+    if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Recurse -Force }
+    Write-Host "Installed $($manifest.object_count) verified generic runtime objects for source $ExpectedSourceRevision." -ForegroundColor Green
+} finally {
+    if ($archive) { $archive.Dispose() }
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+    if (-not $installed -and (Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $destination)) {
+        Move-Item -LiteralPath $backup -Destination $destination
+    } elseif (Test-Path -LiteralPath $backup) {
+        Remove-Item -LiteralPath $backup -Recurse -Force
+    }
+} -or
+            [int64]$record.length -lt 1 -or $expected.ContainsKey($relative)) {
+            throw 'The prebuilt runtime manifest contains an unsafe or duplicate library entry.'
+        }
+        if (-not $entries.ContainsKey($relative) -or $entries[$relative].Length -ne [int64]$record.length) {
+            throw "A listed prebuilt runtime library is missing or has the wrong size: $relative"
+        }
+        $expected.Add($relative, $hash.ToLowerInvariant())
+    }
+
+    foreach ($entry in $archive.Entries) {
+        $name = $entry.FullName.Replace([char]92, [char]47)
+        if ($name -eq 'runtime-manifest.json') { continue }
+        if (-not $expected.ContainsKey($name)) { throw "Unlisted prebuilt runtime object: $name" }
+        $relative = $name.Replace('/', '\')
+        $target = Join-Path $stage $relative
+        $targetDirectory = Split-Path -Parent $target
+        New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+        $input = $entry.Open()
+        $output = [IO.File]::Create($target)
+        try { $input.CopyTo($output) } finally { $output.Dispose(); $input.Dispose() }
+        $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $expected[$name]) {
+            throw "Prebuilt runtime object failed SHA-256 verification: $name"
+        }
+    }
+    $manifestInput = $entries['runtime-manifest.json'].Open()
+    $manifestOutput = [IO.File]::Create((Join-Path $stage 'runtime-manifest.json'))
+    try { $manifestInput.CopyTo($manifestOutput) } finally { $manifestOutput.Dispose(); $manifestInput.Dispose() }
+    $archive.Dispose()
+    $archive = $null
+
+    if (Test-Path -LiteralPath $destination) {
+        Move-Item -LiteralPath $destination -Destination $backup
+    }
+    try {
+        Move-Item -LiteralPath $stage -Destination $destination
+        $installed = $true
+    } catch {
+        if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $destination }
+        throw
+    }
+    if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Recurse -Force }
+    Write-Host "Installed $($manifest.object_count) verified generic runtime objects for source $ExpectedSourceRevision." -ForegroundColor Green
+} finally {
+    if ($archive) { $archive.Dispose() }
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+    if (-not $installed -and (Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $destination)) {
+        Move-Item -LiteralPath $backup -Destination $destination
+    } elseif (Test-Path -LiteralPath $backup) {
+        Remove-Item -LiteralPath $backup -Recurse -Force
+    }
+}) {
+        throw 'The prebuilt runtime manifest does not match this release source or architecture.'
+    }
+    if ($entries.Count -ne ($manifest.objects.Count + 1)) {
+        throw 'The prebuilt runtime archive contains unlisted or missing files.'
+    }
+
+    $repoRoot = Split-Path -Parent $EngineRoot
+    . (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1')
+    $toolchainRoot = Get-UUnlockedToolchainRoot
+    $compiler = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
+    if (-not (Test-Path -LiteralPath $compiler -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $compiler -Algorithm SHA256).Hash.ToLowerInvariant() -ne ([string]$manifest.compiler_sha256).ToLowerInvariant()) {
+        throw 'The prebuilt runtime was compiled with a different or missing pinned compiler.'
+    }
+
+    $expected = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($record in $manifest.objects) {
+        $relative = [string]$record.path
+        $hash = [string]$record.sha256
+        if (-not $relative.StartsWith('objects/') -or $relative.Contains('..') -or
+            [IO.Path]::IsPathRooted($relative) -or $hash -notmatch '^[0-9a-fA-F]{64}$' -or
+            [int64]$record.length -lt 1 -or $expected.ContainsKey($relative)) {
+            throw 'The prebuilt runtime manifest contains an unsafe or duplicate object entry.'
+        }
+        if (-not $entries.ContainsKey($relative) -or $entries[$relative].Length -ne [int64]$record.length) {
+            throw "A listed prebuilt runtime object is missing or has the wrong size: $relative"
+        }
+        $expected.Add($relative, $hash.ToLowerInvariant())
+    }
+
+    foreach ($entry in $archive.Entries) {
+        $name = $entry.FullName.Replace([char]92, [char]47)
+        if ($name -eq 'runtime-manifest.json') { continue }
+        if (-not $expected.ContainsKey($name)) { throw "Unlisted prebuilt runtime object: $name" }
+        $relative = $name.Replace('/', '\')
+        $target = Join-Path $stage $relative
+        $targetDirectory = Split-Path -Parent $target
+        New-Item -ItemType Directory -Force -Path $targetDirectory | Out-Null
+        $input = $entry.Open()
+        $output = [IO.File]::Create($target)
+        try { $input.CopyTo($output) } finally { $output.Dispose(); $input.Dispose() }
+        $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $expected[$name]) {
+            throw "Prebuilt runtime object failed SHA-256 verification: $name"
+        }
+    }
+    $manifestInput = $entries['runtime-manifest.json'].Open()
+    $manifestOutput = [IO.File]::Create((Join-Path $stage 'runtime-manifest.json'))
+    try { $manifestInput.CopyTo($manifestOutput) } finally { $manifestOutput.Dispose(); $manifestInput.Dispose() }
+    $archive.Dispose()
+    $archive = $null
+
+    if (Test-Path -LiteralPath $destination) {
+        Move-Item -LiteralPath $destination -Destination $backup
+    }
+    try {
+        Move-Item -LiteralPath $stage -Destination $destination
+        $installed = $true
+    } catch {
+        if (Test-Path -LiteralPath $backup) { Move-Item -LiteralPath $backup -Destination $destination }
+        throw
+    }
+    if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Recurse -Force }
+    Write-Host "Installed $($manifest.object_count) verified generic runtime objects for source $ExpectedSourceRevision." -ForegroundColor Green
+} finally {
+    if ($archive) { $archive.Dispose() }
+    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+    if (-not $installed -and (Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $destination)) {
+        Move-Item -LiteralPath $backup -Destination $destination
+    } elseif (Test-Path -LiteralPath $backup) {
+        Remove-Item -LiteralPath $backup -Recurse -Force
+    }
+} -or
+                [int64]$record.length -lt 1 -or $expected.ContainsKey($relative)) {
+                throw 'The prebuilt runtime manifest contains an unsafe or duplicate host object.'
+            }
+            if (-not $entries.ContainsKey($relative) -or $entries[$relative].Length -ne [int64]$record.length) {
+                throw "A listed prebuilt host object is missing or has the wrong size: $relative"
+            }
+            $expected.Add($relative, $hash.ToLowerInvariant())
+        }
+    }
+    if ($hostVariantNames.Count -ne 2 -or $expected.Count -ne ($manifest.objects.Count + $manifest.libraries.Count + 6)) {
+        throw 'The prebuilt runtime manifest does not contain both complete host object variants.'
     }
 
     foreach ($entry in $archive.Entries) {
