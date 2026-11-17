@@ -96,15 +96,58 @@ if ($UseSystemTools) {
         throw "Ninja 1.12.1 or newer could not be installed; found '$ninjaVersionLine'."
     }
 
-    $python = Find-Executable 'python.exe'
-    $pythonVersion = if ($python) { (& $python --version 2>&1 | Out-String).Trim() } else { '' }
-    if ($pythonVersion -notmatch '^Python 3\.12\.') {
-        Invoke-WingetInstall -Id 'Python.Python.3.12' -Version '3.12.10'
-        $python = Find-Executable 'python.exe' @("$env:LOCALAPPDATA\Programs\Python\Python312\python.exe", "$env:ProgramFiles\Python312\python.exe")
+    # Ignore WindowsApps execution-alias stubs: they resolve through Get-Command
+    # but are not an installed interpreter and terminate under ErrorActionPreference=Stop.
+    function Get-UsablePython312 {
+        $candidates = @(
+            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+            "$env:ProgramFiles\Python312\python.exe",
+            "$env:LOCALAPPDATA\Programs\Python\Python312-32\python.exe",
+            'C:\Python312\python.exe'
+        )
+        foreach ($candidate in $candidates) {
+            if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+            try {
+                $output = @(& $candidate --version 2>&1)
+                if ($LASTEXITCODE -eq 0) {
+                    $versionText = ($output | Out-String).Trim()
+                    if ($versionText -match '^Python 3\.12\.') {
+                        return [pscustomobject]@{ Path = $candidate; Version = $versionText }
+                    }
+                }
+            } catch {
+                # Continue searching; a stale/broken executable must not block installation.
+            }
+        }
+
+        $command = Get-Command python.exe -ErrorAction SilentlyContinue
+        if ($command -and $command.Source -and
+            $command.Source -notmatch '[\\/]Microsoft[\\/]WindowsApps[\\/]') {
+            try {
+                $output = @(& $command.Source --version 2>&1)
+                if ($LASTEXITCODE -eq 0) {
+                    $versionText = ($output | Out-String).Trim()
+                    if ($versionText -match '^Python 3\.12\.') {
+                        return [pscustomobject]@{ Path = $command.Source; Version = $versionText }
+                    }
+                }
+            } catch {
+                # Treat launch failures exactly like a missing interpreter.
+            }
+        }
+        return $null
     }
-    if (-not $python) { throw 'Python 3.12.10 was installed but python.exe could not be located.' }
-    $pythonVersion = (& $python --version 2>&1 | Out-String).Trim()
-    if ($pythonVersion -notmatch '^Python 3\.12\.') { throw "Expected Python 3.12; found '$pythonVersion'." }
+
+    $pythonInstall = Get-UsablePython312
+    if (-not $pythonInstall) {
+        Invoke-WingetInstall -Id 'Python.Python.3.12' -Version '3.12.10'
+        $pythonInstall = Get-UsablePython312
+    }
+    if (-not $pythonInstall) {
+        throw 'Python 3.12 could not be installed or executed. The WindowsApps Microsoft Store alias is not a valid Python interpreter.'
+    }
+    $python = $pythonInstall.Path
+    $pythonVersion = $pythonInstall.Version
 }
 
 # llvm-mingw 20260616 is pinned by release tag and the SHA-256 published for this exact asset.
