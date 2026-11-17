@@ -204,6 +204,7 @@ try {
     $installer = Join-Path $buildKitDirectory 'tools\windows\install-prebuilt-dependencies.ps1'
     $prebuiltArchive = Join-Path $buildKitDirectory 'prebuilt-dependencies.zip'
     & $installer -ArchivePath $prebuiltArchive -EngineRoot (Join-Path $testEngine 'engine')
+    & $installer -ArchivePath $prebuiltArchive -EngineRoot (Join-Path $testEngine 'engine')
     $installedPrefix = Join-Path $testEngine 'engine\build-deps\prefix'
     foreach ($required in @(
         'lib\libvulkan-1.a', 'include\vulkan\vulkan.h',
