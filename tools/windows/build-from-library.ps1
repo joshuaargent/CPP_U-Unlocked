@@ -181,8 +181,46 @@ try {
         $runtimeStage = Join-Path $launcherRoot '.runtime-staging'
         $runtimeTarget = Join-Path $launcherRoot 'runtime'
         $runtimeBackup = Join-Path $launcherRoot '.runtime-previous'
-        foreach ($temporaryPath in @($runtimeStage, $runtimeBackup)) {
-            if (Test-Path -LiteralPath $temporaryPath) { Remove-Item -LiteralPath $temporaryPath -Recurse -Force }
+        $runtimeRequired = @(
+            'smash.exe', 'smash-compat.exe', 'smash-base.exe',
+            'smash-base-compat.exe', 'wua_extract.exe', 'title-logo.png'
+        )
+
+        # Recover an interrupted activation before starting another one. A backup
+        # is never deleted merely because it exists: it may be the only complete
+        # copy of the user's previous working runtime.
+        if (Test-Path -LiteralPath $runtimeStage) {
+            Remove-Item -LiteralPath $runtimeStage -Recurse -Force
+        }
+        if (Test-Path -LiteralPath $runtimeBackup) {
+            if (-not (Test-Path -LiteralPath $runtimeTarget)) {
+                Move-Item -LiteralPath $runtimeBackup -Destination $runtimeTarget
+                Write-Host 'Recovered the previous runtime after an interrupted activation.' -ForegroundColor Yellow
+            } else {
+                $incompleteTarget = @($runtimeRequired | Where-Object {
+                    -not (Test-Path -LiteralPath (Join-Path $runtimeTarget $_) -PathType Leaf)
+                })
+                if ($incompleteTarget.Count -eq 0) {
+                    Remove-Item -LiteralPath $runtimeBackup -Recurse -Force
+                } else {
+                    $failedTarget = Join-Path $launcherRoot '.runtime-incomplete'
+                    if (Test-Path -LiteralPath $failedTarget) {
+                        Remove-Item -LiteralPath $failedTarget -Recurse -Force
+                    }
+                    Move-Item -LiteralPath $runtimeTarget -Destination $failedTarget
+                    try {
+                        Move-Item -LiteralPath $runtimeBackup -Destination $runtimeTarget
+                    } catch {
+                        if (-not (Test-Path -LiteralPath $runtimeTarget) -and
+                            (Test-Path -LiteralPath $failedTarget)) {
+                            Move-Item -LiteralPath $failedTarget -Destination $runtimeTarget
+                        }
+                        throw
+                    }
+                    Remove-Item -LiteralPath $failedTarget -Recurse -Force
+                    Write-Host 'Restored the previous runtime because the interrupted replacement was incomplete.' -ForegroundColor Yellow
+                }
+            }
         }
         New-Item -ItemType Directory -Force -Path $runtimeStage | Out-Null
         foreach ($file in Get-ChildItem -LiteralPath $playDirectory -File) {
@@ -209,18 +247,39 @@ try {
             }
         }
 
+        $incompleteStage = @($runtimeRequired | Where-Object {
+            -not (Test-Path -LiteralPath (Join-Path $runtimeStage $_) -PathType Leaf)
+        })
+        if ($incompleteStage.Count -gt 0) {
+            throw "Staged runtime is incomplete; missing: $($incompleteStage -join ', ')."
+        }
+
+        if (Test-Path -LiteralPath $runtimeBackup) {
+            throw "Refusing to overwrite an existing recovery backup: $runtimeBackup"
+        }
         if (Test-Path -LiteralPath $runtimeTarget) {
             Move-Item -LiteralPath $runtimeTarget -Destination $runtimeBackup
         }
         try {
             Move-Item -LiteralPath $runtimeStage -Destination $runtimeTarget
+            $incompleteTarget = @($runtimeRequired | Where-Object {
+                -not (Test-Path -LiteralPath (Join-Path $runtimeTarget $_) -PathType Leaf)
+            })
+            if ($incompleteTarget.Count -gt 0) {
+                throw "Activated runtime is incomplete; missing: $($incompleteTarget -join ', ')."
+            }
         } catch {
+            if (Test-Path -LiteralPath $runtimeTarget) {
+                Remove-Item -LiteralPath $runtimeTarget -Recurse -Force
+            }
             if (Test-Path -LiteralPath $runtimeBackup) {
                 Move-Item -LiteralPath $runtimeBackup -Destination $runtimeTarget
             }
             throw
         }
-        if (Test-Path -LiteralPath $runtimeBackup) { Remove-Item -LiteralPath $runtimeBackup -Recurse -Force }
+        if (Test-Path -LiteralPath $runtimeBackup) {
+            Remove-Item -LiteralPath $runtimeBackup -Recurse -Force
+        }
         Write-Host "Local game runtime activated: $runtimeTarget" -ForegroundColor Green
     }
 
