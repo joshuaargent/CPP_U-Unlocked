@@ -122,6 +122,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Install pinned Python for release packaging
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+
       - name: Bootstrap compiler and use runner build utilities
         shell: pwsh
         run: |
