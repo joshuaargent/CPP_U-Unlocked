@@ -153,7 +153,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $prebuiltRuntime -PathT
 
 # Exercise the same hash-checked installer used by players before shipping the archive.
 $runtimeVerificationRoot = Join-Path $dist ('.runtime-package-verification-' + [guid]::NewGuid().ToString('N'))
-$runtimeVerificationEngine = Join-Path $runtimeVerificationRoot 'engine'
+$runtimeVerificationEngine = Join-Path $repoRoot ('.runtime-package-verification-engine-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $runtimeVerificationEngine | Out-Null
 try {
     & (Join-Path $repoRoot 'tools\windows\install-prebuilt-runtime.ps1') -ArchivePath $prebuiltRuntime -EngineRoot $runtimeVerificationEngine -ExpectedSourceRevision $sourceRevision
@@ -187,6 +187,9 @@ try {
 } finally {
     if (Test-Path -LiteralPath $runtimeVerificationRoot) {
         Remove-Item -LiteralPath $runtimeVerificationRoot -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $runtimeVerificationEngine) {
+        Remove-Item -LiteralPath $runtimeVerificationEngine -Recurse -Force
     }
 }
 Copy-Item -LiteralPath $prebuiltRuntime -Destination (Join-Path $buildKit 'prebuilt-runtime.zip')
