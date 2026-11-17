@@ -55,8 +55,6 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $buildKitArchive -PathT
     throw 'Unable to create the clean source build kit from the release commit.'
 }
 Expand-Archive -LiteralPath $buildKitArchive -DestinationPath $buildKit -Force
-Copy-Item -LiteralPath $buildKitArchive -Destination (Join-Path $stage 'build-kit.zip')
-Remove-Item -LiteralPath $buildKitArchive -Force
 
 # The release workflow has already fetched every locked source revision. Package
 # those exact, marker-verified trees so first-run builds do not depend on GitHub
@@ -68,7 +66,7 @@ Remove-Item -LiteralPath $prebuiltArchive -Force -ErrorAction SilentlyContinue
 if (-not (Test-Path -LiteralPath $prebuiltArchive -PathType Leaf)) {
     throw 'Precompiled dependency archive was not created.'
 }
-Copy-Item -LiteralPath $prebuiltArchive -Destination (Join-Path $stage 'prebuilt-dependencies.zip')
+Copy-Item -LiteralPath $prebuiltArchive -Destination (Join-Path $buildKit 'prebuilt-dependencies.zip')
 Remove-Item -LiteralPath $prebuiltArchive -Force
 
 # Include the generic PowerPC recompiler built from this exact source revision.
@@ -77,7 +75,7 @@ $recompiler = Join-Path $engineRoot 'build\recomp\cafe-recomp.exe'
 if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) {
     throw "The prebuilt local recompiler is missing: $recompiler"
 }
-Copy-Item -LiteralPath $recompiler -Destination (Join-Path $stage 'cafe-recomp.exe')
+Copy-Item -LiteralPath $recompiler -Destination (Join-Path $buildKit 'cafe-recomp.exe')
 
 $dependencyBundle = Join-Path $dist "$name-dependency-bundle.zip"
 Remove-Item -LiteralPath $dependencyBundle -Force -ErrorAction SilentlyContinue
@@ -87,13 +85,44 @@ if (-not $python) { throw 'Python is required to package the verified dependency
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $dependencyBundle -PathType Leaf)) {
     throw 'Creating the verified dependency bundle failed.'
 }
-Copy-Item -LiteralPath $dependencyBundle -Destination (Join-Path $stage 'dependency-bundle.zip')
+Copy-Item -LiteralPath $dependencyBundle -Destination (Join-Path $buildKit 'dependency-bundle.zip')
 Remove-Item -LiteralPath $dependencyBundle -Force
 foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
     }
 }
+
+# Bind the player assets to the exact build-kit archive. The outer release
+# manifest authenticates build-kit.zip; this inner manifest lets the player
+# re-check each prebuilt asset immediately before using it.
+$buildKitManifest = [ordered]@{
+    schema_version = 1
+    version = $Version
+    files = @(
+        foreach ($asset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip')) {
+            $assetPath = Join-Path $buildKit $asset
+            if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
+                throw "A required prebuilt build-kit asset is missing: $asset"
+            }
+            [ordered]@{
+                name = $asset
+                sha256 = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+        }
+    )
+}
+$buildKitManifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $buildKit 'build-kit-manifest.json') -Encoding UTF8
+
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+Remove-Item -LiteralPath $buildKitArchive -Force -ErrorAction SilentlyContinue
+[IO.Compression.ZipFile]::CreateFromDirectory($buildKit, $buildKitArchive, [IO.Compression.CompressionLevel]::Optimal, $false)
+if (-not (Test-Path -LiteralPath $buildKitArchive -PathType Leaf)) {
+    throw 'The complete source and prebuilt build-kit archive was not created.'
+}
+Copy-Item -LiteralPath $buildKitArchive -Destination (Join-Path $stage 'build-kit.zip')
+Remove-Item -LiteralPath $buildKitArchive -Force
 
 Copy-Item -LiteralPath $launcher -Destination $stage
 Copy-Item -LiteralPath $updater -Destination $stage
@@ -111,7 +140,7 @@ foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $sta
 # infers install targets from arbitrary archive paths.
 $packageFiles = @(
     Get-ChildItem -LiteralPath $stage -File |
-        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Name -eq 'build-kit.zip' -or $_.Name -eq 'dependency-bundle.zip' -or $_.Name -eq 'prebuilt-dependencies.zip' -or $_.Name -eq 'cafe-recomp.exe' -or $_.Extension -eq '.dll' } |
+        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Name -eq 'build-kit.zip' -or $_.Extension -eq '.dll' } |
         Sort-Object Name
 )
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'U Unlocked.exe' })) {
@@ -122,15 +151,6 @@ if (-not ($packageFiles | Where-Object { $_.Name -eq 'wua_extract.exe' })) {
 }
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'title-logo.png' })) {
     throw 'The original U Unlocked title logo is missing from the package.'
-}
-if (-not ($packageFiles | Where-Object { $_.Name -eq 'dependency-bundle.zip' })) {
-    throw 'The verified third-party dependency bundle is missing from the package.'
-}
-if (-not ($packageFiles | Where-Object { $_.Name -eq 'prebuilt-dependencies.zip' })) {
-    throw 'The precompiled dependency archive is missing from the package.'
-}
-if (-not ($packageFiles | Where-Object { $_.Name -eq 'cafe-recomp.exe' })) {
-    throw 'The prebuilt generic recompiler is missing from the package.'
 }
 $manifest = [ordered]@{
     schema_version = 1
