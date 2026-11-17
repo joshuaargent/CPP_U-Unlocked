@@ -389,7 +389,7 @@ try {
     if (Test-Path -LiteralPath $toolchainManifestPath -PathType Leaf) {
         $toolchainManifest = Get-Content -LiteralPath $toolchainManifestPath -Raw | ConvertFrom-Json
         if ($toolchainManifest.files -is [array] -and [int]$toolchainManifest.file_count -eq $toolchainManifest.files.Count) {
-            $toolchainFileIdentity = @($toolchainManifest.files | ForEach-Object { '{0}:{1}:{2}' -f $_.path, $_.sha256, $_.length })
+            $toolchainFileIdentity = @($toolchainManifest.files | ForEach-Object { "{0}:{1}:{2}" -f $_.path, $_.sha256, $_.length })
             $toolchainIdentityJson = [ordered]@{
                 llvm_mingw_version = $toolchainManifest.llvm_mingw_version
                 cmake_version = $toolchainManifest.cmake_version
@@ -429,11 +429,11 @@ try {
         $runtimeManifest = Get-Content -LiteralPath $runtimeManifestPath -Raw | ConvertFrom-Json
         $runtimeFingerprintData = [ordered]@{
             compiler_sha256 = $runtimeManifest.compiler_sha256
-            objects = @($runtimeManifest.objects | ForEach-Object { '{0}:{1}' -f $_.path, $_.sha256 })
+            objects = @($runtimeManifest.objects | ForEach-Object { "{0}:{1}" -f $_.path, $_.sha256 })
             libraries = @($runtimeManifest.libraries | ForEach-Object { '{0}:{1}' -f $_.path, $_.sha256 })
             host_variants = @($runtimeManifest.host_variants | ForEach-Object {
                 $variant = $_.variant
-                @($_.objects | ForEach-Object { '{0}/{1}:{2}' -f $variant, $_.path, $_.sha256 })
+                @($_.objects | ForEach-Object { "{0}/{1}:{2}" -f $variant, $_.path, $_.sha256 })
             })
         }
         $runtimeFingerprintJson = $runtimeFingerprintData | ConvertTo-Json -Depth 8 -Compress
