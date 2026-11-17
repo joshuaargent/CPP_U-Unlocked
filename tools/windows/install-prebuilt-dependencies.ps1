@@ -18,6 +18,9 @@ if (-not (Test-Path -LiteralPath $ArchivePath -PathType Leaf)) { throw "Prebuilt
 if (-not (Test-Path -LiteralPath $lockPath -PathType Leaf)) { throw "Dependency lock file is missing: $lockPath" }
 
 $lockHash = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$recipePath = Join-Path $EngineRoot 'tools\windows\build-deps.ps1'
+if (-not (Test-Path -LiteralPath $recipePath -PathType Leaf)) { throw "Dependency build recipe is missing: $recipePath" }
+$recipeHash = (Get-FileHash -LiteralPath $recipePath -Algorithm SHA256).Hash.ToLowerInvariant()
 $destination = Join-Path $EngineRoot 'build-deps\prefix'
 $parent = Split-Path -Parent $destination
 New-Item -ItemType Directory -Force -Path $parent | Out-Null
@@ -69,7 +72,8 @@ try {
     } finally { $manifestStream.Dispose() }
 
     if ($manifest.schema_version -ne 1 -or $manifest.architecture -ne 'x86_64-windows' -or
-        $manifest.dependency_lock_sha256 -ne $lockHash -or -not ($manifest.files -is [array])) {
+        $manifest.toolchain_version -ne '20260616' -or $manifest.dependency_lock_sha256 -ne $lockHash -or
+        $manifest.build_recipe_sha256 -ne $recipeHash -or -not ($manifest.files -is [array])) {
         throw 'Prebuilt dependency manifest does not match this build kit or target architecture.'
     }
 
