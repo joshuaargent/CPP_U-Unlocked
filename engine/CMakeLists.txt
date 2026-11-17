@@ -7,6 +7,7 @@ if(WIN32)
     set(CAFE_DEPS_PREFIX ${CMAKE_SOURCE_DIR}/build-deps/prefix)
     list(APPEND CMAKE_PREFIX_PATH ${CAFE_DEPS_PREFIX})
     set(ZLIB_USE_STATIC_LIBS ON)
+    find_package(ZLIB REQUIRED)
     set(Vulkan_INCLUDE_DIR ${CAFE_DEPS_PREFIX}/include CACHE PATH "")
     set(Vulkan_LIBRARY ${CAFE_DEPS_PREFIX}/lib/libvulkan-1.a CACHE FILEPATH "")
     set(CAFE_PREBUILT_RUNTIME_DIR "$ENV{U_UNLOCKED_PREBUILT_RUNTIME_DIR}")
@@ -19,6 +20,7 @@ if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/
     set_target_properties(zarchive PROPERTIES
         IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libzarchive.a"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/third_party/ZArchive/include")
+    target_link_libraries(zarchive INTERFACE ZLIB::ZLIB)
     add_library(ZArchive::zarchive ALIAS zarchive)
 else()
     add_subdirectory(third_party/ZArchive EXCLUDE_FROM_ALL)
