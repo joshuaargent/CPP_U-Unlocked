@@ -99,8 +99,9 @@ $buildEntry = Join-Path $repoRoot 'tools\windows\build-u-unlocked.ps1'
 $environmentSetup = Join-Path $PSScriptRoot 'setup-build-environment.ps1'
 $verifyScript = Join-Path $PSScriptRoot 'verify-checkout.ps1'
 $activationScript = Join-Path $PSScriptRoot 'runtime-activation.ps1'
+$prebuiltDependencyInstaller = Join-Path $PSScriptRoot 'install-prebuilt-dependencies.ps1'
 
-foreach ($required in @($buildEntry, $environmentSetup, $verifyScript, $activationScript)) {
+foreach ($required in @($buildEntry, $environmentSetup, $verifyScript, $activationScript, $prebuiltDependencyInstaller)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "A required local build script is missing: $required"
     }
@@ -166,6 +167,28 @@ try {
         $memoryGb = 8
     }
     $env:U_UNLOCKED_BUILD_JOBS = if ($memoryGb -ge 32) { '4' } elseif ($memoryGb -ge 12) { '2' } else { '1' }
+
+    # Official releases carry precompiled dependency libraries and the generic
+    # recompiler. Verify and install them before the local CMake build. Source
+    # checkouts without these files retain the existing compile-from-source path.
+    if (-not [string]::IsNullOrWhiteSpace($LauncherDirectory)) {
+        $launcherRoot = [System.IO.Path]::GetFullPath($LauncherDirectory)
+        $prebuiltArchive = Join-Path $launcherRoot 'prebuilt-dependencies.zip'
+        if (Test-Path -LiteralPath $prebuiltArchive -PathType Leaf) {
+            & $prebuiltDependencyInstaller -ArchivePath $prebuiltArchive -EngineRoot (Join-Path $repoRoot 'engine')
+            if ($LASTEXITCODE -ne 0) { throw 'Precompiled dependency verification or installation failed.' }
+        } else {
+            Write-Host 'No precompiled dependency archive found; developer source-build fallback will be used.' -ForegroundColor Yellow
+        }
+
+        $prebuiltRecompiler = Join-Path $launcherRoot 'cafe-recomp.exe'
+        if (Test-Path -LiteralPath $prebuiltRecompiler -PathType Leaf) {
+            $recompilerDirectory = Join-Path $repoRoot 'engine\build\recomp'
+            New-Item -ItemType Directory -Force -Path $recompilerDirectory | Out-Null
+            Copy-Item -LiteralPath $prebuiltRecompiler -Destination (Join-Path $recompilerDirectory 'cafe-recomp.exe') -Force
+            Write-Host 'Using the release-matched prebuilt generic recompiler.' -ForegroundColor Green
+        }
+    }
 
     & $verifyScript
     if ($LASTEXITCODE -ne 0) { throw "Source/toolchain verification failed with exit code $LASTEXITCODE." }
