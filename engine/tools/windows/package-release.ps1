@@ -112,7 +112,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $dependencyBundle -Path
 }
 Copy-Item -LiteralPath $dependencyBundle -Destination (Join-Path $stage 'dependency-bundle.zip')
 Remove-Item -LiteralPath $dependencyBundle -Force
-foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
+foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
     }
