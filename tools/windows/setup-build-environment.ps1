@@ -75,7 +75,8 @@ function Install-BundledToolchain {
         $staging = Join-Path $toolchainRoot ('.bundle-staging-' + [guid]::NewGuid().ToString('N'))
         $backup = Join-Path $toolchainRoot ('.bundle-backup-' + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Force -Path $staging, $backup | Out-Null
-        $moved = [Collections.Generic.List[string]]::new()
+        $installedDirectories = [Collections.Generic.List[string]]::new()
+        $backedUpDirectories = [Collections.Generic.List[string]]::new()
         try {
             Expand-Archive -LiteralPath $ArchivePath -DestinationPath $staging -Force
             $manifestPath = Join-Path $staging 'toolchain-manifest.json'
@@ -106,25 +107,32 @@ function Install-BundledToolchain {
                 }
             }
             foreach ($directory in $requiredDirectories) {
-                $moved.Add($directory)
                 $destination = Join-Path $toolchainRoot $directory
                 if (Test-Path -LiteralPath $destination) {
                     Move-Item -LiteralPath $destination -Destination (Join-Path $backup $directory)
+                    $backedUpDirectories.Add($directory)
                 }
                 Move-Item -LiteralPath (Join-Path $staging $directory) -Destination $destination
+                $installedDirectories.Add($directory)
             }
             Copy-Item -LiteralPath $manifestPath -Destination $installedManifestPath -Force
             if (-not (Test-InstalledBundle -ManifestPath $installedManifestPath)) {
                 throw 'The installed toolchain did not pass its post-install integrity check.'
             }
         } catch {
-            foreach ($directory in @($moved.ToArray())) {
+            foreach ($directory in @($installedDirectories.ToArray())) {
                 $destination = Join-Path $toolchainRoot $directory
                 if (Test-Path -LiteralPath $destination) {
                     Remove-Item -LiteralPath $destination -Recurse -Force
                 }
+            }
+            foreach ($directory in @($backedUpDirectories.ToArray())) {
+                $destination = Join-Path $toolchainRoot $directory
                 $old = Join-Path $backup $directory
                 if (Test-Path -LiteralPath $old) {
+                    if (Test-Path -LiteralPath $destination) {
+                        Remove-Item -LiteralPath $destination -Recurse -Force
+                    }
                     Move-Item -LiteralPath $old -Destination $destination
                 }
             }
