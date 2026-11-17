@@ -329,6 +329,10 @@ void update_input() {
         state.right_x += keymap::kInputs[i].right_stick_x;
         state.right_y += keymap::kInputs[i].right_stick_y;
     }
+    state.left_x = std::clamp(state.left_x, -1.0f, 1.0f);
+    state.left_y = std::clamp(state.left_y, -1.0f, 1.0f);
+    state.right_x = std::clamp(state.right_x, -1.0f, 1.0f);
+    state.right_y = std::clamp(state.right_y, -1.0f, 1.0f);
 
     for (int i = 0; i < count; ++i) {
         SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
