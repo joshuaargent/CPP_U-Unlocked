@@ -261,6 +261,14 @@ def fetch_dependency(name, dependency):
 
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def create_dependency_bundle(output, dependencies):
     """Package already-verified pinned sources into a release bundle."""
     output = Path(output)
@@ -285,7 +293,7 @@ def create_dependency_bundle(output, dependencies):
                 archive_path = f"third_party/{name}/{relative}"
                 manifest["files"].append({
                     "path": archive_path,
-                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "sha256": sha256_file(path),
                 })
                 bundle.write(path, f"bundle/{archive_path}")
         bundle.writestr(
@@ -314,10 +322,13 @@ def install_dependency_bundle(bundle_path, dependencies):
         except (OSError, json.JSONDecodeError) as error:
             raise RuntimeError(f"Dependency bundle integrity manifest is invalid: {error}") from error
         expected_revisions = {name: dependency["revision"] for name, dependency in dependencies.items()}
-        if manifest.get("schema_version") != 1 or manifest.get("revisions") != expected_revisions:
+        if not isinstance(manifest, dict) or manifest.get("schema_version") != 1 or manifest.get("revisions") != expected_revisions:
             raise RuntimeError("Dependency bundle lock revisions do not match dependencies.lock.json.")
+        file_entries = manifest.get("files")
+        if not isinstance(file_entries, list):
+            raise RuntimeError("Dependency bundle integrity manifest has no valid file inventory.")
         expected_hashes = {}
-        for entry in manifest.get("files", []):
+        for entry in file_entries:
             if not isinstance(entry, dict):
                 raise RuntimeError("Dependency bundle integrity manifest contains an invalid file entry.")
             relative = entry.get("path")
@@ -339,7 +350,7 @@ def install_dependency_bundle(bundle_path, dependencies):
             raise RuntimeError("Dependency bundle file inventory does not match its integrity manifest.")
         for relative, expected_hash in expected_hashes.items():
             path = extracted.joinpath(*PurePosixPath(relative).parts)
-            actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+            actual_hash = sha256_file(path)
             if actual_hash != expected_hash:
                 raise RuntimeError(f"Dependency bundle SHA-256 mismatch: {relative}")
         sources = {}
