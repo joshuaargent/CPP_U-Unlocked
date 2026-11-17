@@ -29,7 +29,10 @@ function Resolve-CommandPath {
 }
 
 $cmakeExe = Resolve-CommandPath 'cmake.exe'
-$ninjaExe = Resolve-CommandPath 'ninja.exe'
+$ninjaExe = Join-Path $toolchainRoot 'ninja\\ninja.exe'
+if (-not (Test-Path -LiteralPath $ninjaExe -PathType Leaf)) {
+    throw "The pinned standalone Ninja executable is missing: $ninjaExe"
+}
 $pythonExe = Resolve-CommandPath 'python.exe'
 $cmakeRoot = Split-Path -Parent (Split-Path -Parent $cmakeExe)
 $pythonRoot = Split-Path -Parent $pythonExe
