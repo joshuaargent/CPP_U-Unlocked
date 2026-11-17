@@ -164,7 +164,116 @@ try {
     foreach($file in $files) {
         $name=[string]$file.name
         $hash=[string]$file.sha256
-        $allowed = $name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|title-logo[.]png|build-kit[.]zip|[A-Za-z0-9_.+-]+[.]dll)$'
+        $allowed = $name -match '^(U Unlocked[.]exe|update-launcher[.]ps1|wua_extract[.]exe|title-logo[.]png|build-kit[.]zip|dependency-bundle[.]zip|[A-Za-z0-9_.+-]+[.]dll)
+        if(-not $allowed -or $name.Contains('..') -or -not $seen.Add($name) -or $hash -notmatch '^[0-9a-fA-F]{64}$') {
+            throw "Invalid file in update manifest: $name"
+        }
+        if(-not $entries.ContainsKey($name)){throw "Manifest file is missing from archive: $name"}
+        $entry=$entries[$name]
+        if($entry.FullName -ne $name -or $entry.Length -gt 512MB){throw "Invalid binary archive entry: $name"}
+
+        $destination=Join-Path $newFiles $name
+        $input=$entry.Open()
+        $output=[IO.File]::Open($destination,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try {$input.CopyTo($output);$output.Flush($true)} finally {$output.Dispose();$input.Dispose()}
+
+        $fileHash=(Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash
+        if($fileHash -ne $hash.ToUpperInvariant()){throw "Package file hash mismatch: $name"}
+        if($name -eq 'U Unlocked.exe'){$hasExe=$true}
+    }
+    if(-not $hasExe){throw 'Manifest does not contain the launcher executable.'}
+
+    # The build kit is a separately hashed source archive. Validate its complete
+    # inner path inventory before extraction; it contains no generated game data.
+    $buildKitArchivePath=Join-Path $newFiles 'build-kit.zip'
+    if(Test-Path -LiteralPath $buildKitArchivePath -PathType Leaf) {
+        $buildKitArchive=[IO.Compression.ZipFile]::OpenRead($buildKitArchivePath)
+        try {
+            if($buildKitArchive.Entries.Count -gt 10000){throw 'Build kit archive contains too many entries.'}
+            $buildKitEntries=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            [int64]$buildKitExpanded=0
+            foreach($entry in $buildKitArchive.Entries) {
+                Validate-ArchiveEntry $entry
+                if(-not $buildKitEntries.Add($entry.FullName)){throw "Duplicate build kit path: $($entry.FullName)"}
+                $buildKitExpanded += [int64]$entry.Length
+                if($buildKitExpanded -gt 1GB){throw 'Expanded build kit exceeds 1 GiB.'}
+            }
+        } finally { $buildKitArchive.Dispose() }
+        $buildKitStage=Join-Path $newFiles 'build-kit'
+        Expand-Archive -LiteralPath $buildKitArchivePath -DestinationPath $buildKitStage -Force
+        foreach($required in @('tools/windows/build-from-library.ps1','tools/windows/setup-build-environment.ps1','engine/tools/setup_deps.py','engine/dependencies.lock.json')) {
+            if(-not(Test-Path -LiteralPath (Join-Path $buildKitStage $required) -PathType Leaf)) {
+                throw "Updated build kit is incomplete: $required"
+            }
+        }
+    }
+    $archive.Dispose()
+    $archive=$null
+
+    $deadline=[DateTime]::UtcNow.AddSeconds(120)
+    while([DateTime]::UtcNow -lt $deadline -and (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue)) {
+        Start-Sleep -Milliseconds 250
+    }
+    if(Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue){throw 'Launcher is still running; close it and retry.'}
+
+    $rollbackRoot=Join-Path $work 'rollback'
+    New-Item -ItemType Directory -Force -Path $rollbackRoot | Out-Null
+    $safeVersion=$CurrentVersion -replace '[^0-9A-Za-z._-]','_'
+    $rollback=Join-Path $rollbackRoot ($safeVersion+'-'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
+    New-Item -ItemType Directory -Force -Path $rollback | Out-Null
+    $changed=[Collections.Generic.List[string]]::new()
+
+    try {
+        foreach($file in $files) {
+            $name=[string]$file.name
+            if($name -eq 'build-kit.zip'){continue}
+            $target=Join-Path $InstallDirectory $name
+            $backup=Join-Path $rollback $name
+            if(Test-Path -LiteralPath $target -PathType Leaf){Copy-Item -LiteralPath $target -Destination $backup}
+            $changed.Add($name)
+            Move-Item -LiteralPath (Join-Path $newFiles $name) -Destination $target -Force
+        }
+        if(Test-Path -LiteralPath (Join-Path $newFiles 'build-kit') -PathType Container) {
+            $buildKitTarget=Join-Path $InstallDirectory 'build-kit'
+            $buildKitBackup=Join-Path $rollback 'build-kit'
+            if(Test-Path -LiteralPath $buildKitTarget -PathType Container){Move-Item -LiteralPath $buildKitTarget -Destination $buildKitBackup}
+            $changed.Add('build-kit')
+            Move-Item -LiteralPath (Join-Path $newFiles 'build-kit') -Destination $buildKitTarget
+        }
+        Start-Process -FilePath (Join-Path $InstallDirectory 'U Unlocked.exe') -WorkingDirectory $InstallDirectory | Out-Null
+    } catch {
+        foreach($name in $changed) {
+            $target=Join-Path $InstallDirectory $name
+            $backup=Join-Path $rollback $name
+            if($name -eq 'build-kit') {
+                if(Test-Path -LiteralPath $target -PathType Container){Remove-Item -LiteralPath $target -Recurse -Force}
+                if(Test-Path -LiteralPath $backup -PathType Container){Move-Item -LiteralPath $backup -Destination $target}
+                continue
+            }
+            if(Test-Path -LiteralPath $backup -PathType Leaf){Copy-Item -LiteralPath $backup -Destination $target -Force}
+            elseif(Test-Path -LiteralPath $target -PathType Leaf){Remove-Item -LiteralPath $target -Force}
+        }
+        throw
+    }
+
+    Get-ChildItem -LiteralPath $rollbackRoot -Directory | Sort-Object LastWriteTimeUtc -Descending | Select-Object -Skip 3 | Remove-Item -Recurse -Force
+    Write-Log "Updated $CurrentVersion to $version; rollback saved at $rollback."
+    Show-Message "U Unlocked was updated to version $version. Game files, mods, saves and settings were preserved."
+} catch {
+    $message=$_.Exception.Message
+    try {
+        if(-not(Test-Path -LiteralPath $work -PathType Container)){New-Item -ItemType Directory -Force -Path $work | Out-Null}
+        Write-Log "Update failed: $message"
+    } catch {}
+    $text="The launcher could not be updated."+[Environment]::NewLine+[Environment]::NewLine+$message+[Environment]::NewLine+"Log: "+$log
+    Show-Message $text $true
+    exit 1
+} finally {
+    if($archive){$archive.Dispose()}
+    if($stage -and (Test-Path -LiteralPath $stage)){Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue}
+    if($download -and (Test-Path -LiteralPath $download)){Remove-Item -LiteralPath $download -Force -ErrorAction SilentlyContinue}
+}
+
         if(-not $allowed -or $name.Contains('..') -or -not $seen.Add($name) -or $hash -notmatch '^[0-9a-fA-F]{64}$') {
             throw "Invalid file in update manifest: $name"
         }
