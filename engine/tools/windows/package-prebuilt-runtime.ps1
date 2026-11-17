@@ -33,6 +33,21 @@ foreach ($library in $librarySources.GetEnumerator()) {
         throw "A required generic runtime static library is missing: $($library.Value)"
     }
 }
+$hostObjectRoots = [ordered]@{
+    'v3' = Join-Path $EngineRoot 'build\CMakeFiles\smash_host_compile_check_v3.dir'
+    'v2' = Join-Path $EngineRoot 'build\CMakeFiles\smash_host_compile_check_v2.dir'
+}
+$hostObjects = [ordered]@{}
+foreach ($variant in $hostObjectRoots.GetEnumerator()) {
+    if (-not (Test-Path -LiteralPath $variant.Value -PathType Container)) {
+        throw "The precompiled $($variant.Key) host object directory is missing: $($variant.Value)"
+    }
+    $files = @(Get-ChildItem -LiteralPath $variant.Value -Filter '*.obj' -File -Recurse | Sort-Object FullName)
+    if ($files.Count -ne 3) {
+        throw "Expected three generic host objects for $($variant.Key); found $($files.Count)."
+    }
+    $hostObjects[$variant.Key] = $files
+}
 if ($objects.Count -lt 40 -or $objects.Count -gt 200) {
     throw "The generic runtime object count is outside the expected range: $($objects.Count)"
 }
@@ -56,6 +71,8 @@ try {
     New-Item -ItemType Directory -Force -Path $stageObjects | Out-Null
     $stageLibraries = Join-Path $stage 'libraries'
     New-Item -ItemType Directory -Force -Path $stageObjects, $stageLibraries | Out-Null
+    $stageHost = Join-Path $stage 'host'
+    New-Item -ItemType Directory -Force -Path $stageObjects, $stageLibraries, (Join-Path $stageHost 'v2'), (Join-Path $stageHost 'v3') | Out-Null
     $records = @(
         foreach ($object in $objects) {
             $relative = $object.FullName.Substring($objectsRoot.Length + 1).Replace('\', '/')
@@ -85,6 +102,27 @@ try {
             }
         }
     )
+    $hostRecords = @(
+        foreach ($variant in $hostObjects.GetEnumerator()) {
+            $variantRecords = @(
+                foreach ($object in $variant.Value) {
+                    $relative = $object.FullName.Substring($hostObjectRoots[$variant.Key].Length + 1).Replace('\', '/')
+                    if ([string]::IsNullOrWhiteSpace($relative) -or $relative.Contains('..') -or [IO.Path]::IsPathRooted($relative)) {
+                        throw "Unsafe prebuilt host object path: $relative"
+                    }
+                    $destination = Join-Path (Join-Path $stageHost $variant.Key) ($relative.Replace('/', '\'))
+                    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+                    Copy-Item -LiteralPath $object.FullName -Destination $destination
+                    [ordered]@{
+                        path = "host/$($variant.Key)/$relative"
+                        sha256 = (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash.ToLowerInvariant()
+                        length = (Get-Item -LiteralPath $destination).Length
+                    }
+                }
+            )
+            [ordered]@{ variant = $variant.Key; objects = $variantRecords }
+        }
+    )
     $manifest = [ordered]@{
         schema_version = 1
         architecture = 'x86_64-windows'
@@ -95,6 +133,7 @@ try {
         objects = $records
         library_count = $libraryRecords.Count
         libraries = $libraryRecords
+        host_variants = $hostRecords
     }
     $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $stage 'runtime-manifest.json') -Encoding UTF8
 
