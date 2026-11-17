@@ -116,6 +116,13 @@ try {
     if ((Get-TestHash $installedLibrary) -ne $installedHash) {
         throw 'Reinstalling an already current dependency prefix changed its contents.'
     }
+
+    # The no-op path must still detect local corruption and repair the prefix.
+    Set-Content -LiteralPath $installedLibrary -Value 'locally corrupted dependency' -Encoding ASCII
+    & $installer -ArchivePath $validArchive -EngineRoot $engineRoot
+    if ((Get-TestHash $installedLibrary) -ne $installedHash) {
+        throw 'The dependency installer reused a corrupted file instead of restoring it from the verified archive.'
+    }
     $tamperedArchive = Join-Path $temporary 'tampered.zip'
     New-TestArchive -Path $tamperedArchive -Root $sourceRoot -LockHash $lockHash -RecipeHash $recipeHash -Tamper
     $rejected = $false
