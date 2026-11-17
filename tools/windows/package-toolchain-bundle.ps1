@@ -103,7 +103,7 @@ try {
 
     Remove-Item -LiteralPath $outputArchive -Force -ErrorAction SilentlyContinue
     $archive = [IO.Compression.ZipFile]::Open($outputArchive, [IO.Compression.ZipArchiveMode]::Create)
-    $files = @(Get-ChildItem -LiteralPath $stage -File -Recurse | Sort-Object FullName)
+    $files = @(Get-ChildItem -LiteralPath $stage -Force -File -Recurse | Sort-Object FullName)
     if ($files.Count -lt 4 -or $files.Count -gt 100000) {
         throw "The staged toolchain has an invalid file count: $($files.Count)"
     }
