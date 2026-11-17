@@ -161,16 +161,51 @@ $compiler = Join-Path $llvmDestination 'bin\x86_64-w64-mingw32-clang++.exe'
 
 if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
     $llvmUrl = "https://github.com/mstorsjo/llvm-mingw/releases/download/$llvmVersion/$llvmArchiveName"
-    if (-not (Test-Path -LiteralPath $llvmArchive -PathType Leaf)) {
-        Write-Host "Downloading $llvmArchiveName (approximately 180 MB)..." -ForegroundColor Cyan
+    $archiveVerified = $false
+    if (Test-Path -LiteralPath $llvmArchive -PathType Leaf) {
+        $existingHash = (Get-FileHash -LiteralPath $llvmArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($existingHash -eq $llvmSha256) {
+            $archiveVerified = $true
+        } else {
+            Remove-Item -LiteralPath $llvmArchive -Force
+        }
+    }
+
+    if (-not $archiveVerified) {
+        $attempts = 5
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -UseBasicParsing -Uri $llvmUrl -OutFile $llvmArchive
+        for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+            Remove-Item -LiteralPath $llvmArchive -Force -ErrorAction SilentlyContinue
+            try {
+                Write-Host "Downloading $llvmArchiveName (approximately 180 MB), attempt $attempt of $attempts..." -ForegroundColor Cyan
+                Invoke-WebRequest -UseBasicParsing -Uri $llvmUrl -OutFile $llvmArchive -TimeoutSec 900
+                if (-not (Test-Path -LiteralPath $llvmArchive -PathType Leaf)) {
+                    throw 'The compiler download did not create an archive.'
+                }
+                $actualHash = (Get-FileHash -LiteralPath $llvmArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+                if ($actualHash -ne $llvmSha256) {
+                    throw "llvm-mingw SHA-256 mismatch. Expected $llvmSha256; got $actualHash."
+                }
+                $archiveVerified = $true
+                break
+            } catch {
+                $downloadError = $_
+                Remove-Item -LiteralPath $llvmArchive -Force -ErrorAction SilentlyContinue
+                $statusCode = 0
+                try { $statusCode = [int]$downloadError.Exception.Response.StatusCode } catch {}
+                if ($statusCode -ge 400 -and $statusCode -lt 500 -and $statusCode -notin @(408, 425, 429)) {
+                    throw "The pinned compiler download was rejected with HTTP $statusCode. $($downloadError.Exception.Message)"
+                }
+                if ($attempt -eq $attempts) {
+                    throw "Unable to download and verify the pinned compiler after $attempts attempts. $($downloadError.Exception.Message)"
+                }
+                $delay = [Math]::Min(20, 2 * $attempt)
+                Write-Warning "Compiler download failed: $($downloadError.Exception.Message). Retrying in $delay seconds."
+                Start-Sleep -Seconds $delay
+            }
+        }
     }
-    $actualHash = (Get-FileHash -LiteralPath $llvmArchive -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actualHash -ne $llvmSha256) {
-        Remove-Item -LiteralPath $llvmArchive -Force
-        throw "llvm-mingw SHA-256 mismatch. Expected $llvmSha256; got $actualHash."
-    }
+    if (-not $archiveVerified) { throw 'The pinned compiler archive could not be verified.' }
 
     $staging = Join-Path $toolchainRoot '.llvm-mingw-staging'
     if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
