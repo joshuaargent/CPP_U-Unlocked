@@ -34,7 +34,7 @@ foreach ($required in @(
 }
 $shadercImportLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -like '*shaderc_shared*' })
 $sdlImportLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -like '*SDL3*' })
-$zlibLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -eq 'libz.a' -or $_.Name -eq 'libz.dll.a' })
+$zlibLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -in @('libz.a', 'libz.dll.a', 'libzlib.dll.a', 'libzlibstatic.a') })
 $zstdLibraries = @(Get-ChildItem -LiteralPath (Join-Path $prefix 'lib') -File | Where-Object { $_.Name -like '*zstd*' })
 if ($shadercImportLibraries.Count -eq 0 -or $sdlImportLibraries.Count -eq 0 -or
     $zlibLibraries.Count -eq 0 -or $zstdLibraries.Count -eq 0) {
