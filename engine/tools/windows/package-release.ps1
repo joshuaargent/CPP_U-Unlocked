@@ -61,6 +61,47 @@ Remove-Item -LiteralPath $buildKitArchive -Force
 # The release workflow has already fetched every locked source revision. Package
 # those exact, marker-verified trees so first-run builds do not depend on GitHub
 # archive downloads or the user's network connection.
+# Build a separate, integrity-manifested archive of the already-compiled
+# dependency prefix. Player machines install these libraries; they do not compile
+# SDL, shaderc, glslang, SPIRV-Tools, zlib, or zstd themselves.
+$prebuiltPrefix = Join-Path $engineRoot 'build-deps\prefix'
+$prebuiltArchive = Join-Path $dist "$name-prebuilt-dependencies.zip"
+$prebuiltStage = Join-Path $dist ('.prebuilt-dependencies-' + [guid]::NewGuid().ToString('N'))
+if (-not (Test-Path -LiteralPath (Join-Path $prebuiltPrefix 'lib\libvulkan-1.a') -PathType Leaf) -or
+    -not (Test-Path -LiteralPath (Join-Path $prebuiltPrefix 'include\vulkan\vulkan.h') -PathType Leaf)) {
+    throw "The compiled dependency prefix is missing or incomplete: $prebuiltPrefix"
+}
+Remove-Item -LiteralPath $prebuiltArchive -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path (Join-Path $prebuiltStage 'prefix') | Out-Null
+Copy-Item -Path (Join-Path $prebuiltPrefix '*') -Destination (Join-Path $prebuiltStage 'prefix') -Recurse -Force
+$lockPath = Join-Path $engineRoot 'dependencies.lock.json'
+$prebuiltManifest = [ordered]@{
+    schema_version = 1
+    architecture = 'x86_64-windows'
+    dependency_lock_sha256 = (Get-FileHash -LiteralPath $lockPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    files = @(
+        foreach ($file in Get-ChildItem -LiteralPath (Join-Path $prebuiltStage 'prefix') -File -Recurse | Sort-Object FullName) {
+            $relative = $file.FullName.Substring($prebuiltStage.Length + 1).Replace('\', '/')
+            [ordered]@{ path = $relative; sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+        }
+    )
+}
+if ($prebuiltManifest.files.Count -lt 2) { throw 'The precompiled dependency prefix contains too few files.' }
+$prebuiltManifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $prebuiltStage 'prebuilt-manifest.json') -Encoding UTF8
+Compress-Archive -Path (Join-Path $prebuiltStage '*') -DestinationPath $prebuiltArchive -CompressionLevel Optimal
+if (-not (Test-Path -LiteralPath $prebuiltArchive -PathType Leaf)) { throw 'Precompiled dependency archive was not created.' }
+Copy-Item -LiteralPath $prebuiltArchive -Destination (Join-Path $stage 'prebuilt-dependencies.zip')
+Remove-Item -LiteralPath $prebuiltArchive -Force
+Remove-Item -LiteralPath $prebuiltStage -Recurse -Force
+
+# Include the generic PowerPC recompiler built from this exact source revision.
+# It contains no game-derived code; the user's RPX files are still processed locally.
+$recompiler = Join-Path $engineRoot 'build\recomp\cafe-recomp.exe'
+if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) {
+    throw "The prebuilt local recompiler is missing: $recompiler"
+}
+Copy-Item -LiteralPath $recompiler -Destination (Join-Path $stage 'cafe-recomp.exe')
+
 $dependencyBundle = Join-Path $dist "$name-dependency-bundle.zip"
 Remove-Item -LiteralPath $dependencyBundle -Force -ErrorAction SilentlyContinue
 $python = Get-Command python.exe -ErrorAction SilentlyContinue
@@ -93,7 +134,7 @@ foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $sta
 # infers install targets from arbitrary archive paths.
 $packageFiles = @(
     Get-ChildItem -LiteralPath $stage -File |
-        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Name -eq 'build-kit.zip' -or $_.Name -eq 'dependency-bundle.zip' -or $_.Extension -eq '.dll' } |
+        Where-Object { $_.Name -eq 'U Unlocked.exe' -or $_.Name -eq 'update-launcher.ps1' -or $_.Name -eq 'wua_extract.exe' -or $_.Name -eq 'title-logo.png' -or $_.Name -eq 'build-kit.zip' -or $_.Name -eq 'dependency-bundle.zip' -or $_.Name -eq 'prebuilt-dependencies.zip' -or $_.Name -eq 'cafe-recomp.exe' -or $_.Extension -eq '.dll' } |
         Sort-Object Name
 )
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'U Unlocked.exe' })) {
@@ -107,6 +148,12 @@ if (-not ($packageFiles | Where-Object { $_.Name -eq 'title-logo.png' })) {
 }
 if (-not ($packageFiles | Where-Object { $_.Name -eq 'dependency-bundle.zip' })) {
     throw 'The verified third-party dependency bundle is missing from the package.'
+}
+if (-not ($packageFiles | Where-Object { $_.Name -eq 'prebuilt-dependencies.zip' })) {
+    throw 'The precompiled dependency archive is missing from the package.'
+}
+if (-not ($packageFiles | Where-Object { $_.Name -eq 'cafe-recomp.exe' })) {
+    throw 'The prebuilt generic recompiler is missing from the package.'
 }
 $manifest = [ordered]@{
     schema_version = 1
@@ -155,7 +202,7 @@ stb_image and stb_truetype (Sean Barrett): public domain or MIT, at your choice;
 @'
 This package contains the U Unlocked launcher, its bounded WUA extraction utility, and the complete source build kit.
 
-Select your base-game and update folders in the launcher, then choose BUILD RUNTIME (or select PLAY when no runtime has been built). The launcher runs the included build kit, which installs the pinned compiler/build tools and builds the Vulkan runtime locally from your own legally obtained game files.
+Select your base-game and update folders in the launcher, then choose BUILD RUNTIME (or select PLAY when no runtime has been built). The launcher runs the included build kit, which installs the precompiled third-party libraries and generic recompiler supplied with this release. It installs the pinned compiler/build tools and compiles only the runtime and game-specific code that must be built from your own legally obtained game files.
 
 No Nintendo game data, console keys, saves, generated recompiled code, or game executable is included. Generated game code and executables remain on this PC.
 '@ | Set-Content -LiteralPath (Join-Path $stage 'RUNTIME-BUILD-REQUIRED.txt') -Encoding utf8
