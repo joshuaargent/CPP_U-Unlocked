@@ -1273,14 +1273,16 @@ private:
             }
             out << "# U Unlocked keyboard bindings for Player 1\n";
             for (size_t i = 0; i < keymap::kInputCount; ++i) {
-                const char* name = SDL_GetScancodeName(static_cast<SDL_Scancode>(keyboard_keys_[i]));
-                if (!name || !*name) {
-                    controls_status_ = "A keyboard binding has no valid SDL key name.";
+                const uint16_t scancode = keyboard_keys_[i];
+                if (scancode < keymap::kFirstKey || scancode >= keymap::kKeyCount || keymap::reserved(scancode)) {
+                    controls_status_ = "A keyboard binding is invalid or reserved.";
                     out.close();
                     fs::remove(temporary, ec);
                     return false;
                 }
-                out << keymap::kInputs[i].id << " = " << name << "\n";
+                // Store numeric SDL scancodes so locale-specific key names and
+                // names containing comment characters cannot corrupt the file.
+                out << keymap::kInputs[i].id << " = " << scancode << "\n";
             }
             out.flush();
             if (!out) {
