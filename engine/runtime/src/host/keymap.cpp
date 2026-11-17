@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <fstream>
 #include <iterator>
 
@@ -75,6 +76,14 @@ fs::path home() {
 }
 
 } // namespace
+
+bool is_regular_file(const host::FileStat& st) {
+#ifdef _WIN32
+    return (st.st_mode & _S_IFMT) == _S_IFREG;
+#else
+    return S_ISREG(st.st_mode);
+#endif
+}
 
 bool reserved(uint16_t key) { return std::find(kReserved.begin(), kReserved.end(), key) != kReserved.end(); }
 
@@ -149,7 +158,7 @@ Loaded load(const fs::path& file, const Resolver& resolve) {
         return loaded;
     }
     // Never open a pipe or a device: that could wait forever.
-    if (!S_ISREG(st.st_mode)) {
+    if (!is_regular_file(st)) {
         loaded.log.push_back("keyboard: defaults (" + name + " is not a file)");
         return loaded;
     }
