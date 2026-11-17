@@ -102,6 +102,15 @@ jobs:
             throw 'The generic PowerPC recompiler executable is missing.'
           }
 
+      - name: Build the generic Vulkan runtime for player releases
+        shell: pwsh
+        run: |
+          . ./tools/windows/toolchain-path.ps1
+          $compilerBin = Join-Path (Get-UUnlockedToolchainRoot) 'llvm-mingw/bin'
+          $env:PATH = "$compilerBin;$env:PATH"
+          ninja -j 2 -C engine/build cafe_runtime
+          if ($LASTEXITCODE -ne 0) { throw 'The generic Vulkan runtime failed to compile.' }
+
       - name: Generate Windows application icon
         shell: pwsh
         run: |
