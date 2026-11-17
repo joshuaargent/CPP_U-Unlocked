@@ -79,6 +79,8 @@ jobs:
 
       - name: Compile pinned runtime dependencies for players
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           ./engine/tools/windows/build-deps.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Precompiled Windows dependency build failed.' }
