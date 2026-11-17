@@ -92,8 +92,28 @@ try {
         $existingFiles = @(Get-ChildItem -LiteralPath $destination -File -Recurse -Force)
         $requiredInstalled = (Test-Path -LiteralPath (Join-Path $destination 'lib\libvulkan-1.a') -PathType Leaf) -and
             (Test-Path -LiteralPath (Join-Path $destination 'include\vulkan\vulkan.h') -PathType Leaf)
-        if ($existingFiles.Count -eq $manifest.files.Count -and $requiredInstalled) {
-            Write-Host "Precompiled dependency prefix is already installed for this manifest; skipping archive hashing and extraction: $destination" -ForegroundColor Green
+        $installedPrefixMatches = $existingFiles.Count -eq $manifest.files.Count -and $requiredInstalled
+        if ($installedPrefixMatches) {
+            foreach ($record in $manifest.files) {
+                $relative = [string]$record.path
+                $digest = [string]$record.sha256
+                if (-not $relative.StartsWith('prefix/', [StringComparison]::Ordinal) -or
+                    $relative.Contains('..') -or $relative.Contains(':') -or $relative.Contains('//') -or
+                    $digest -notmatch '^[0-9a-fA-F]{64}$') {
+                    $installedPrefixMatches = $false
+                    break
+                }
+                $relativePath = $relative.Substring('prefix/'.Length).Replace('/', [IO.Path]::DirectorySeparatorChar)
+                $installedPath = Join-Path $destination $relativePath
+                if (-not (Test-Path -LiteralPath $installedPath -PathType Leaf) -or
+                    (Get-FileHash -LiteralPath $installedPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $digest.ToLowerInvariant()) {
+                    $installedPrefixMatches = $false
+                    break
+                }
+            }
+        }
+        if ($installedPrefixMatches) {
+            Write-Host "Precompiled dependency prefix is already installed and every file matches its manifest; skipping extraction: $destination" -ForegroundColor Green
             return
         }
     }
