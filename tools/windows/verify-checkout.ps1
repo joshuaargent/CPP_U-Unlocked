@@ -103,7 +103,10 @@ if (-not $SkipToolchainCheck) {
     $missingCommands = @(@('cmake', 'ninja', 'python') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
     if (-not (Test-Path -LiteralPath $compiler -PathType Leaf) -or $missingCommands.Count -gt 0) {
         if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { Write-Host "Missing compiler: $compiler" -ForegroundColor Yellow }
-        if ($missingCommands.Count -gt 0) { Write-Host "Missing commands: $($missingCommands -join ', ')" -ForegroundColor Yellow }
+        if ($missingCommands.Count -gt 0) {
+            $missingCommandsText = $missingCommands -join ', '
+            Write-Host "Missing commands: $missingCommandsText" -ForegroundColor Yellow
+        }
         throw 'The Windows build environment is incomplete. Run setup-build-environment.ps1.'
     }
 }
