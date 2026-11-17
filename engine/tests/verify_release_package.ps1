@@ -143,8 +143,12 @@ try {
         $name = [string]$asset.name
         $hash = [string]$asset.sha256
         if ($hash.Length -ne 64 -or $hash -match '[^0-9a-fA-F]' -or
-            -not $innerListedFiles.Add($name) -or -not $buildKitEntries.ContainsKey($name)) {
+            -not $innerListedFiles.Add($name)) {
             throw "Embedded build-kit manifest contains an invalid or duplicate asset: $name"
+        }
+        if ($name -eq 'U Unlocked.exe' -or $name -eq 'wua_extract.exe') { continue }
+        if (-not $buildKitEntries.ContainsKey($name)) {
+            throw "Embedded build-kit archive is missing authenticated asset: $name"
         }
         $stream = $buildKitEntries[$name].Open()
         $sha = [Security.Cryptography.SHA256]::Create()
@@ -152,7 +156,8 @@ try {
         finally { $sha.Dispose(); $stream.Dispose() }
         if ($actualHash -ne $hash.ToLowerInvariant()) { throw "Embedded build-kit asset SHA-256 mismatch: $name" }
     }
-    foreach ($requiredAsset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip')) {
+    foreach ($requiredAsset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip',
+        'U Unlocked.exe', 'wua_extract.exe')) {
         if (-not $innerListedFiles.Contains($requiredAsset)) {
             throw "Embedded build-kit manifest does not authenticate $requiredAsset."
         }
@@ -172,14 +177,15 @@ try {
         }
         foreach ($asset in $innerManifest.files) {
             $name = [string]$asset.name
-            $entry = $directArchive.GetEntry("build-kit/$name")
-            if (-not $entry) { throw "Expanded release build kit is missing $name." }
+            $entryName = if ($name -eq 'U Unlocked.exe' -or $name -eq 'wua_extract.exe') { $name } else { "build-kit/$name" }
+            $entry = $directArchive.GetEntry($entryName)
+            if (-not $entry) { throw "Expanded release package is missing authenticated asset $entryName." }
             $stream = $entry.Open()
             $sha = [Security.Cryptography.SHA256]::Create()
             try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
             finally { $sha.Dispose(); $stream.Dispose() }
             if ($hash -ne ([string]$asset.sha256).ToLowerInvariant()) {
-                throw "Expanded release build-kit asset does not match its manifest: $name"
+                throw "Release asset does not match the build-kit manifest: $name"
             }
         }
     } finally { $directArchive.Dispose() }
