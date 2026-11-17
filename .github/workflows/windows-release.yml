@@ -202,6 +202,24 @@ jobs:
           } finally {
             $archive.Dispose()
           }
+
+          # Exercise the exact installer that runs on player machines using the
+          # archive extracted from the final, checksummed release package.
+          $releaseArchive = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          $prebuiltTest = Join-Path $env:RUNNER_TEMP 'prebuilt-dependencies-test.zip'
+          try {
+            $prebuiltEntry = $releaseArchive.GetEntry('prebuilt-dependencies.zip')
+            if (-not $prebuiltEntry) { throw 'Prebuilt dependency archive is missing from the final package.' }
+            $input = $prebuiltEntry.Open()
+            $output = [IO.File]::Open($prebuiltTest, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            try { $input.CopyTo($output); $output.Flush($true) } finally { $output.Dispose(); $input.Dispose() }
+          } finally {
+            $releaseArchive.Dispose()
+          }
+          & ./tools/windows/install-prebuilt-dependencies.ps1 -ArchivePath $prebuiltTest -EngineRoot (Join-Path $PWD 'engine')
+          if ($LASTEXITCODE -ne 0) { throw 'Player prebuilt dependency installer validation failed.' }
+          Remove-Item -LiteralPath $prebuiltTest -Force
+
           "RELEASE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_CHECKSUM=$checksum" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
