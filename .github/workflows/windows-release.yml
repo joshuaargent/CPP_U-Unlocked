@@ -60,7 +60,7 @@ jobs:
             $vcpkgRoot = Split-Path $vcpkgCommand.Source
           }
           "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows zstd:x64-windows
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows-static zstd:x64-windows-static
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg dependency installation failed.' }
 
       - name: Fetch all pinned third-party sources
@@ -104,7 +104,7 @@ jobs:
       - name: Configure launcher release target
         shell: pwsh
         run: |
-          cmake -S engine/tests/launcher_release -B build/launcher-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_BUILD_TYPE=Release
+          cmake -S engine/tests/launcher_release -B build/launcher-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_BUILD_TYPE=Release
           if ($LASTEXITCODE -ne 0) { throw 'Launcher release configuration failed.' }
 
       - name: Build and link launcher
@@ -138,10 +138,9 @@ jobs:
           if (-not (Test-Path -LiteralPath $titleLogo -PathType Leaf)) { throw 'Generated U Unlocked title logo is missing.' }
           Copy-Item -LiteralPath $titleLogo -Destination (Join-Path $engineBuild 'title-logo.png')
 
-          $vcpkgBin = Join-Path $env:VCPKG_ROOT 'installed/x64-windows/bin'
-          $dlls = @(Get-ChildItem -LiteralPath $vcpkgBin -Filter '*.dll' -File)
-          if (-not ($dlls | Where-Object { $_.Name -eq 'SDL3.dll' })) { throw 'SDL3.dll is missing from the runtime dependency output.' }
-          foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $runtimeDlls -Force }
+          if (-not (Test-Path -LiteralPath (Join-Path $runtimeDlls 'SDL3.dll') -PathType Leaf)) {
+            throw 'The pinned llvm-mingw SDL3 runtime DLL is missing from the precompiled dependency prefix.'
+          }
 
       - name: Create and verify release package
         shell: pwsh
