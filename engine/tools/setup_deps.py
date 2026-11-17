@@ -259,11 +259,82 @@ def fetch_dependency(name, dependency):
     print(f"{name}: {revision} (downloaded and pinned)")
 
 
+
+def create_dependency_bundle(output, dependencies):
+    """Package already-verified pinned sources into a release bundle."""
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.unlink(missing_ok=True)
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:
+        for name, dependency in sorted(dependencies.items()):
+            source = ROOT / "third_party" / name
+            marker = source / MARKER
+            if not marker.is_file() or marker.read_text(encoding="ascii").strip() != dependency["revision"]:
+                raise RuntimeError(f"{name}: cannot bundle a missing or unverified dependency; expected {dependency['revision']}.")
+            for path in sorted(source.rglob("*")):
+                if path.is_symlink():
+                    raise RuntimeError(f"{name}: refusing to bundle a symbolic link: {path}")
+                if not path.is_file():
+                    continue
+                relative = path.relative_to(source).as_posix()
+                if any(part in ("", ".", "..") or ":" in part for part in PurePosixPath(relative).parts):
+                    raise RuntimeError(f"{name}: unsafe dependency path: {relative}")
+                bundle.write(path, f"bundle/third_party/{name}/{relative}")
+    if not output.is_file() or output.stat().st_size == 0:
+        raise RuntimeError("The dependency bundle was not created.")
+    print(f"Created verified dependency bundle: {output} ({output.stat().st_size} bytes)")
+
+
+def install_dependency_bundle(bundle_path, dependencies):
+    """Install only locked, marker-verified dependency trees from a release bundle."""
+    bundle_path = Path(bundle_path)
+    if not bundle_path.is_file():
+        raise RuntimeError(f"Dependency bundle does not exist: {bundle_path}")
+    with tempfile.TemporaryDirectory(prefix="u-unlocked-dependency-bundle-") as temporary:
+        extracted = Path(temporary)
+        safe_extract(bundle_path, extracted)
+        source_root = extracted / "third_party"
+        if not source_root.is_dir():
+            raise RuntimeError("Dependency bundle is missing its third_party directory.")
+        sources = {}
+        for name, dependency in dependencies.items():
+            source = source_root / name
+            marker = source / MARKER
+            if not source.is_dir() or not marker.is_file():
+                raise RuntimeError(f"Dependency bundle is missing pinned dependency {name}.")
+            actual = marker.read_text(encoding="ascii").strip()
+            if actual != dependency["revision"]:
+                raise RuntimeError(f"{name}: dependency bundle revision mismatch; expected {dependency['revision']}, found {actual}.")
+            destination = ROOT / "third_party" / name
+            if destination.exists():
+                existing_marker = destination / MARKER
+                if not existing_marker.is_file() or existing_marker.read_text(encoding="ascii").strip() != dependency["revision"]:
+                    raise RuntimeError(f"Refusing to replace existing dependency directory {destination}; it does not match the locked revision.")
+            sources[name] = (source, destination)
+        for name, (source, destination) in sources.items():
+            if destination.exists():
+                print(f"{name}: {dependencies[name]['revision']} (already installed)")
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(source, destination)
+            print(f"{name}: {dependencies[name]['revision']} (installed from release bundle)")
+
 def main():
     dependencies = json.loads((ROOT / "dependencies.lock.json").read_text(encoding="utf-8"))
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("names", nargs="*", help="Default: all dependencies in dependencies.lock.json")
+    parser.add_argument("--bundle-output", type=Path, help="Create a release bundle from already verified local dependencies.")
+    parser.add_argument("--bundle-archive", type=Path, default=Path(os.environ["U_UNLOCKED_DEPENDENCY_BUNDLE"]) if os.environ.get("U_UNLOCKED_DEPENDENCY_BUNDLE") else None, help="Install pinned dependencies from a release bundle before checking online sources.")
     args = parser.parse_args()
+    if args.bundle_output and args.bundle_archive:
+        parser.error("--bundle-output and --bundle-archive cannot be used together")
+    if args.bundle_output:
+        if args.names:
+            parser.error("dependency names cannot be combined with --bundle-output")
+        create_dependency_bundle(args.bundle_output, dependencies)
+        return
+    if args.bundle_archive:
+        install_dependency_bundle(args.bundle_archive, dependencies)
     selected = args.names or list(dependencies)
     unknown = [name for name in selected if name not in dependencies]
     if unknown:
