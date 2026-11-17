@@ -18,6 +18,30 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+function Get-ZipEntrySha256 {
+    param(
+        [Parameter(Mandatory = $true)][string]$ArchivePath,
+        [Parameter(Mandatory = $true)][string]$EntryName
+    )
+    $archive = [IO.Compression.ZipFile]::OpenRead($ArchivePath)
+    try {
+        $entry = $archive.GetEntry($EntryName)
+        if (-not $entry) { throw "Archive is missing its integrity manifest: $EntryName" }
+        $stream = $entry.Open()
+        $sha = [Security.Cryptography.SHA256]::Create()
+        try {
+            return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+        } finally {
+            $sha.Dispose()
+            $stream.Dispose()
+        }
+    } finally {
+        $archive.Dispose()
+    }
+}
+
 function Resolve-TitleFolder {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
@@ -279,10 +303,24 @@ try {
 
     $toolchainManifestPath = Join-Path $toolchainRoot 'toolchain-manifest.json'
     $compilerPath = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
-    if ($releaseAssetRoot -and (Test-Path -LiteralPath (Join-Path $releaseAssetRoot 'toolchain-bundle.zip') -PathType Leaf)) {
-        $toolchainFingerprint = (Get-FileHash -LiteralPath (Join-Path $releaseAssetRoot 'toolchain-bundle.zip') -Algorithm SHA256).Hash.ToLowerInvariant()
-    } elseif (Test-Path -LiteralPath $toolchainManifestPath -PathType Leaf) {
-        $toolchainFingerprint = (Get-FileHash -LiteralPath $toolchainManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if (Test-Path -LiteralPath $toolchainManifestPath -PathType Leaf) {
+        $toolchainManifest = Get-Content -LiteralPath $toolchainManifestPath -Raw | ConvertFrom-Json
+        if ($toolchainManifest.files -is [array] -and [int]$toolchainManifest.file_count -eq $toolchainManifest.files.Count) {
+            $toolchainFileIdentity = @($toolchainManifest.files | ForEach-Object { "$($_.path):$($_.sha256):$($_.length)" })
+            $toolchainIdentityJson = [ordered]@{
+                llvm_mingw_version = $toolchainManifest.llvm_mingw_version
+                cmake_version = $toolchainManifest.cmake_version
+                ninja_version = $toolchainManifest.ninja_version
+                python_version = $toolchainManifest.python_version
+                files = $toolchainFileIdentity
+            } | ConvertTo-Json -Depth 8 -Compress
+            $toolchainIdentityBytes = [Text.Encoding]::UTF8.GetBytes($toolchainIdentityJson)
+            $toolchainIdentitySha = [Security.Cryptography.SHA256]::Create()
+            try { $toolchainFingerprint = [BitConverter]::ToString($toolchainIdentitySha.ComputeHash($toolchainIdentityBytes)).Replace('-', '').ToLowerInvariant() }
+            finally { $toolchainIdentitySha.Dispose() }
+        } else {
+            $toolchainFingerprint = (Get-FileHash -LiteralPath $toolchainManifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
     } elseif (Test-Path -LiteralPath $compilerPath -PathType Leaf) {
         $toolchainFingerprint = (Get-FileHash -LiteralPath $compilerPath -Algorithm SHA256).Hash.ToLowerInvariant()
     } else {
@@ -290,17 +328,19 @@ try {
     }
     $dependencyLock = Join-Path $repoRoot 'engine\dependencies.lock.json'
     $dependencyRecipe = Join-Path $repoRoot 'engine\tools\windows\build-deps.ps1'
-    $dependencyFingerprint = if ($releaseAssetRoot) {
-        (Get-FileHash -LiteralPath (Join-Path $releaseAssetRoot 'prebuilt-dependencies.zip') -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($releaseAssetRoot) {
+        $dependencySourceManifestHash = Get-ZipEntrySha256 -ArchivePath (Join-Path $releaseAssetRoot 'dependency-bundle.zip') -EntryName 'bundle/dependency-manifest.json'
+        $dependencyPrefixManifestHash = Get-ZipEntrySha256 -ArchivePath (Join-Path $releaseAssetRoot 'prebuilt-dependencies.zip') -EntryName 'prebuilt-manifest.json'
+        $dependencyBytes = [Text.Encoding]::UTF8.GetBytes($dependencySourceManifestHash + [Environment]::NewLine + $dependencyPrefixManifestHash)
     } else {
         $dependencyBytes = [Text.Encoding]::UTF8.GetBytes(
             (Get-FileHash -LiteralPath $dependencyLock -Algorithm SHA256).Hash.ToLowerInvariant() +
             (Get-FileHash -LiteralPath $dependencyRecipe -Algorithm SHA256).Hash.ToLowerInvariant()
         )
-        $dependencySha = [Security.Cryptography.SHA256]::Create()
-        try { [BitConverter]::ToString($dependencySha.ComputeHash($dependencyBytes)).Replace('-', '').ToLowerInvariant() }
-        finally { $dependencySha.Dispose() }
     }
+    $dependencySha = [Security.Cryptography.SHA256]::Create()
+    try { $dependencyFingerprint = [BitConverter]::ToString($dependencySha.ComputeHash($dependencyBytes)).Replace('-', '').ToLowerInvariant() }
+    finally { $dependencySha.Dispose() }
     $runtimeManifestPath = Join-Path $repoRoot 'engine\build-prebuilt-runtime\runtime-manifest.json'
     if ($releaseAssetRoot -and (Test-Path -LiteralPath $runtimeManifestPath -PathType Leaf)) {
         $runtimeManifest = Get-Content -LiteralPath $runtimeManifestPath -Raw | ConvertFrom-Json
