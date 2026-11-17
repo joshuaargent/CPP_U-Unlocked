@@ -10,7 +10,6 @@ get_filename_component(ENGINE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 # and controller-import integration errors in ordinary Windows CI.
 add_library(u_unlocked_launcher_compile OBJECT
     "${ENGINE_ROOT}/launcher/smash/main.cpp"
-    "${ENGINE_ROOT}/runtime/src/host/keymap.cpp"
     "${ENGINE_ROOT}/runtime/src/host/netplay.cpp"
     "${ENGINE_ROOT}/runtime/src/host/rooms.cpp"
 )
