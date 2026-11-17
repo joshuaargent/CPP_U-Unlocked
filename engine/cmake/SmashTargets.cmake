@@ -17,6 +17,10 @@ function(add_smash_executable target_name output_name generated_target compatibi
         "${SMASH_ENGINE_ROOT}/runtime/src/smash_overlay.cpp")
     target_include_directories(${target_name} SYSTEM PRIVATE "${SMASH_ENGINE_ROOT}/third_party/stb")
     if(WIN32)
+        # windres/llvm-rc resolves ICON paths relative to its include search path,
+        # not the directory containing smash.rc. The icon is generated before
+        # configuring/building the game targets and must be discoverable here.
+        target_include_directories(${target_name} PRIVATE "${SMASH_ENGINE_ROOT}/runtime/res")
         target_sources(${target_name} PRIVATE "${SMASH_ENGINE_ROOT}/runtime/res/smash.rc")
     endif()
     target_link_libraries(${target_name} PRIVATE cafe_runtime ${generated_target}
