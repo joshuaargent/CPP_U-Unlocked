@@ -300,7 +300,7 @@ jobs:
               [ref]$parseErrors
             ) | Out-Null
             if ($parseErrors.Count -gt 0) {
-              $parseErrors | ForEach-Object { Write-Error "$($file.FullName): $($_.Message)" }
+              $parseErrors | ForEach-Object { Write-Error "$($file.FullName):$($_.Extent.StartLineNumber):$($_.Extent.StartColumnNumber): $($_.Message)" }
               throw "PowerShell syntax validation failed: $($file.FullName)"
             }
           }
