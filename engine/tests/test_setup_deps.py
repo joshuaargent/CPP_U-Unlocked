@@ -30,6 +30,9 @@ class FakeResponse:
             raise value
         return value
 
+    def close(self):
+        pass
+
 
 class DependencyArchiveTests(unittest.TestCase):
     def test_archive_url_is_pinned_to_revision(self):
@@ -156,6 +159,60 @@ class DependencyArchiveTests(unittest.TestCase):
 
             self.assertEqual(urlopen.call_count, 5)
             self.assertFalse(archive.exists())
+
+    def test_does_not_retry_permanent_http_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "source.zip"
+            missing = setup_deps.urllib.error.HTTPError(
+                "https://example.invalid/source.zip", 404, "Not Found", {}, None
+            )
+            with mock.patch.object(
+                setup_deps.urllib.request, "urlopen", side_effect=missing
+            ) as urlopen, mock.patch("time.sleep"):
+                with self.assertRaisesRegex(RuntimeError, "HTTP 404"):
+                    setup_deps.download_archive(
+                        "SDL", "https://example.invalid/source.zip", archive
+                    )
+            self.assertEqual(urlopen.call_count, 1)
+            self.assertFalse(archive.exists())
+
+    def test_retries_transient_http_503(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "source.zip"
+            unavailable = setup_deps.urllib.error.HTTPError(
+                "https://example.invalid/source.zip", 503, "Unavailable", {}, None
+            )
+            completed = FakeResponse(6, [b"abcdef", b""])
+            with mock.patch.object(
+                setup_deps.urllib.request,
+                "urlopen",
+                side_effect=[unavailable, completed],
+            ) as urlopen, mock.patch("time.sleep"):
+                setup_deps.download_archive(
+                    "SDL", "https://example.invalid/source.zip", archive
+                )
+            self.assertEqual(urlopen.call_count, 2)
+            self.assertEqual(archive.read_bytes(), b"abcdef")
+
+    def test_does_not_retry_local_archive_write_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "source.zip"
+            response = FakeResponse(6, [b"abcdef", b""])
+            original_open = Path.open
+
+            def failing_open(path, *args, **kwargs):
+                if path == archive:
+                    raise PermissionError("simulated disk permission failure")
+                return original_open(path, *args, **kwargs)
+
+            with mock.patch.object(
+                setup_deps.urllib.request, "urlopen", return_value=response
+            ) as urlopen, mock.patch.object(Path, "open", failing_open):
+                with self.assertRaises(PermissionError):
+                    setup_deps.download_archive(
+                        "SDL", "https://example.invalid/source.zip", archive
+                    )
+            self.assertEqual(urlopen.call_count, 1)
 
 
 if __name__ == "__main__":
