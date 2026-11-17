@@ -200,6 +200,14 @@ jobs:
           ./engine/tools/windows/build-recomp.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Recompiler and function finder build failed.' }
 
+      - name: Generate Windows game executable resource icon
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if (-not (Test-Path -LiteralPath 'engine/runtime/res/u-unlocked.ico' -PathType Leaf)) {
+            throw 'The Windows game executable resource icon was not generated.'
+          }
+
       - name: Configure generated-code compile fixtures
         shell: pwsh
         run: |
