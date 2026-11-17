@@ -212,6 +212,16 @@ jobs:
           ninja -j 2 -C engine/build cafe_runtime smash_host_compile_check_v3 smash_host_compile_check_v2 smash_update_generated_v3 smash_update_generated_v2 smash_base_generated_v3 smash_base_generated_v2 smash-launcher wua_extract
           if ($LASTEXITCODE -ne 0) { throw 'The complete Vulkan runtime, host, CPU variants, launcher, or WUA extractor failed to compile/link.' }
 
+      - name: Build and verify the complete player release package
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if ($LASTEXITCODE -ne 0) { throw 'Release icon and title-logo generation failed.' }
+          ./engine/tools/windows/package-release.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Complete player release packaging failed.' }
+          ./engine/tests/verify_release_package.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Complete player release package verification failed.' }
+
   validate:
     name: Validate source tree and project scripts
     runs-on: windows-latest
