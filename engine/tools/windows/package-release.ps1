@@ -99,7 +99,25 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $toolchainBundle -PathT
 Copy-Item -LiteralPath $toolchainBundle -Destination (Join-Path $buildKit 'toolchain-bundle.zip')
 Remove-Item -LiteralPath $toolchainBundle -Force
 
-foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\toolchain-path.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json', 'tools\windows\package-toolchain-bundle.ps1')) {
+# Ship the generic native runtime objects built by CI. These contain no game data;
+# the player only compiles the locally generated RPX code and links the targets.
+$prebuiltRuntime = Join-Path $dist "$name-prebuilt-runtime.zip"
+Remove-Item -LiteralPath $prebuiltRuntime -Force -ErrorAction SilentlyContinue
+& (Join-Path $engineRoot 'tools\windows\package-prebuilt-runtime.ps1') -EngineRoot $engineRoot -OutputArchive $prebuiltRuntime
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $prebuiltRuntime -PathType Leaf)) {
+    throw 'Creating the precompiled generic runtime bundle failed.'
+}
+Copy-Item -LiteralPath $prebuiltRuntime -Destination (Join-Path $buildKit 'prebuilt-runtime.zip')
+Remove-Item -LiteralPath $prebuiltRuntime -Force
+
+$git = Get-Command git.exe -ErrorAction Stop
+$sourceRevision = (& $git.Source -C $repoRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-fA-F]{40}$') {
+    throw 'Unable to record the source revision for the release build kit.'
+}
+$sourceRevision | Set-Content -LiteralPath (Join-Path $buildKit 'source-revision.txt') -Encoding ASCII
+
+foreach ($requiredBuildFile in @('tools\windows\build-from-library.ps1', 'tools\windows\setup-build-environment.ps1', 'tools\windows\toolchain-path.ps1', 'tools\windows\install-prebuilt-dependencies.ps1', 'engine\tools\windows\package-prebuilt-dependencies.ps1', 'engine\tools\setup_deps.py', 'engine\dependencies.lock.json', 'tools\windows\package-toolchain-bundle.ps1', 'engine\tools\windows\package-prebuilt-runtime.ps1', 'tools\windows\install-prebuilt-runtime.ps1')) {
     if (-not (Test-Path -LiteralPath (Join-Path $buildKit $requiredBuildFile) -PathType Leaf)) {
         throw "The embedded build kit is incomplete: $requiredBuildFile"
     }
@@ -113,6 +131,8 @@ $buildKitAssets = @(
     @{ name = 'cafe-recomp.exe'; path = (Join-Path $buildKit 'cafe-recomp.exe') },
     @{ name = 'dependency-bundle.zip'; path = (Join-Path $buildKit 'dependency-bundle.zip') },
     @{ name = 'toolchain-bundle.zip'; path = (Join-Path $buildKit 'toolchain-bundle.zip') },
+    @{ name = 'prebuilt-runtime.zip'; path = (Join-Path $buildKit 'prebuilt-runtime.zip') },
+    @{ name = 'source-revision.txt'; path = (Join-Path $buildKit 'source-revision.txt') },
     @{ name = 'U Unlocked.exe'; path = $launcher },
     @{ name = 'wua_extract.exe'; path = $wuaExtractor }
 )
