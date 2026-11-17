@@ -68,13 +68,33 @@ try {
     $manifestStream = $entries['prebuilt-manifest.json'].Open()
     try {
         $reader = [IO.StreamReader]::new($manifestStream)
-        try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+        try {
+            $manifestText = $reader.ReadToEnd()
+            $manifest = $manifestText | ConvertFrom-Json
+        } finally { $reader.Dispose() }
     } finally { $manifestStream.Dispose() }
+    $manifestSha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $manifestHash = [BitConverter]::ToString($manifestSha.ComputeHash([Text.Encoding]::UTF8.GetBytes($manifestText))).Replace('-', '').ToLowerInvariant()
+    } finally { $manifestSha.Dispose() }
 
     if ($manifest.schema_version -ne 1 -or $manifest.architecture -ne 'x86_64-windows' -or
         $manifest.toolchain_version -ne '20260616' -or $manifest.dependency_lock_sha256 -ne $lockHash -or
         $manifest.build_recipe_sha256 -ne $recipeHash -or -not ($manifest.files -is [array])) {
         throw 'Prebuilt dependency manifest does not match this build kit or target architecture.'
+    }
+
+    $installMarkerPath = Join-Path $parent '.prebuilt-prefix-manifest.sha256'
+    if ((Test-Path -LiteralPath $installMarkerPath -PathType Leaf) -and
+        (Get-Content -LiteralPath $installMarkerPath -Raw).Trim() -eq $manifestHash -and
+        (Test-Path -LiteralPath $destination -PathType Container)) {
+        $existingFiles = @(Get-ChildItem -LiteralPath $destination -File -Recurse -Force)
+        $requiredInstalled = (Test-Path -LiteralPath (Join-Path $destination 'lib\libvulkan-1.a') -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $destination 'include\vulkan\vulkan.h') -PathType Leaf)
+        if ($existingFiles.Count -eq $manifest.files.Count -and $requiredInstalled) {
+            Write-Host "Precompiled dependency prefix is already installed for this manifest; skipping archive hashing and extraction: $destination" -ForegroundColor Green
+            return
+        }
     }
 
     $expected = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -118,6 +138,7 @@ try {
                 }
             }
             if ($existingMatches) {
+                Set-Content -LiteralPath $installMarkerPath -Value $manifestHash -Encoding ASCII
                 Write-Host "Verified precompiled Windows dependencies are already current: $destination" -ForegroundColor Green
                 return
             }
@@ -154,6 +175,7 @@ try {
         throw
     }
     if (Test-Path -LiteralPath $backup -PathType Container) { Remove-Item -LiteralPath $backup -Recurse -Force }
+    Set-Content -LiteralPath $installMarkerPath -Value $manifestHash -Encoding ASCII
     Write-Host "Verified precompiled Windows dependencies installed: $destination" -ForegroundColor Green
 } finally {
     if ($archive) { $archive.Dispose() }
