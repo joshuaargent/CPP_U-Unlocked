@@ -519,19 +519,19 @@ try {
 
     $playDirectory = Join-Path $repoRoot 'Play'
     $requiredOutputs = @(
-        'U Unlocked.exe',
-        'smash.exe',
-        'smash-compat.exe',
-        'smash-base.exe',
-        'smash-base-compat.exe',
-        'wua_extract.exe',
-        'title-logo.png'
+        "U Unlocked.exe",
+        "smash.exe",
+        "smash-compat.exe",
+        "smash-base.exe",
+        "smash-base-compat.exe",
+        "wua_extract.exe",
+        "title-logo.png"
     )
     $missing = @($requiredOutputs | Where-Object {
         -not (Test-Path -LiteralPath (Join-Path $playDirectory $_) -PathType Leaf)
     })
     if ($missing.Count -gt 0) {
-        $missingText = $missing -join ', '
+        $missingText = $missing -join ", "
         throw "Build returned without all required files. Missing: $missingText."
     }
 
@@ -541,12 +541,12 @@ try {
             throw "Launcher directory does not exist: $launcherRoot"
         }
 
-        $runtimeStage = Join-Path $launcherRoot '.runtime-staging'
-        $runtimeTarget = Join-Path $launcherRoot 'runtime'
-        $runtimeBackup = Join-Path $launcherRoot '.runtime-previous'
+        $runtimeStage = Join-Path $launcherRoot ".runtime-staging"
+        $runtimeTarget = Join-Path $launcherRoot "runtime"
+        $runtimeBackup = Join-Path $launcherRoot ".runtime-previous"
         $runtimeRequired = @(
-            'smash.exe', 'smash-compat.exe', 'smash-base.exe',
-            'smash-base-compat.exe', 'wua_extract.exe', 'title-logo.png'
+            "smash.exe", "smash-compat.exe", "smash-base.exe",
+            "smash-base-compat.exe", "wua_extract.exe", "title-logo.png"
         )
 
         # Recover the previous runtime before preparing a replacement. This
@@ -555,24 +555,24 @@ try {
 
         New-Item -ItemType Directory -Force -Path $runtimeStage | Out-Null
         foreach ($file in Get-ChildItem -LiteralPath $playDirectory -File) {
-            if ($file.Name -eq 'U Unlocked.exe') { continue }
+            if ($file.Name -eq "U Unlocked.exe") { continue }
             Copy-Item -LiteralPath $file.FullName -Destination $runtimeStage -Force
         }
 
         # Rebuilding the runtime must never discard saves, online credentials,
         # user fonts, logs, or display settings from the previous installation.
-        foreach ($name in @('save', 'online', 'fonts', 'logs', 'cache')) {
+        foreach ($name in @("save", "online", "fonts", "logs", "cache")) {
             $stagedData = Join-Path $runtimeStage $name
             Copy-PreservedDirectory -Source (Join-Path $runtimeTarget $name) -Destination $stagedData
             if (-not (Test-Path -LiteralPath $stagedData -PathType Container)) {
                 Copy-PreservedDirectory -Source (Join-Path $launcherRoot $name) -Destination $stagedData
             }
         }
-        $previousDisplay = Join-Path $runtimeTarget 'display.ini'
+        $previousDisplay = Join-Path $runtimeTarget "display.ini"
         if (Test-Path -LiteralPath $previousDisplay -PathType Leaf) {
             Copy-Item -LiteralPath $previousDisplay -Destination $runtimeStage -Force
         } else {
-            $launcherDisplay = Join-Path $launcherRoot 'display.ini'
+            $launcherDisplay = Join-Path $launcherRoot "display.ini"
             if (Test-Path -LiteralPath $launcherDisplay -PathType Leaf) {
                 Copy-Item -LiteralPath $launcherDisplay -Destination $runtimeStage -Force
             }
@@ -582,7 +582,7 @@ try {
         Write-Host "Local game runtime activated: $runtimeTarget" -ForegroundColor Green
     }
 
-    $launcherOutput = Join-Path $playDirectory 'U Unlocked.exe'
+    $launcherOutput = Join-Path $playDirectory "U Unlocked.exe"
     Write-Host "Build verified. Launcher: $launcherOutput" -ForegroundColor Green
     Write-Host "Build log: $logPath"
 } catch {
