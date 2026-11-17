@@ -79,11 +79,30 @@ try {
     }
     if (-not $listedFiles.Contains('build-kit.zip')) { throw 'The release manifest does not authenticate build-kit.zip.' }
 
+    $rootRuntimeDirectory = Join-Path $temporary 'root-runtime'
+    New-Item -ItemType Directory -Force -Path $rootRuntimeDirectory | Out-Null
+    foreach ($file in $manifest.files) {
+        $name = [string]$file.name
+        if ($name -eq 'wua_extract.exe' -or [IO.Path]::GetExtension($name) -ieq '.dll') {
+            $entry = $entries[$name]
+            $destination = Join-Path $rootRuntimeDirectory $name
+            $input = $entry.Open()
+            $output = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            try { $input.CopyTo($output); $output.Flush($true) } finally { $output.Dispose(); $input.Dispose() }
+        }
+    }
+
     $input = $entries['build-kit.zip'].Open()
     $output = [IO.File]::Open($buildKitPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
     try { $input.CopyTo($output); $output.Flush($true) } finally { $output.Dispose(); $input.Dispose() }
     $archive.Dispose()
     $archive = $null
+
+    # Starting the packaged WUA extractor with no arguments should reach its
+    # usage path. Missing dependent DLLs fail before the process can start.
+    $wuaExecutable = Join-Path $rootRuntimeDirectory 'wua_extract.exe'
+    $wuaProcess = Start-Process -FilePath $wuaExecutable -WorkingDirectory $rootRuntimeDirectory -PassThru -Wait -NoNewWindow
+    if (-not $wuaProcess -or $wuaProcess.Id -le 0) { throw 'The packaged WUA extractor could not be started with its release DLL set.' }
 
     $buildKitArchive = [IO.Compression.ZipFile]::OpenRead($buildKitPath)
     if ($buildKitArchive.Entries.Count -gt 20000) { throw 'Embedded build kit contains too many entries.' }
