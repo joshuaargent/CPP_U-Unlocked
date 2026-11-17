@@ -2534,7 +2534,8 @@ private:
             font_.draw(r_, x, y, fit(line, px * 0.85f, layout_.w * 0.65f), px * 0.85f,
                        capture_binding_ ? kGold : kDim);
             font_.draw(r_, x, y + H * 0.045f,
-                       "Keyboard bindings are stored in the U Unlocked configuration folder.",
+                       control_keyboard_ ? "Keyboard bindings are stored in the U Unlocked configuration folder."
+                                         : "Controller profiles are stored per device in the U Unlocked configuration folder.",
                        px * 0.75f, kDim);
             return;
         }
