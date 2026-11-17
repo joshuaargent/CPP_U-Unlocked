@@ -235,6 +235,9 @@ try {
         throw 'The pinned CMake, Ninja, Python, or llvm-mingw compiler could not be located after bootstrap.'
     }
     $env:PATH = (@((Split-Path -Parent $python), (Split-Path -Parent $cmake), (Split-Path -Parent $ninja), $compilerBin, "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
+    Write-Host 'Installing and verifying all pinned source dependencies from the bundled archive...' -ForegroundColor Cyan
+    & $python (Join-Path $repoRoot 'engine\tools\setup_deps.py')
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned source dependency installation failed; the release bundle may be incomplete.' }
     try {
         $memoryGb = [math]::Floor((Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory / 1GB)
     } catch {
