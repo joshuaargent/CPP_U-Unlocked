@@ -201,7 +201,7 @@ try {
         } finally { $buildKitArchive.Dispose() }
         $buildKitStage=Join-Path $newFiles 'build-kit'
         Expand-Archive -LiteralPath $buildKitArchivePath -DestinationPath $buildKitStage -Force
-        foreach($required in @('tools/windows/build-from-library.ps1','tools/windows/setup-build-environment.ps1','engine/tools/setup_deps.py','engine/dependencies.lock.json','tools/windows/install-prebuilt-dependencies.ps1','build-kit-manifest.json')) {
+        foreach($required in @('tools/windows/build-from-library.ps1','tools/windows/setup-build-environment.ps1','tools/windows/toolchain-path.ps1','engine/tools/setup_deps.py','engine/dependencies.lock.json','tools/windows/install-prebuilt-dependencies.ps1','build-kit-manifest.json')) {
             if(-not(Test-Path -LiteralPath (Join-Path $buildKitStage $required) -PathType Leaf)) {
                 throw "Updated build kit is incomplete: $required"
             }
