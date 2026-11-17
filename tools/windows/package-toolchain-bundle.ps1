@@ -82,7 +82,7 @@ try {
         schema_version = 1
         architecture = 'x86_64-windows'
         llvm_mingw_version = '20260616'
-        cmake_version = $Matches[1]
+        cmake_version = $cmakeMatch.Groups[1].Value
         ninja_version = $ninjaVersion
         python_version = $pythonVersion
         executables = @(
