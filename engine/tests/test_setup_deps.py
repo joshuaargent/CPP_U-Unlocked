@@ -1,4 +1,6 @@
+import hashlib
 import http.client
+import json
 import importlib.util
 from pathlib import Path
 import stat
@@ -163,11 +165,22 @@ class DependencyArchiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             archive = root / "bad-bundle.zip"
-            with zipfile.ZipFile(archive, "w") as output:
-                output.writestr("bundle/third_party/SDL/" + setup_deps.MARKER, "wrong\\n")
-                output.writestr("bundle/third_party/zlib/" + setup_deps.MARKER, "b" * 40 + "\\n")
-            install_root = root / "install-engine"
             lock = {"SDL": {"revision": "a" * 40}, "zlib": {"revision": "b" * 40}}
+            wrong_marker = "wrong\\n"
+            zlib_marker = "b" * 40 + "\\n"
+            manifest = {
+                "schema_version": 1,
+                "revisions": {name: value["revision"] for name, value in lock.items()},
+                "files": [
+                    {"path": "third_party/SDL/" + setup_deps.MARKER, "sha256": hashlib.sha256(wrong_marker.encode("ascii")).hexdigest()},
+                    {"path": "third_party/zlib/" + setup_deps.MARKER, "sha256": hashlib.sha256(zlib_marker.encode("ascii")).hexdigest()},
+                ],
+            }
+            with zipfile.ZipFile(archive, "w") as output:
+                output.writestr("bundle/third_party/SDL/" + setup_deps.MARKER, wrong_marker)
+                output.writestr("bundle/third_party/zlib/" + setup_deps.MARKER, zlib_marker)
+                output.writestr("bundle/dependency-manifest.json", json.dumps(manifest))
+            install_root = root / "install-engine"
             with mock.patch.object(setup_deps, "ROOT", install_root):
                 with self.assertRaisesRegex(RuntimeError, "revision mismatch"):
                     setup_deps.install_dependency_bundle(archive, lock)
