@@ -65,6 +65,15 @@ try {
         throw 'The prebuilt runtime archive contains unlisted or missing files.'
     }
 
+    $repoRoot = Split-Path -Parent $EngineRoot
+    . (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1')
+    $toolchainRoot = Get-UUnlockedToolchainRoot
+    $compiler = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
+    if (-not (Test-Path -LiteralPath $compiler -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $compiler -Algorithm SHA256).Hash.ToLowerInvariant() -ne ([string]$manifest.compiler_sha256).ToLowerInvariant()) {
+        throw 'The prebuilt runtime was compiled with a different or missing pinned compiler.'
+    }
+
     $expected = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($record in $manifest.objects) {
         $relative = [string]$record.path
