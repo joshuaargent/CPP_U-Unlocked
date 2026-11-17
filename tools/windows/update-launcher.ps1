@@ -108,11 +108,8 @@ try {
     }
     if([int64]$asset.size -le 0 -or [int64]$asset.size -gt 2GB){throw 'Release package size is invalid or too large.'}
 
-    $download=Join-Path $work ($assetName+'.'+[guid]::NewGuid().ToString('N'))
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $download -Headers @{'User-Agent'='U-Unlocked-Updater'} -TimeoutSec 180 -UseBasicParsing
-
     $expected=''
-    if([string]$asset.digest -match '^sha256:([0-9a-fA-F]{64})$') {
+    if([string]$asset.digest -match '^sha256:([0-9a-fA-F]{64})') {
         $expected=$Matches[1].ToLowerInvariant()
     } else {
         $checksumName="$assetName.sha256"
@@ -120,14 +117,42 @@ try {
         if(-not $checksumAsset -or [string]$checksumAsset.browser_download_url -notlike 'https://github.com/*') {
             throw 'Release has no SHA-256 digest or checksum asset. Refusing an unverified update.'
         }
-        $checksum=(Invoke-WebRequest -Uri $checksumAsset.browser_download_url -Headers @{'User-Agent'='U-Unlocked-Updater'} -TimeoutSec 30 -UseBasicParsing).Content
+        $checksum=(Invoke-WebRequest -Uri $checksumAsset.browser_download_url -Headers @{'User-Agent'='U-Unlocked-Updater'} -TimeoutSec 60 -UseBasicParsing).Content
         $match=[regex]::Match([string]$checksum,'[0-9a-fA-F]{64}')
         if(-not $match.Success){throw 'Release checksum is malformed.'}
         $expected=$match.Value.ToLowerInvariant()
     }
 
-    $actual=(Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant()
-    if($actual -ne $expected){throw 'Downloaded package failed SHA-256 verification.'}
+    $download=Join-Path $work ($assetName+'.'+[guid]::NewGuid().ToString('N'))
+    $downloadVerified=$false
+    $attempts=5
+    for($attempt=1;$attempt -le $attempts;$attempt++) {
+        Remove-Item -LiteralPath $download -Force -ErrorAction SilentlyContinue
+        try {
+            Write-Log "Downloading release package, attempt $attempt of $attempts."
+            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $download -Headers @{'User-Agent'='U-Unlocked-Updater'} -TimeoutSec 900 -UseBasicParsing
+            if(-not(Test-Path -LiteralPath $download -PathType Leaf)){throw 'Release download did not create a package file.'}
+            $actual=(Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($actual -ne $expected){throw 'Downloaded package failed SHA-256 verification.'}
+            $downloadVerified=$true
+            break
+        } catch {
+            $downloadError=$_
+            Remove-Item -LiteralPath $download -Force -ErrorAction SilentlyContinue
+            $statusCode=0
+            try {$statusCode=[int]$downloadError.Exception.Response.StatusCode} catch {}
+            if($statusCode -ge 400 -and $statusCode -lt 500 -and $statusCode -notin @(408,425,429)) {
+                throw "Release package download was rejected with HTTP $statusCode. $($downloadError.Exception.Message)"
+            }
+            if($attempt -eq $attempts) {
+                throw "Unable to download and verify the release package after $attempts attempts. $($downloadError.Exception.Message)"
+            }
+            $delay=[Math]::Min(20,2*$attempt)
+            Write-Log "Release package download failed: $($downloadError.Exception.Message). Retrying in $delay seconds."
+            Start-Sleep -Seconds $delay
+        }
+    }
+    if(-not $downloadVerified){throw 'The release package could not be verified.'}
 
     $archive=[IO.Compression.ZipFile]::OpenRead($download)
     if($archive.Entries.Count -gt 4096){throw 'Update archive contains too many entries.'}
