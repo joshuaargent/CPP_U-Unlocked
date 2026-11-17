@@ -19,7 +19,8 @@ $Rpx = (Resolve-Path -LiteralPath $Rpx).Path
 $BaseRpx = (Resolve-Path -LiteralPath $BaseRpx).Path
 
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-$toolchain = Join-Path $root 'toolchain'
+. (Join-Path $root 'tools\windows\toolchain-path.ps1')
+$toolchain = Get-UUnlockedToolchainRoot
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $build = Join-Path $engineRoot 'build'
 $prefix = Join-Path $engineRoot 'build-deps\prefix'
