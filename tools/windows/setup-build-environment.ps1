@@ -519,12 +519,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Python cannot execute the dependency bootstrap
                 }
             }
             foreach ($directory in $requiredDirectories) {
+                $moved.Add($directory)
                 $destination = Join-Path $toolchainRoot $directory
                 if (Test-Path -LiteralPath $destination) {
                     Move-Item -LiteralPath $destination -Destination (Join-Path $backup $directory)
                 }
                 Move-Item -LiteralPath (Join-Path $staging $directory) -Destination $destination
-                $moved.Add($directory)
             }
             Copy-Item -LiteralPath $manifestPath -Destination $installedManifestPath -Force
             if (-not (Test-InstalledBundle -ManifestPath $installedManifestPath)) {
