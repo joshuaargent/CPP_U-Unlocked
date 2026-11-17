@@ -129,8 +129,8 @@ class DependencyArchiveTests(unittest.TestCase):
             dependency = build_root / "third_party" / "SDL"
             dependency.mkdir(parents=True)
             revision = "a" * 40
-            (dependency / setup_deps.MARKER).write_text(revision + "\\n", encoding="ascii")
-            (dependency / "CMakeLists.txt").write_text("project(SDL)\\n", encoding="utf-8")
+            (dependency / setup_deps.MARKER).write_text(revision + "\n", encoding="ascii")
+            (dependency / "CMakeLists.txt").write_text("project(SDL)\n", encoding="utf-8")
             bundle = root / "dependency-bundle.zip"
             lock = {"SDL": {"revision": revision}}
             with mock.patch.object(setup_deps, "ROOT", build_root):
@@ -141,7 +141,7 @@ class DependencyArchiveTests(unittest.TestCase):
                 setup_deps.install_dependency_bundle(bundle, lock)
             installed = install_root / "third_party" / "SDL"
             self.assertEqual((installed / setup_deps.MARKER).read_text(encoding="ascii").strip(), revision)
-            self.assertEqual((installed / "CMakeLists.txt").read_text(encoding="utf-8"), "project(SDL)\\n")
+            self.assertEqual((installed / "CMakeLists.txt").read_text(encoding="utf-8"), "project(SDL)\n")
 
     def test_rejects_bundle_revision_mismatch_before_installing_any_dependency(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -154,7 +154,7 @@ class DependencyArchiveTests(unittest.TestCase):
             for name, revision in (("SDL", "a" * 40), ("zlib", "c" * 40)):
                 dependency = build_root / "third_party" / name
                 dependency.mkdir(parents=True)
-                (dependency / setup_deps.MARKER).write_text(revision + "\\n", encoding="ascii")
+                (dependency / setup_deps.MARKER).write_text(revision + "\n", encoding="ascii")
                 (dependency / "source.txt").write_text(name, encoding="utf-8")
             bundle = root / "dependency-bundle.zip"
             with mock.patch.object(setup_deps, "ROOT", build_root):
@@ -166,8 +166,8 @@ class DependencyArchiveTests(unittest.TestCase):
             root = Path(temporary)
             archive = root / "bad-bundle.zip"
             lock = {"SDL": {"revision": "a" * 40}, "zlib": {"revision": "b" * 40}}
-            wrong_marker = "wrong\\n"
-            zlib_marker = "b" * 40 + "\\n"
+            wrong_marker = "wrong\n"
+            zlib_marker = "b" * 40 + "\n"
             manifest = {
                 "schema_version": 1,
                 "revisions": {name: value["revision"] for name, value in lock.items()},
