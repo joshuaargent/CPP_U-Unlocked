@@ -6,6 +6,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $PSScriptRoot 'toolchain-path.ps1')
+$toolchainRoot = Get-UUnlockedToolchainRoot
 $enginePath = Join-Path $repoRoot 'engine'
 
 $requiredSource = @(
@@ -20,6 +22,7 @@ $requiredSource = @(
     (Join-Path $enginePath 'tools\windows\build-smash.ps1'),
     (Join-Path $repoRoot 'tools\windows\build-from-library.ps1'),
     (Join-Path $repoRoot 'tools\windows\setup-build-environment.ps1'),
+    (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1'),
     (Join-Path $repoRoot 'tools\windows\install-prebuilt-dependencies.ps1'),
     (Join-Path $enginePath 'tools\windows\package-prebuilt-dependencies.ps1'),
     (Join-Path $enginePath 'tools\windows\package-release.ps1'),
@@ -89,7 +92,7 @@ if ($legacyMatches.Count -gt 0) {
 }
 
 if (-not $SkipToolchainCheck) {
-    $compiler = Join-Path $repoRoot 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
+    $compiler = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
     $missingCommands = @(@('cmake', 'ninja', 'python') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
     if (-not (Test-Path -LiteralPath $compiler -PathType Leaf) -or $missingCommands.Count -gt 0) {
         if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { Write-Host "Missing compiler: $compiler" -ForegroundColor Yellow }
