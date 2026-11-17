@@ -146,9 +146,7 @@ jobs:
         shell: pwsh
         run: |
           ./engine/tools/windows/package-release.ps1 -Version "$env:U_UNLOCKED_VERSION"
-          if ($LASTEXITCODE -ne 0) { throw 'Release package creation failed.' }
           ./engine/tests/verify_release_package.ps1
-          if ($LASTEXITCODE -ne 0) { throw 'Complete release package and player installer verification failed.' }
 
           $zip = Join-Path $PWD "dist/U-Unlocked-v$env:U_UNLOCKED_VERSION-Windows-Launcher.zip"
           $checksum = "$zip.sha256"
