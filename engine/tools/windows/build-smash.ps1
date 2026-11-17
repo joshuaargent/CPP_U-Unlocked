@@ -105,6 +105,13 @@ if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) { throw "The cafe-recomp executable is missing: $recompiler" }
 
 $env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $prefix 'bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
+$prebuiltRuntimeDirectory = Join-Path $engineRoot 'build-prebuilt-runtime'
+if (Test-Path -LiteralPath (Join-Path $prebuiltRuntimeDirectory 'runtime-manifest.json') -PathType Leaf) {
+    $env:U_UNLOCKED_PREBUILT_RUNTIME_DIR = $prebuiltRuntimeDirectory
+    Write-Host 'Using the release-matched precompiled generic runtime; only local game code and final links remain.' -ForegroundColor Green
+} else {
+    Remove-Item Env:\U_UNLOCKED_PREBUILT_RUNTIME_DIR -ErrorAction SilentlyContinue
+}
 Invoke-CachedRecompile -Label 'update' -RpxPath $Rpx -OutputDirectory $updateGenerated -RecompilerPath $recompiler
 Invoke-CachedRecompile -Label 'base-game' -RpxPath $BaseRpx -OutputDirectory $baseGenerated -RecompilerPath $recompiler
 
