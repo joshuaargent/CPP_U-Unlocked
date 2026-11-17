@@ -11,7 +11,8 @@ if ($env:OS -ne 'Windows_NT') {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$toolchainRoot = Join-Path $repoRoot 'toolchain'
+. (Join-Path $PSScriptRoot 'toolchain-path.ps1')
+$toolchainRoot = Get-UUnlockedToolchainRoot
 $downloads = Join-Path $toolchainRoot 'downloads'
 New-Item -ItemType Directory -Force -Path $downloads | Out-Null
 
