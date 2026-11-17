@@ -161,18 +161,40 @@ try {
             $installedIdentityMatches = $false
         }
         if ($installedIdentityMatches) {
-            $allInstalledFilesExist = $true
-            foreach ($relative in $entries.Keys) {
-                if ($relative -eq 'runtime-manifest.json') { continue }
-                if (-not (Test-Path -LiteralPath (Join-Path $destination $relative.Replace('/', '\')) -PathType Leaf)) {
-                    $allInstalledFilesExist = $false
-                    break
+            $installedRecords = @($manifest.objects) + @($manifest.libraries) + @(
+                $manifest.host_variants | ForEach-Object { $_.objects }
+            )
+            $expectedInstalledCount = $installedRecords.Count + 2
+            $installedFiles = @(Get-ChildItem -LiteralPath $destination -File -Recurse -Force)
+            $allInstalledFilesMatch = $installedFiles.Count -eq $expectedInstalledCount
+            if ($allInstalledFilesMatch) {
+                foreach ($record in $installedRecords) {
+                    $relative = [string]$record.path
+                    $expectedHash = [string]$record.sha256
+                    $expectedLength = [int64]$record.length
+                    if ([string]::IsNullOrWhiteSpace($relative) -or
+                        [IO.Path]::IsPathRooted($relative) -or $relative.Contains('..') -or
+                        $expectedHash -notmatch '^[0-9a-fA-F]{64}$' -or $expectedLength -lt 1) {
+                        $allInstalledFilesMatch = $false
+                        break
+                    }
+                    $installedPath = Join-Path $destination $relative.Replace('/', '\')
+                    if (-not (Test-Path -LiteralPath $installedPath -PathType Leaf)) {
+                        $allInstalledFilesMatch = $false
+                        break
+                    }
+                    $installedFile = Get-Item -LiteralPath $installedPath
+                    if ($installedFile.Length -ne $expectedLength -or
+                        (Get-FileHash -LiteralPath $installedPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash.ToLowerInvariant()) {
+                        $allInstalledFilesMatch = $false
+                        break
+                    }
                 }
             }
-            if ($allInstalledFilesExist) {
+            if ($allInstalledFilesMatch) {
                 [IO.File]::WriteAllText($installedManifestPath, $manifestText, [Text.UTF8Encoding]::new($false))
                 Set-Content -LiteralPath $identityMarkerPath -Value $runtimeIdentityHash -Encoding ASCII
-                Write-Host 'The verified generic runtime is already installed; skipping object extraction and hashing.' -ForegroundColor Green
+                Write-Host 'The verified generic runtime is already installed and every file matches its manifest; skipping extraction.' -ForegroundColor Green
                 return
             }
         }
