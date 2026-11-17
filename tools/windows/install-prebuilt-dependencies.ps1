@@ -106,7 +106,7 @@ try {
     # and rewriting the large dependency prefix when every installed file is
     # already byte-for-byte identical to the verified release archive.
     if (Test-Path -LiteralPath $destination -PathType Container) {
-        $existingFiles = @(Get-ChildItem -LiteralPath $destination -File -Recurse)
+        $existingFiles = @(Get-ChildItem -LiteralPath $destination -File -Recurse -Force)
         if ($existingFiles.Count -eq $expected.Count) {
             $existingMatches = $true
             foreach ($file in $existingFiles) {
