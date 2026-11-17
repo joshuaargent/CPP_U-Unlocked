@@ -247,7 +247,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Precompiled dependency verification or installation failed.' }
 
         $runtimeArchive = Join-Path $releaseAssetRoot 'prebuilt-runtime.zip'
-        $sourceRevision = (Get-Content -LiteralPath (Join-Path $releaseAssetRoot 'source-revision.txt' -Raw)).Trim()
+        $sourceRevision = (Get-Content -LiteralPath (Join-Path $releaseAssetRoot 'source-revision.txt') -Raw).Trim()
         & $prebuiltRuntimeInstaller -ArchivePath $runtimeArchive -EngineRoot (Join-Path $repoRoot 'engine') -ExpectedSourceRevision $sourceRevision
         if ($LASTEXITCODE -ne 0) { throw 'Precompiled generic runtime verification or installation failed.' }
 
