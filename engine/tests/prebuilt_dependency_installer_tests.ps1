@@ -112,6 +112,10 @@ try {
 
     $installedLibrary = Join-Path $engineRoot 'build-deps\prefix\lib\libvulkan-1.a'
     $installedHash = Get-TestHash $installedLibrary
+    & $installer -ArchivePath $validArchive -EngineRoot $engineRoot
+    if ((Get-TestHash $installedLibrary) -ne $installedHash) {
+        throw 'Reinstalling an already current dependency prefix changed its contents.'
+    }
     $tamperedArchive = Join-Path $temporary 'tampered.zip'
     New-TestArchive -Path $tamperedArchive -Root $sourceRoot -LockHash $lockHash -RecipeHash $recipeHash -Tamper
     $rejected = $false
