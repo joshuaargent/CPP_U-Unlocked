@@ -85,7 +85,8 @@ try {
     }
 
     $installMarkerPath = Join-Path $parent '.prebuilt-prefix-manifest.sha256'
-    if ((Test-Path -LiteralPath $installMarkerPath -PathType Leaf) -and
+    if ($archive.Entries.Count -eq ($manifest.files.Count + 1) -and
+        (Test-Path -LiteralPath $installMarkerPath -PathType Leaf) -and
         (Get-Content -LiteralPath $installMarkerPath -Raw).Trim() -eq $manifestHash -and
         (Test-Path -LiteralPath $destination -PathType Container)) {
         $existingFiles = @(Get-ChildItem -LiteralPath $destination -File -Recurse -Force)
