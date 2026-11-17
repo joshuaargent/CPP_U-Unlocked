@@ -120,9 +120,9 @@ if(SMASH_GENERATED_DIR)
         # Netplay's room list (the Netplay page)
         runtime/src/host/rooms.cpp)
     set_target_properties(smash-launcher PROPERTIES OUTPUT_NAME "U Unlocked")
-    if(WIN32)
-        target_sources(smash-launcher PRIVATE runtime/res/smash.rc)
-    endif()
+    # The historical RC file references an icon asset that is not part of the
+    # source distribution. Do not compile that broken resource into the launcher;
+    # SDL supplies the runtime window icon separately.
     target_include_directories(smash-launcher PRIVATE runtime/src third_party/tinyxml2)
     target_include_directories(smash-launcher SYSTEM PRIVATE third_party/stb)
     target_compile_features(smash-launcher PRIVATE cxx_std_20)
