@@ -119,11 +119,13 @@ try {
         throw 'Embedded build-kit manifest schema, version, or file list is invalid.'
     }
 
+    $innerListedFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($asset in $innerManifest.files) {
         $name = [string]$asset.name
         $hash = [string]$asset.sha256
-        if ($hash.Length -ne 64 -or $hash -match '[^0-9a-fA-F]' -or -not $buildKitEntries.ContainsKey($name)) {
-            throw "Embedded build-kit manifest contains an invalid asset: $name"
+        if ($hash.Length -ne 64 -or $hash -match '[^0-9a-fA-F]' -or
+            -not $innerListedFiles.Add($name) -or -not $buildKitEntries.ContainsKey($name)) {
+            throw "Embedded build-kit manifest contains an invalid or duplicate asset: $name"
         }
         $stream = $buildKitEntries[$name].Open()
         $sha = [Security.Cryptography.SHA256]::Create()
@@ -131,9 +133,38 @@ try {
         finally { $sha.Dispose(); $stream.Dispose() }
         if ($actualHash -ne $hash.ToLowerInvariant()) { throw "Embedded build-kit asset SHA-256 mismatch: $name" }
     }
+    foreach ($requiredAsset in @('prebuilt-dependencies.zip', 'cafe-recomp.exe', 'dependency-bundle.zip')) {
+        if (-not $innerListedFiles.Contains($requiredAsset)) {
+            throw "Embedded build-kit manifest does not authenticate $requiredAsset."
+        }
+    }
 
     $buildKitArchive.Dispose()
     $buildKitArchive = $null
+
+    # The first-install launcher uses the expanded build-kit folder, while the
+    # updater extracts build-kit.zip. Verify both layouts contain identical assets.
+    $directArchive = [IO.Compression.ZipFile]::OpenRead($packagePath)
+    try {
+        foreach ($required in @('build-kit/build-kit-manifest.json', 'build-kit/prebuilt-dependencies.zip',
+            'build-kit/cafe-recomp.exe', 'build-kit/dependency-bundle.zip',
+            'build-kit/tools/windows/build-from-library.ps1')) {
+            if (-not $directArchive.GetEntry($required)) { throw "Expanded release build kit is missing $required." }
+        }
+        foreach ($asset in $innerManifest.files) {
+            $name = [string]$asset.name
+            $entry = $directArchive.GetEntry("build-kit/$name")
+            if (-not $entry) { throw "Expanded release build kit is missing $name." }
+            $stream = $entry.Open()
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+            finally { $sha.Dispose(); $stream.Dispose() }
+            if ($hash -ne ([string]$asset.sha256).ToLowerInvariant()) {
+                throw "Expanded release build-kit asset does not match its manifest: $name"
+            }
+        }
+    } finally { $directArchive.Dispose() }
+
     [IO.Compression.ZipFile]::ExtractToDirectory($buildKitPath, $buildKitDirectory)
 
     New-Item -ItemType Directory -Force -Path (Join-Path $testEngine 'tools\windows') | Out-Null
