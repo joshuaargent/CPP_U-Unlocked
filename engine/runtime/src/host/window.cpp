@@ -68,6 +68,7 @@ constexpr SDL_Scancode kDefaultKeys[] = {
     SDL_SCANCODE_I,      SDL_SCANCODE_K,         SDL_SCANCODE_J,    SDL_SCANCODE_L,     // X, B, Y, A
     SDL_SCANCODE_H,      SDL_SCANCODE_SEMICOLON, SDL_SCANCODE_U,    SDL_SCANCODE_O,     // L, R, ZL, ZR
     SDL_SCANCODE_UP,     SDL_SCANCODE_DOWN,      SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, // left stick
+    SDL_SCANCODE_T,      SDL_SCANCODE_G,         SDL_SCANCODE_F,    SDL_SCANCODE_H,     // right stick
     SDL_SCANCODE_RETURN, SDL_SCANCODE_BACKSPACE, SDL_SCANCODE_HOME,                     // +, -, HOME
 };
 static_assert([] {
@@ -325,6 +326,8 @@ void update_input() {
         state.buttons |= keymap::kInputs[i].button;
         state.left_x += keymap::kInputs[i].stick_x;
         state.left_y += keymap::kInputs[i].stick_y;
+        state.right_x += keymap::kInputs[i].right_stick_x;
+        state.right_y += keymap::kInputs[i].right_stick_y;
     }
 
     for (int i = 0; i < count; ++i) {
