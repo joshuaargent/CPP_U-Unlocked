@@ -106,27 +106,28 @@ function Assert-BuildKitFile {
 function Assert-RootPackageFile {
     param(
         [Parameter(Mandatory = $true)][string]$PackageDirectory,
+        [Parameter(Mandatory = $true)][string]$BuildKitDirectory,
         [Parameter(Mandatory = $true)][string]$FileName
     )
-    $manifestPath = Join-Path $PackageDirectory 'package-manifest.json'
+    $manifestPath = Join-Path $BuildKitDirectory 'build-kit-manifest.json'
     $filePath = Join-Path $PackageDirectory $FileName
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or
         -not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
-        throw "The release package manifest or required root asset is missing: $FileName"
+        throw "The build-kit manifest or required root asset is missing: $FileName"
     }
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     if ($manifest.schema_version -ne 1 -or -not ($manifest.files -is [array])) {
-        throw 'The release package manifest is invalid.'
+        throw 'The build-kit manifest is invalid.'
     }
     $records = @($manifest.files | Where-Object { [string]$_.name -ceq $FileName })
-    if ($records.Count -ne 1) { throw "The release package manifest does not uniquely list $FileName." }
+    if ($records.Count -ne 1) { throw "The build-kit manifest does not uniquely list $FileName." }
     $expected = [string]$records[0].sha256
     if ($expected.Length -ne 64 -or $expected -match '[^0-9a-fA-F]') {
-        throw "The release package manifest has an invalid SHA-256 for $FileName."
+        throw "The build-kit manifest has an invalid SHA-256 for $FileName."
     }
     $actual = (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash
     if ($actual -ne $expected.ToUpperInvariant()) {
-        throw "The release package asset failed SHA-256 verification: $FileName"
+        throw "The root release asset failed build-kit manifest SHA-256 verification: $FileName"
     }
 }
 
@@ -199,7 +200,7 @@ try {
             $releaseAssetRoot = $buildKitRoot
             if (Test-Path -LiteralPath (Join-Path $packageRoot 'package-manifest.json') -PathType Leaf) {
                 foreach ($asset in @('U Unlocked.exe', 'wua_extract.exe')) {
-                    Assert-RootPackageFile -PackageDirectory $packageRoot -FileName $asset
+                    Assert-RootPackageFile -PackageDirectory $packageRoot -BuildKitDirectory $buildKitRoot -FileName $asset
                 }
                 $env:U_UNLOCKED_PREBUILT_LAUNCHER = Join-Path $packageRoot 'U Unlocked.exe'
                 $env:U_UNLOCKED_PREBUILT_WUA_EXTRACTOR = Join-Path $packageRoot 'wua_extract.exe'
