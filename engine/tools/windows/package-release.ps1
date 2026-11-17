@@ -1,6 +1,6 @@
-# Packages the redistributable launcher and bounded WUA utility; no game runtime or user data.
-# Game runtime binaries and generated code are deliberately excluded: each user builds those locally
-# from their own game files. User saves, console files, keys, mods, caches, and settings are never packaged.
+# Packages the launcher, bounded WUA utility, portable toolchain, and generic precompiled runtime.
+# Game-specific generated code and executables are built locally from each user's own game files.
+# User saves, console files, keys, mods, caches, and settings are never packaged.
 [CmdletBinding()]
 param(
     [string]$Version
