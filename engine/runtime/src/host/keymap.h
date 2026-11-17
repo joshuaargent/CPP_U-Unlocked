@@ -66,9 +66,9 @@ constexpr size_t kInputCount = kInputs.size();
 constexpr uint16_t kKeyCount = 512;
 constexpr uint16_t kFirstKey = 4;
 
-// Keys nobody can assign: F11 is the game's fullscreen key, Escape cancels
-// picking a key in the launcher, and the GUI keys belong to the desktop.
-inline constexpr std::array<uint16_t, 4> kReserved{68, 41, 227, 231};
+// Keys nobody can assign: F10/F12 are runtime profiling and frame-trace hotkeys,
+// F11 is fullscreen, Escape cancels key capture, and GUI keys belong to the desktop.
+inline constexpr std::array<uint16_t, 6> kReserved{67, 68, 41, 69, 227, 231};
 bool reserved(uint16_t key);
 
 // A key per input, in kInputs' order.
