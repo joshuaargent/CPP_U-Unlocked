@@ -58,7 +58,7 @@ try {
 
     # A failed stage validation must leave the currently active runtime untouched.
     $stage = Join-Path $root '.runtime-staging'
-    New-TestRuntime -Directory $stage -Marker 'new' -Files ($required | Select-Object -SkipLast 1)
+    New-TestRuntime -Directory $stage -Marker 'new' -Files ($required | Select-Object -First ($required.Count - 1))
     $before = [System.IO.File]::ReadAllText((Join-Path $target 'smash.exe'))
     $failed = $false
     try {
