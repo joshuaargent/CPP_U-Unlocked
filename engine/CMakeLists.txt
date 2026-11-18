@@ -22,7 +22,7 @@ if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/
     set_target_properties(zarchive PROPERTIES
         IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libzarchive.a"
         INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/third_party/ZArchive")
-    target_link_libraries(zarchive INTERFACE ZLIB::ZLIB)
+    target_link_libraries(zarchive INTERFACE ZLIB::ZLIB "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libzstd.a")
     add_library(ZArchive::zarchive ALIAS zarchive)
 else()
     add_subdirectory(third_party/ZArchive EXCLUDE_FROM_ALL)
