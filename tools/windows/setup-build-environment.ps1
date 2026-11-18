@@ -42,6 +42,27 @@ function Find-Executable {
     return $null
 }
 
+# Capture all native output before inspecting it. Piping a native executable
+# directly to Select-Object -First 1 can close its output pipe early in Windows
+# PowerShell 5.1 and produce a misleading non-zero LASTEXITCODE.
+function Get-CheckedExecutableFirstLine {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [string[]]$Arguments = @(),
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $output = @(& $Path @Arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        $details = ($output | ForEach-Object { [string]$_ }) -join [Environment]::NewLine
+        throw "$Label failed with exit code $exitCode. $details"
+    }
+    foreach ($line in $output) {
+        if ($null -ne $line) { return [string]$line }
+    }
+    return ''
+}
+
 function Install-BundledToolchain {
     param([Parameter(Mandatory = $true)][string]$ArchivePath)
 
@@ -173,7 +194,7 @@ if ($UseSystemTools) {
         throw 'The CI runner must provide CMake, Ninja, and Python when -UseSystemTools is selected.'
     }
 
-    $cmakeVersionLine = (& $cmake --version | Select-Object -First 1)
+    $cmakeVersionLine = Get-CheckedExecutableFirstLine -Path $cmake -Arguments @('--version') -Label 'CMake'
     $cmakeMatch = [regex]::Match($cmakeVersionLine, '([0-9]+\.[0-9]+\.[0-9]+)')
     if (-not $cmakeMatch.Success -or [version]$cmakeMatch.Groups[1].Value -lt [version]'3.20.0') {
         throw "CMake 3.20 or newer is required; found '$cmakeVersionLine'."
@@ -191,7 +212,7 @@ if ($UseSystemTools) {
     $cmake = $bundledToolchain.CMake
     $ninja = $bundledToolchain.Ninja
     $python = $bundledToolchain.Python
-    $cmakeVersionLine = (& $cmake --version | Select-Object -First 1)
+    $cmakeVersionLine = Get-CheckedExecutableFirstLine -Path $cmake -Arguments @('--version') -Label 'CMake'
     if ($LASTEXITCODE -ne 0) { throw 'The bundled CMake executable failed to run.' }
     $cmakeMatch = [regex]::Match($cmakeVersionLine, '([0-9]+\.[0-9]+\.[0-9]+)')
     if (-not $cmakeMatch.Success -or [version]$cmakeMatch.Groups[1].Value -lt [version]'3.20.0') {
@@ -215,13 +236,13 @@ if ($UseSystemTools) {
         "$env:LOCALAPPDATA\Programs\CMake\bin\cmake.exe"
     )
     $cmake = Find-Executable 'cmake.exe' $cmakeCandidates
-    $cmakeVersionLine = if ($cmake) { (& $cmake --version | Select-Object -First 1) } else { '' }
+    $cmakeVersionLine = if ($cmake) { Get-CheckedExecutableFirstLine -Path $cmake -Arguments @('--version') -Label 'CMake' } else { '' }
     $cmakeMatch = [regex]::Match($cmakeVersionLine, '([0-9]+\.[0-9]+\.[0-9]+)')
     $cmakeVersionNumber = if ($cmakeMatch.Success) { [version]$cmakeMatch.Groups[1].Value } else { [version]'0.0.0' }
     if (-not $cmake -or $cmakeVersionNumber -lt [version]'3.20.0') {
         Invoke-WingetInstall -Id 'Kitware.CMake' -Version '3.31.6'
         $cmake = Find-Executable 'cmake.exe' $cmakeCandidates
-        $cmakeVersionLine = if ($cmake) { (& $cmake --version | Select-Object -First 1) } else { '' }
+        $cmakeVersionLine = if ($cmake) { Get-CheckedExecutableFirstLine -Path $cmake -Arguments @('--version') -Label 'CMake' } else { '' }
         $cmakeMatch = [regex]::Match($cmakeVersionLine, '([0-9]+\.[0-9]+\.[0-9]+)')
         $cmakeVersionNumber = if ($cmakeMatch.Success) { [version]$cmakeMatch.Groups[1].Value } else { [version]'0.0.0' }
     }
@@ -439,7 +460,7 @@ if (-not $bundledToolchain) {
     }
 }
 
-$cmakeVersion = (& $cmake --version | Select-Object -First 1)
+$cmakeVersion = Get-CheckedExecutableFirstLine -Path $cmake -Arguments @('--version') -Label 'CMake'
 $ninjaVersion = (& $ninja --version | Out-String).Trim()
 Write-Host "Build tools ready: $cmakeVersion; Ninja $ninjaVersion; $pythonVersion; llvm-mingw $llvmVersion." -ForegroundColor Green
 
