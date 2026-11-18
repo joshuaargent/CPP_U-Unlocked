@@ -222,7 +222,8 @@ try {
         'libraries/libcafe_rpx.a',
         'libraries/libcafe_title.a',
         'libraries/libcafe_latte.a',
-        'libraries/libzarchive.a'
+        'libraries/libzarchive.a',
+        'libraries/libzstd.a'
     )
     foreach ($record in $manifest.libraries) {
         $relative = [string]$record.path
