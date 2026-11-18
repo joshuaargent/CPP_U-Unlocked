@@ -2,7 +2,8 @@
 # All dependency source is downloaded from immutable commit archives by setup_deps.py.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-$toolchain = Join-Path $root 'toolchain'
+. (Join-Path $root 'tools\windows\toolchain-path.ps1')
+$toolchain = Get-UUnlockedToolchainRoot
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $third = Join-Path $engineRoot 'third_party'
 $work = Join-Path $engineRoot 'build-deps'

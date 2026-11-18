@@ -29,6 +29,11 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 0
 
+      - name: Install pinned Python for release packaging
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+
       - name: Resolve and validate release version
         id: version
         shell: pwsh
@@ -60,14 +65,51 @@ jobs:
             $vcpkgRoot = Split-Path $vcpkgCommand.Source
           }
           "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows zstd:x64-windows
+          & (Join-Path $vcpkgRoot 'vcpkg.exe') install sdl3:x64-windows-static zstd:x64-windows-static zlib:x64-windows-static
           if ($LASTEXITCODE -ne 0) { throw 'vcpkg dependency installation failed.' }
 
       - name: Fetch all pinned third-party sources
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           python engine/tools/setup_deps.py
           if ($LASTEXITCODE -ne 0) { throw 'Fetching pinned third-party sources failed.' }
+
+      - name: Bootstrap pinned Windows compiler
+        shell: pwsh
+        run: |
+          ./tools/windows/setup-build-environment.ps1 -UseSystemTools
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Windows compiler bootstrap failed.' }
+
+      - name: Compile pinned runtime dependencies for players
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./engine/tools/windows/build-deps.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Precompiled Windows dependency build failed.' }
+          if (-not (Test-Path 'engine/build-deps/prefix/lib/libvulkan-1.a')) {
+            throw 'The precompiled dependency prefix is incomplete.'
+          }
+
+      - name: Build the generic PowerPC recompiler for players
+        shell: pwsh
+        run: |
+          ./engine/tools/windows/build-recomp.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'The generic PowerPC recompiler build failed.' }
+          if (-not (Test-Path 'engine/build/recomp/cafe-recomp.exe')) {
+            throw 'The generic PowerPC recompiler executable is missing.'
+          }
+
+      - name: Build the generic Vulkan runtime for player releases
+        shell: pwsh
+        run: |
+          . ./tools/windows/toolchain-path.ps1
+          $compilerBin = Join-Path (Get-UUnlockedToolchainRoot) 'llvm-mingw/bin'
+          $env:PATH = "$compilerBin;$env:PATH"
+          ninja -j 2 -C engine/build cafe_runtime smash_host_compile_check_v3 smash_host_compile_check_v2
+          if ($LASTEXITCODE -ne 0) { throw 'The generic Vulkan runtime failed to compile.' }
 
       - name: Generate Windows application icon
         shell: pwsh
@@ -80,7 +122,7 @@ jobs:
       - name: Configure launcher release target
         shell: pwsh
         run: |
-          cmake -S engine/tests/launcher_release -B build/launcher-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_BUILD_TYPE=Release
+          cmake -S engine/tests/launcher_release -B build/launcher-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_BUILD_TYPE=Release
           if ($LASTEXITCODE -ne 0) { throw 'Launcher release configuration failed.' }
 
       - name: Build and link launcher
@@ -92,7 +134,7 @@ jobs:
       - name: Build bounded WUA extractor
         shell: pwsh
         run: |
-          cmake -S engine/tests/wua_extract_compile -B build/wua-extract-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DCMAKE_BUILD_TYPE=Release
+          cmake -S engine/tests/wua_extract_compile -B build/wua-extract-release -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static -DCMAKE_BUILD_TYPE=Release
           if ($LASTEXITCODE -ne 0) { throw 'WUA extractor configuration failed.' }
           cmake --build build/wua-extract-release --config Release --parallel 2
           if ($LASTEXITCODE -ne 0) { throw 'WUA extractor build failed.' }
@@ -114,73 +156,24 @@ jobs:
           if (-not (Test-Path -LiteralPath $titleLogo -PathType Leaf)) { throw 'Generated U Unlocked title logo is missing.' }
           Copy-Item -LiteralPath $titleLogo -Destination (Join-Path $engineBuild 'title-logo.png')
 
-          $vcpkgBin = Join-Path $env:VCPKG_ROOT 'installed/x64-windows/bin'
-          $dlls = @(Get-ChildItem -LiteralPath $vcpkgBin -Filter '*.dll' -File)
-          if (-not ($dlls | Where-Object { $_.Name -eq 'SDL3.dll' })) { throw 'SDL3.dll is missing from the runtime dependency output.' }
-          foreach ($dll in $dlls) { Copy-Item -LiteralPath $dll.FullName -Destination $runtimeDlls -Force }
+          if (-not (Test-Path -LiteralPath (Join-Path $runtimeDlls 'SDL3.dll') -PathType Leaf)) {
+            throw 'The pinned llvm-mingw SDL3 runtime DLL is missing from the precompiled dependency prefix.'
+          }
 
       - name: Create and verify release package
         shell: pwsh
         run: |
           ./engine/tools/windows/package-release.ps1 -Version "$env:U_UNLOCKED_VERSION"
-          if ($LASTEXITCODE -ne 0) { throw 'Release package creation failed.' }
+          ./engine/tests/verify_release_package.ps1
+
           $zip = Join-Path $PWD "dist/U-Unlocked-v$env:U_UNLOCKED_VERSION-Windows-Launcher.zip"
           $checksum = "$zip.sha256"
-          if (-not (Test-Path -LiteralPath $zip -PathType Leaf) -or -not (Test-Path -LiteralPath $checksum -PathType Leaf)) {
-            throw 'The release ZIP or SHA-256 sidecar is missing.'
-          }
-          $expected = ((Get-Content -LiteralPath $checksum -Raw).Trim() -split '\s+')[0]
-          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($expected -ne $actual) { throw 'The generated release checksum does not match the ZIP.' }
-
-          Add-Type -AssemblyName System.IO.Compression
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
-          try {
-            $entries = [Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)
-            foreach ($entry in $archive.Entries) {
-              $name = $entry.FullName.Replace([char]92, [char]47)
-              $parts = $name.Split([char]47)
-              if ([string]::IsNullOrWhiteSpace($name) -or $name.StartsWith('/') -or $name.Contains(':') -or
-                  ($parts -contains '..') -or ($parts -contains '.')) {
-                throw "Unsafe path in release ZIP: $name"
-              }
-              if ($entries.ContainsKey($name)) { throw "Duplicate path in release ZIP: $name" }
-              $entries.Add($name, $entry)
-            }
-            foreach ($required in @('package-manifest.json', 'U Unlocked.exe', 'wua_extract.exe', 'title-logo.png', 'update-launcher.ps1')) {
-              if (-not $entries.ContainsKey($required)) { throw "Release ZIP is missing root entry: $required" }
-            }
-
-            $reader = [IO.StreamReader]::new($entries['package-manifest.json'].Open())
-            try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
-            if ($manifest.schema_version -ne 1 -or $manifest.version -ne $env:U_UNLOCKED_VERSION) {
-              throw 'Release ZIP manifest schema or version is invalid.'
-            }
-            foreach ($file in $manifest.files) {
-              $name = [string]$file.name
-              if (-not $entries.ContainsKey($name) -or $name.Contains('/') -or $name.Contains([char]92) -or
-                  $file.sha256 -notmatch '^[0-9a-fA-F]{64}$') {
-                throw "Invalid or missing manifest entry: $name"
-              }
-              $entryStream = $entries[$name].Open()
-              $sha = [Security.Cryptography.SHA256]::Create()
-              try {
-                $actualFileHash = [BitConverter]::ToString($sha.ComputeHash($entryStream)).Replace('-', '').ToLowerInvariant()
-              } finally {
-                $sha.Dispose()
-                $entryStream.Dispose()
-              }
-              if ($actualFileHash -ne ([string]$file.sha256).ToLowerInvariant()) {
-                throw "Manifest hash mismatch for $name"
-              }
-            }
-          } finally {
-            $archive.Dispose()
+          if (-not (Test-Path -LiteralPath $zip -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $checksum -PathType Leaf)) {
+            throw 'The verified release ZIP or SHA-256 sidecar is missing.'
           }
           "RELEASE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RELEASE_CHECKSUM=$checksum" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
       - name: Publish GitHub release assets
         shell: pwsh
         env:

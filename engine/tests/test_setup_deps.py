@@ -1,5 +1,8 @@
+import hashlib
 import http.client
+import json
 import importlib.util
+import os
 from pathlib import Path
 import stat
 import tempfile
@@ -119,6 +122,100 @@ class DependencyArchiveTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 setup_deps.safe_extract(archive, destination)
 
+
+    def test_creates_and_installs_verified_dependency_bundle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            build_root = root / "build-engine"
+            dependency = build_root / "third_party" / "SDL"
+            dependency.mkdir(parents=True)
+            revision = "a" * 40
+            (dependency / setup_deps.MARKER).write_text(revision + "\n", encoding="ascii")
+            (dependency / "CMakeLists.txt").write_text("project(SDL)\n", encoding="utf-8")
+            bundle = root / "dependency-bundle.zip"
+            lock = {"SDL": {"revision": revision}}
+            with mock.patch.object(setup_deps, "ROOT", build_root):
+                setup_deps.create_dependency_bundle(bundle, lock)
+
+            install_root = root / "install-engine"
+            with mock.patch.object(setup_deps, "ROOT", install_root):
+                setup_deps.install_dependency_bundle(bundle, lock)
+            installed = install_root / "third_party" / "SDL"
+            self.assertEqual((installed / setup_deps.MARKER).read_text(encoding="ascii").strip(), revision)
+            self.assertEqual((installed / "CMakeLists.txt").read_text(encoding="utf-8"), "project(SDL)\n")
+
+    def test_rejects_modified_dependency_file_by_sha256(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            build_root = root / "build-engine"
+            dependency = build_root / "third_party" / "SDL"
+            dependency.mkdir(parents=True)
+            revision = "a" * 40
+            (dependency / setup_deps.MARKER).write_text(revision + "\n", encoding="ascii")
+            (dependency / "source.txt").write_text("original", encoding="utf-8")
+            lock = {"SDL": {"revision": revision}}
+            bundle = root / "dependency-bundle.zip"
+            with mock.patch.object(setup_deps, "ROOT", build_root):
+                setup_deps.create_dependency_bundle(bundle, lock)
+
+            tampered = root / "tampered-bundle.zip"
+            with zipfile.ZipFile(bundle, "r") as source, zipfile.ZipFile(tampered, "w") as output:
+                for entry in source.infolist():
+                    data = source.read(entry.filename)
+                    if entry.filename.endswith("/source.txt"):
+                        data = b"modified"
+                    output.writestr(entry.filename, data)
+
+            install_root = root / "install-engine"
+            with mock.patch.object(setup_deps, "ROOT", install_root):
+                with self.assertRaisesRegex(RuntimeError, "SHA-256 mismatch"):
+                    setup_deps.install_dependency_bundle(tampered, lock)
+            self.assertFalse((install_root / "third_party" / "SDL").exists())
+
+    def test_rejects_bundle_revision_mismatch_before_installing_any_dependency(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            build_root = root / "build-engine"
+            lock = {
+                "SDL": {"revision": "a" * 40},
+                "zlib": {"revision": "b" * 40},
+            }
+            for name, revision in (("SDL", "a" * 40), ("zlib", "c" * 40)):
+                dependency = build_root / "third_party" / name
+                dependency.mkdir(parents=True)
+                (dependency / setup_deps.MARKER).write_text(revision + "\n", encoding="ascii")
+                (dependency / "source.txt").write_text(name, encoding="utf-8")
+            bundle = root / "dependency-bundle.zip"
+            with mock.patch.object(setup_deps, "ROOT", build_root):
+                with self.assertRaisesRegex(RuntimeError, "cannot bundle a missing or unverified dependency"):
+                    setup_deps.create_dependency_bundle(bundle, lock)
+
+    def test_rejects_wrong_revision_inside_bundle_without_partial_install(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "bad-bundle.zip"
+            lock = {"SDL": {"revision": "a" * 40}, "zlib": {"revision": "b" * 40}}
+            wrong_marker = "wrong\n"
+            zlib_marker = "b" * 40 + "\n"
+            manifest = {
+                "schema_version": 1,
+                "revisions": {name: value["revision"] for name, value in lock.items()},
+                "files": [
+                    {"path": "third_party/SDL/" + setup_deps.MARKER, "sha256": hashlib.sha256(wrong_marker.encode("ascii")).hexdigest()},
+                    {"path": "third_party/zlib/" + setup_deps.MARKER, "sha256": hashlib.sha256(zlib_marker.encode("ascii")).hexdigest()},
+                ],
+            }
+            with zipfile.ZipFile(archive, "w") as output:
+                output.writestr("bundle/third_party/SDL/" + setup_deps.MARKER, wrong_marker)
+                output.writestr("bundle/third_party/zlib/" + setup_deps.MARKER, zlib_marker)
+                output.writestr("bundle/dependency-manifest.json", json.dumps(manifest))
+            install_root = root / "install-engine"
+            with mock.patch.object(setup_deps, "ROOT", install_root):
+                with self.assertRaisesRegex(RuntimeError, "revision mismatch"):
+                    setup_deps.install_dependency_bundle(archive, lock)
+            self.assertFalse((install_root / "third_party" / "SDL").exists())
+            self.assertFalse((install_root / "third_party" / "zlib").exists())
+
     def test_retries_interrupted_download_and_replaces_partial_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
             archive = Path(temporary) / "source.zip"
@@ -136,6 +233,34 @@ class DependencyArchiveTests(unittest.TestCase):
 
             self.assertEqual(urlopen.call_count, 2)
             self.assertEqual(archive.read_bytes(), b"abcdef")
+
+    def test_uses_optional_github_token_for_pinned_source_archives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            archive = Path(temporary) / "source.zip"
+            missing = setup_deps.urllib.error.HTTPError(
+                "https://github.com/example/repo/archive/revision.zip",
+                404,
+                "Not Found",
+                {},
+                None,
+            )
+
+            def reject_missing(request, timeout):
+                self.assertEqual(request.get_header("Authorization"), "Bearer test-token")
+                raise missing
+
+            with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "test-token"}):
+                with mock.patch.object(
+                    setup_deps.urllib.request, "urlopen", side_effect=reject_missing
+                ) as urlopen:
+                    with self.assertRaisesRegex(RuntimeError, "HTTP 404"):
+                        setup_deps.download_archive(
+                            "SDL",
+                            "https://github.com/example/repo/archive/revision.zip",
+                            archive,
+                        )
+            self.assertEqual(urlopen.call_count, 1)
+            self.assertFalse(archive.exists())
 
     def test_removes_partial_archive_after_all_download_attempts_fail(self):
         with tempfile.TemporaryDirectory() as temporary:

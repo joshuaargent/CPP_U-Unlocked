@@ -6,6 +6,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $PSScriptRoot 'toolchain-path.ps1')
+$toolchainRoot = Get-UUnlockedToolchainRoot
 $enginePath = Join-Path $repoRoot 'engine'
 
 $requiredSource = @(
@@ -20,6 +22,13 @@ $requiredSource = @(
     (Join-Path $enginePath 'tools\windows\build-smash.ps1'),
     (Join-Path $repoRoot 'tools\windows\build-from-library.ps1'),
     (Join-Path $repoRoot 'tools\windows\setup-build-environment.ps1'),
+    (Join-Path $repoRoot 'tools\windows\toolchain-path.ps1'),
+    (Join-Path $repoRoot 'tools\windows\install-prebuilt-dependencies.ps1'),
+    (Join-Path $repoRoot 'tools\windows\install-prebuilt-runtime.ps1'),
+    (Join-Path $repoRoot 'tools\windows\package-toolchain-bundle.ps1'),
+    (Join-Path $enginePath 'tools\windows\package-prebuilt-runtime.ps1'),
+    (Join-Path $enginePath 'tools\windows\package-prebuilt-dependencies.ps1'),
+    (Join-Path $repoRoot 'LICENSES\NINJA-APACHE-2.0.txt'),
     (Join-Path $enginePath 'tools\windows\package-release.ps1'),
     (Join-Path $repoRoot 'tools\windows\update-launcher.ps1'),
     (Join-Path $enginePath 'third_party\cemu_nex\LICENSE.txt'),
@@ -53,11 +62,14 @@ if ($gitCommand -and (Test-Path -LiteralPath (Join-Path $repoRoot '.git'))) {
 } else {
     # Release source bundles intentionally omit .git metadata. Scan the complete
     # source tree while excluding generated build outputs and downloaded toolchains.
-    $excludedRoots = @('toolchain', 'generated', 'Play', 'dist', 'engine/build', 'engine/build-deps', 'engine/third_party/ZArchive', 'engine/third_party/addrlib', 'engine/third_party/zlib', 'engine/third_party/SDL', 'engine/third_party/Vulkan-Headers', 'engine/third_party/zstd', 'engine/third_party/shaderc', 'engine/third_party/glslang', 'engine/third_party/spirv-headers', 'engine/third_party/spirv-tools', 'engine/third_party/stb')
+    $excludedRoots = @('toolchain', 'generated', 'Play', 'dist', 'engine/build', 'engine/build-deps', 'engine/build-prebuilt-runtime', 'engine/third_party/ZArchive', 'engine/third_party/addrlib', 'engine/third_party/zlib', 'engine/third_party/SDL', 'engine/third_party/Vulkan-Headers', 'engine/third_party/zstd', 'engine/third_party/shaderc', 'engine/third_party/glslang', 'engine/third_party/spirv-headers', 'engine/third_party/spirv-tools', 'engine/third_party/stb')
+    $binaryExtensions = @('.zip', '.exe', '.dll', '.a', '.obj', '.lib', '.pdb', '.png', '.ico', '.bin')
+
     $trackedFiles = @(Get-ChildItem -LiteralPath $repoRoot -File -Recurse -Force | Where-Object {
         $relative = $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/')
         $parts = $relative.Split('/')
         ($parts -notcontains '.git') -and
+        ([IO.Path]::GetExtension($_.Name) -notin $binaryExtensions) -and
         -not ($excludedRoots | Where-Object { $relative.StartsWith($_ + '/', [System.StringComparison]::OrdinalIgnoreCase) })
     } | ForEach-Object { $_.FullName.Substring($repoRoot.Length + 1).Replace('\', '/') })
 }
@@ -87,11 +99,14 @@ if ($legacyMatches.Count -gt 0) {
 }
 
 if (-not $SkipToolchainCheck) {
-    $compiler = Join-Path $repoRoot 'toolchain\llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
+    $compiler = Join-Path $toolchainRoot 'llvm-mingw\bin\x86_64-w64-mingw32-clang++.exe'
     $missingCommands = @(@('cmake', 'ninja', 'python') | Where-Object { -not (Get-Command $_ -ErrorAction SilentlyContinue) })
     if (-not (Test-Path -LiteralPath $compiler -PathType Leaf) -or $missingCommands.Count -gt 0) {
         if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { Write-Host "Missing compiler: $compiler" -ForegroundColor Yellow }
-        if ($missingCommands.Count -gt 0) { Write-Host "Missing commands: $($missingCommands -join ', ')" -ForegroundColor Yellow }
+        if ($missingCommands.Count -gt 0) {
+            $missingCommandsText = $missingCommands -join ', '
+            Write-Host "Missing commands: $missingCommandsText" -ForegroundColor Yellow
+        }
         throw 'The Windows build environment is incomplete. Run setup-build-environment.ps1.'
     }
 }

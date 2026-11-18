@@ -11,7 +11,7 @@ endif()
 # Linked as objects, not an archive: strong import implementations here must
 # replace the weak defaults in the generated imports.cpp, and the export
 # registrations must not be dropped by the linker.
-add_library(cafe_runtime OBJECT
+set(CAFE_RUNTIME_SOURCES
     src/memory.cpp
     src/loader.cpp
     src/dispatch.cpp
@@ -79,18 +79,39 @@ add_library(cafe_runtime OBJECT
     src/gx2/shader.cpp
     src/gx2/state.cpp
     src/gx2/surface.cpp
-    src/gx2/texture.cpp)
-target_include_directories(cafe_runtime PUBLIC include PRIVATE src)
-target_compile_features(cafe_runtime PUBLIC cxx_std_20)
+    src/gx2/texture.cpp
+)
+
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    file(GLOB_RECURSE CAFE_RUNTIME_PREBUILT_OBJECTS CONFIGURE_DEPENDS
+        "${CAFE_PREBUILT_RUNTIME_DIR}/objects/*.obj")
+    list(LENGTH CAFE_RUNTIME_PREBUILT_OBJECTS CAFE_RUNTIME_PREBUILT_OBJECT_COUNT)
+    if(CAFE_RUNTIME_PREBUILT_OBJECT_COUNT LESS 40 OR CAFE_RUNTIME_PREBUILT_OBJECT_COUNT GREATER 200)
+        message(FATAL_ERROR "The verified prebuilt runtime object set is incomplete: ${CAFE_RUNTIME_PREBUILT_OBJECT_COUNT} objects")
+    endif()
+    add_library(cafe_runtime OBJECT IMPORTED GLOBAL)
+    set_property(TARGET cafe_runtime PROPERTY IMPORTED_OBJECTS "${CAFE_RUNTIME_PREBUILT_OBJECTS}")
+    target_include_directories(cafe_runtime INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_features(cafe_runtime INTERFACE cxx_std_20)
+    set(CAFE_RUNTIME_LINK_SCOPE INTERFACE)
+    set(CAFE_RUNTIME_PREBUILT TRUE)
+    message(STATUS "Using ${CAFE_RUNTIME_PREBUILT_OBJECT_COUNT} verified precompiled generic runtime objects")
+else()
+    add_library(cafe_runtime OBJECT ${CAFE_RUNTIME_SOURCES})
+    target_include_directories(cafe_runtime PUBLIC include PRIVATE src)
+    target_compile_features(cafe_runtime PUBLIC cxx_std_20)
+    target_compile_options(cafe_runtime PRIVATE -Wall -Wextra -Wpedantic -Wno-missing-field-initializers)
+    set(CAFE_RUNTIME_LINK_SCOPE PUBLIC)
+    set(CAFE_RUNTIME_PREBUILT FALSE)
+endif()
 find_package(Vulkan REQUIRED)
 find_package(SDL3 REQUIRED CONFIG)
 # GLSL -> SPIR-V at run time.
 find_library(SHADERC_LIBRARY NAMES shaderc_shared REQUIRED)
-target_link_libraries(cafe_runtime PUBLIC cemu_nex cafe_rpx cafe_title ${CAFE_HOST_LIBS} Threads::Threads ZArchive::zarchive amd_addrlib cafe_latte
+target_link_libraries(cafe_runtime ${CAFE_RUNTIME_LINK_SCOPE} cemu_nex cafe_rpx cafe_title ${CAFE_HOST_LIBS} Threads::Threads ZArchive::zarchive amd_addrlib cafe_latte
     Vulkan::Vulkan SDL3::SDL3 ${SHADERC_LIBRARY})
-# Vulkan structures are initialised with only their sType.
-target_compile_options(cafe_runtime PRIVATE -Wall -Wextra -Wpedantic -Wno-missing-field-initializers)
 
+if(NOT CAFE_RUNTIME_PREBUILT)
 # The runtime's own shaders, compiled to SPIR-V at build time (headers in the build folder).
 add_executable(spirv_embed src/gpu/vulkan/spirv_embed.cpp)
 target_link_libraries(spirv_embed PRIVATE ${SHADERC_LIBRARY})
@@ -109,30 +130,47 @@ add_custom_command(OUTPUT ${CAFE_SHADER_OUT}/scale_comp.h
 target_sources(cafe_runtime PRIVATE ${CAFE_SHADER_OUT}/scale_comp.h)
 target_include_directories(cafe_runtime PRIVATE ${CAFE_SHADER_OUT})
 
+endif()
+
 # The title's file formats and the pictures and texts made from them
 # (title/): no runtime, so tests use them on synthetic data.
-add_library(cafe_title STATIC
-    src/title/archive.cpp
-    src/title/draw.cpp
-    src/title/font.cpp
-    src/title/image.cpp
-    src/title/text.cpp
-    src/title/title_screen.cpp)
-target_include_directories(cafe_title PUBLIC src)
-target_compile_features(cafe_title PUBLIC cxx_std_20)
-target_link_libraries(cafe_title PUBLIC ZLIB::ZLIB)
-target_compile_options(cafe_title PRIVATE -Wall -Wextra -Wpedantic)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    add_library(cafe_title STATIC IMPORTED GLOBAL)
+    set_target_properties(cafe_title PROPERTIES
+        IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libcafe_title.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src")
+    target_link_libraries(cafe_title INTERFACE ZLIB::ZLIB)
+else()
+    add_library(cafe_title STATIC
+        src/title/archive.cpp
+        src/title/draw.cpp
+        src/title/font.cpp
+        src/title/image.cpp
+        src/title/text.cpp
+        src/title/title_screen.cpp)
+    target_include_directories(cafe_title PUBLIC src)
+    target_compile_features(cafe_title PUBLIC cxx_std_20)
+    target_link_libraries(cafe_title PUBLIC ZLIB::ZLIB)
+    target_compile_options(cafe_title PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 # Latte shader decoding and translation, shared by the runtime and tools.
-add_library(cafe_latte STATIC
-    src/latte/isa.cpp
-    src/latte/decode.cpp
-    src/latte/disassemble.cpp
-    src/latte/environment.cpp
-    src/latte/translate.cpp)
-target_include_directories(cafe_latte PUBLIC src)
-target_compile_features(cafe_latte PUBLIC cxx_std_20)
-target_compile_options(cafe_latte PRIVATE -Wall -Wextra -Wpedantic)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    add_library(cafe_latte STATIC IMPORTED GLOBAL)
+    set_target_properties(cafe_latte PROPERTIES
+        IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libcafe_latte.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/src")
+else()
+    add_library(cafe_latte STATIC
+        src/latte/isa.cpp
+        src/latte/decode.cpp
+        src/latte/disassemble.cpp
+        src/latte/environment.cpp
+        src/latte/translate.cpp)
+    target_include_directories(cafe_latte PUBLIC src)
+    target_compile_features(cafe_latte PUBLIC cxx_std_20)
+    target_compile_options(cafe_latte PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 add_executable(cafe-shader src/latte/cafe_shader_main.cpp)
 target_link_libraries(cafe-shader PRIVATE cafe_latte ${SHADERC_LIBRARY})

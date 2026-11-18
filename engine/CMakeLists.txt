@@ -7,43 +7,71 @@ if(WIN32)
     set(CAFE_DEPS_PREFIX ${CMAKE_SOURCE_DIR}/build-deps/prefix)
     list(APPEND CMAKE_PREFIX_PATH ${CAFE_DEPS_PREFIX})
     set(ZLIB_USE_STATIC_LIBS ON)
+    find_package(ZLIB REQUIRED)
     set(Vulkan_INCLUDE_DIR ${CAFE_DEPS_PREFIX}/include CACHE PATH "")
     set(Vulkan_LIBRARY ${CAFE_DEPS_PREFIX}/lib/libvulkan-1.a CACHE FILEPATH "")
+    # CMake's generated glob-verification scripts parse backslashes as escapes.
+    # Normalize this externally supplied Windows path before it is used in GLOB.
+    file(TO_CMAKE_PATH "$ENV{U_UNLOCKED_PREBUILT_RUNTIME_DIR}" CAFE_PREBUILT_RUNTIME_DIR)
 elseif(NOT UNIX)
     message(FATAL_ERROR "The safe extraction utility currently requires a POSIX host.")
 endif()
 
-add_subdirectory(third_party/ZArchive EXCLUDE_FROM_ALL)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    add_library(zarchive STATIC IMPORTED GLOBAL)
+    set_target_properties(zarchive PROPERTIES
+        IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libzarchive.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/third_party/ZArchive")
+    target_link_libraries(zarchive INTERFACE ZLIB::ZLIB "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libzstd.a")
+    add_library(ZArchive::zarchive ALIAS zarchive)
+else()
+    add_subdirectory(third_party/ZArchive EXCLUDE_FROM_ALL)
+endif()
 
 # AMD's surface address library (MIT), in its R600 variant for the Wii U GPU:
 # GX2 surface layouts must match the console's exactly.
 set(ADDRLIB_DIR ${CMAKE_SOURCE_DIR}/third_party/addrlib)
-add_library(amd_addrlib STATIC EXCLUDE_FROM_ALL
-    ${ADDRLIB_DIR}/src/addrinterface.cpp
-    ${ADDRLIB_DIR}/src/core/addrelemlib.cpp
-    ${ADDRLIB_DIR}/src/core/addrlib.cpp
-    ${ADDRLIB_DIR}/src/core/addrobject.cpp
-    ${ADDRLIB_DIR}/src/r600/r600addrlib.cpp)
-target_include_directories(amd_addrlib SYSTEM PUBLIC ${ADDRLIB_DIR}/include)
-target_include_directories(amd_addrlib PRIVATE ${ADDRLIB_DIR}/src)
-target_compile_features(amd_addrlib PRIVATE cxx_std_17)
-target_compile_options(amd_addrlib PRIVATE -w)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    add_library(amd_addrlib STATIC IMPORTED GLOBAL)
+    set_target_properties(amd_addrlib PROPERTIES
+        IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libamd_addrlib.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${ADDRLIB_DIR}/include")
+else()
+    add_library(amd_addrlib STATIC EXCLUDE_FROM_ALL
+        ${ADDRLIB_DIR}/src/addrinterface.cpp
+        ${ADDRLIB_DIR}/src/core/addrelemlib.cpp
+        ${ADDRLIB_DIR}/src/core/addrlib.cpp
+        ${ADDRLIB_DIR}/src/core/addrobject.cpp
+        ${ADDRLIB_DIR}/src/r600/r600addrlib.cpp)
+    target_include_directories(amd_addrlib SYSTEM PUBLIC ${ADDRLIB_DIR}/include)
+    target_include_directories(amd_addrlib PRIVATE ${ADDRLIB_DIR}/src)
+    target_compile_features(amd_addrlib PRIVATE cxx_std_17)
+    target_compile_options(amd_addrlib PRIVATE -w)
+endif()
 
 # Cemu's NEX client (MPL 2.0, third_party/cemu_nex/LICENSE.txt): PRUDP and the
 # friends service, for Nintendo Network (Pretendo) play. Built from Cemu's
 # files with cemu_compat.h standing in for the rest of Cemu.
 set(CEMU_NEX_DIR ${CMAKE_SOURCE_DIR}/third_party/cemu_nex)
-add_library(cemu_nex STATIC EXCLUDE_FROM_ALL
-    ${CEMU_NEX_DIR}/Cemu/nex/nex.cpp
-    ${CEMU_NEX_DIR}/Cemu/nex/nexFriends.cpp
-    ${CEMU_NEX_DIR}/Cemu/nex/nexThread.cpp
-    ${CEMU_NEX_DIR}/Cemu/nex/prudp.cpp
-    ${CEMU_NEX_DIR}/util/crypto/md5.cpp)
-target_include_directories(cemu_nex SYSTEM PUBLIC ${CEMU_NEX_DIR})
-target_compile_features(cemu_nex PUBLIC cxx_std_20)
-target_compile_options(cemu_nex PRIVATE -w -include ${CEMU_NEX_DIR}/cemu_compat.h)
-if(WIN32)
-    target_link_libraries(cemu_nex PUBLIC ws2_32)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    add_library(cemu_nex STATIC IMPORTED GLOBAL)
+    set_target_properties(cemu_nex PROPERTIES
+        IMPORTED_LOCATION "${CAFE_PREBUILT_RUNTIME_DIR}/libraries/libcemu_nex.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${CEMU_NEX_DIR}")
+    target_link_libraries(cemu_nex INTERFACE ws2_32)
+else()
+    add_library(cemu_nex STATIC EXCLUDE_FROM_ALL
+        ${CEMU_NEX_DIR}/Cemu/nex/nex.cpp
+        ${CEMU_NEX_DIR}/Cemu/nex/nexFriends.cpp
+        ${CEMU_NEX_DIR}/Cemu/nex/nexThread.cpp
+        ${CEMU_NEX_DIR}/Cemu/nex/prudp.cpp
+        ${CEMU_NEX_DIR}/util/crypto/md5.cpp)
+    target_include_directories(cemu_nex SYSTEM PUBLIC ${CEMU_NEX_DIR})
+    target_compile_features(cemu_nex PUBLIC cxx_std_20)
+    target_compile_options(cemu_nex PRIVATE -w -include ${CEMU_NEX_DIR}/cemu_compat.h)
+    if(WIN32)
+        target_link_libraries(cemu_nex PUBLIC ws2_32)
+    endif()
 endif()
 
 if(WIN32)
@@ -66,6 +94,18 @@ endif()
 # Function-level PowerPC -> C++ recompiler for the standalone port.
 add_subdirectory(recomp)
 add_subdirectory(runtime)
+if(WIN32 AND CAFE_PREBUILT_RUNTIME_DIR AND EXISTS "${CAFE_PREBUILT_RUNTIME_DIR}/runtime-manifest.json")
+    foreach(variant IN ITEMS v2 v3)
+        file(GLOB_RECURSE CAFE_PREBUILT_HOST_OBJECTS CONFIGURE_DEPENDS
+            "${CAFE_PREBUILT_RUNTIME_DIR}/host/${variant}/*.obj")
+        list(LENGTH CAFE_PREBUILT_HOST_OBJECTS CAFE_PREBUILT_HOST_OBJECT_COUNT)
+        if(NOT CAFE_PREBUILT_HOST_OBJECT_COUNT EQUAL 3)
+            message(FATAL_ERROR "The prebuilt ${variant} host object set is incomplete: ${CAFE_PREBUILT_HOST_OBJECT_COUNT} objects")
+        endif()
+        add_library(smash_host_${variant} OBJECT IMPORTED GLOBAL)
+        set_property(TARGET smash_host_${variant} PROPERTY IMPORTED_OBJECTS "${CAFE_PREBUILT_HOST_OBJECTS}")
+    endforeach()
+endif()
 
 if(WIN32)
     # Compile the game-host translation units in CI even when no copyrighted

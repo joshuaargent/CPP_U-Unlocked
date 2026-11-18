@@ -19,14 +19,74 @@ $Rpx = (Resolve-Path -LiteralPath $Rpx).Path
 $BaseRpx = (Resolve-Path -LiteralPath $BaseRpx).Path
 
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-$toolchain = Join-Path $root 'toolchain'
+. (Join-Path $root 'tools\windows\toolchain-path.ps1')
+$toolchain = Get-UUnlockedToolchainRoot
 $engineRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-$build = Join-Path $engineRoot 'build'
+$build = if (-not [string]::IsNullOrWhiteSpace($env:U_UNLOCKED_ENGINE_BUILD_DIR)) { [IO.Path]::GetFullPath($env:U_UNLOCKED_ENGINE_BUILD_DIR) } else { Join-Path $engineRoot 'build' }
 $prefix = Join-Path $engineRoot 'build-deps\prefix'
 $play = Join-Path $root 'Play'
-$updateGenerated = Join-Path $root 'generated\smash'
-$baseGenerated = Join-Path $root 'generated\smash-base'
+$cacheBase = if (-not [string]::IsNullOrWhiteSpace($env:U_UNLOCKED_BUILD_CACHE_ROOT)) { [IO.Path]::GetFullPath($env:U_UNLOCKED_BUILD_CACHE_ROOT) } elseif ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'U Unlocked\BuildCache' } else { Join-Path $env:TEMP 'U Unlocked\BuildCache' }
+$updateGenerated = Join-Path $cacheBase 'generated\smash'
+$baseGenerated = Join-Path $cacheBase 'generated\smash-base'
 $buildJobs = if ($env:U_UNLOCKED_BUILD_JOBS -match '^[0-9]+$') { [int]$env:U_UNLOCKED_BUILD_JOBS } else { 2 }
+function Get-Sha256([string]$Path) { return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
+
+function Test-GeneratedCodeCache {
+    param([string]$RpxPath, [string]$OutputDirectory, [string]$RecompilerPath)
+    $manifestPath = Join-Path $OutputDirectory '.u-unlocked-cache.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $false }
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        if ($manifest.schema_version -ne 1 -or $manifest.rpx_sha256 -ne (Get-Sha256 $RpxPath) -or
+            $manifest.recompiler_sha256 -ne (Get-Sha256 $RecompilerPath) -or $manifest.arguments -ne '--any-rpx' -or
+            -not ($manifest.files -is [array]) -or $manifest.files.Count -eq 0) { return $false }
+        $expected = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($file in $manifest.files) {
+            $relative = [string]$file.path
+            $hash = [string]$file.sha256
+            if ([string]::IsNullOrWhiteSpace($relative) -or $relative.Contains('..') -or [IO.Path]::IsPathRooted($relative) -or
+                $hash.Length -ne 64 -or $hash -notmatch '^[0-9a-fA-F]{64}' -or $expected.ContainsKey($relative)) { return $false }
+            $expected.Add($relative, $hash.ToLowerInvariant())
+        }
+        $actualFiles = @(Get-ChildItem -LiteralPath $OutputDirectory -File -Recurse | Where-Object { $_.FullName -ne $manifestPath })
+        if ($actualFiles.Count -ne $expected.Count) { return $false }
+        foreach ($file in $actualFiles) {
+            $relative = $file.FullName.Substring($OutputDirectory.Length + 1).Replace('\', '/')
+            if (-not $expected.ContainsKey($relative) -or (Get-Sha256 $file.FullName) -ne $expected[$relative]) { return $false }
+        }
+        return $true
+    } catch { return $false }
+}
+
+function Invoke-CachedRecompile {
+    param([string]$Label, [string]$RpxPath, [string]$OutputDirectory, [string]$RecompilerPath)
+    if (Test-GeneratedCodeCache -RpxPath $RpxPath -OutputDirectory $OutputDirectory -RecompilerPath $RecompilerPath) {
+        Write-Host "$Label RPX and generated code are unchanged; reusing the verified local recompile cache." -ForegroundColor Green
+        return
+    }
+    if (Test-Path -LiteralPath $OutputDirectory -PathType Container) { Remove-Item -LiteralPath $OutputDirectory -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
+    Write-Host "Recompiling the user's $Label RPX locally..." -ForegroundColor Cyan
+    & $RecompilerPath $RpxPath $OutputDirectory --any-rpx
+    if ($LASTEXITCODE) { throw "cafe-recomp failed on the $Label RPX." }
+    $generatedFiles = @(Get-ChildItem -LiteralPath $OutputDirectory -File -Recurse)
+    if ($generatedFiles.Count -eq 0) { throw "cafe-recomp produced no files for the $Label RPX." }
+    $manifest = [ordered]@{
+        schema_version = 1
+        rpx_sha256 = Get-Sha256 $RpxPath
+        recompiler_sha256 = Get-Sha256 $RecompilerPath
+        arguments = '--any-rpx'
+        files = @(
+            foreach ($file in $generatedFiles) {
+                [ordered]@{ path = $file.FullName.Substring($OutputDirectory.Length + 1).Replace('\', '/'); sha256 = Get-Sha256 $file.FullName }
+            }
+        )
+    }
+    $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutputDirectory '.u-unlocked-cache.json') -Encoding UTF8
+    if (-not (Test-GeneratedCodeCache -RpxPath $RpxPath -OutputDirectory $OutputDirectory -RecompilerPath $RecompilerPath)) {
+        throw "Generated $Label RPX cache failed its post-build integrity check."
+    }
+}
 $stbHeader = Join-Path $engineRoot 'third_party\stb\stb_truetype.h'
 if (-not (Test-Path -LiteralPath $stbHeader -PathType Leaf)) {
     $python = (Get-Command python).Source
@@ -37,22 +97,24 @@ if (-not (Test-Path (Join-Path $prefix 'lib\libvulkan-1.a'))) {
     & (Join-Path $PSScriptRoot 'build-deps.ps1')
     if ($LASTEXITCODE) { throw 'Building pinned runtime dependencies failed.' }
 }
-& (Join-Path $PSScriptRoot 'build-recomp.ps1')
-if ($LASTEXITCODE) { throw 'Building the recompilation tools failed.' }
-
-$env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $prefix 'bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
 $recompiler = Join-Path $build 'recomp\cafe-recomp.exe'
 if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) {
-    throw "The cafe-recomp executable was not built: $recompiler"
+    & (Join-Path $PSScriptRoot 'build-recomp.ps1')
+    if ($LASTEXITCODE) { throw 'Building the recompilation tools failed.' }
 }
+if (-not (Test-Path -LiteralPath $recompiler -PathType Leaf)) { throw "The cafe-recomp executable is missing: $recompiler" }
 
-Write-Host 'Recompiling the user's update RPX locally...' -ForegroundColor Cyan
-& $recompiler $Rpx $updateGenerated --any-rpx
-if ($LASTEXITCODE) { throw 'cafe-recomp failed on the update RPX.' }
-
-Write-Host 'Recompiling the user's base-game RPX locally...' -ForegroundColor Cyan
-& $recompiler $BaseRpx $baseGenerated --any-rpx
-if ($LASTEXITCODE) { throw 'cafe-recomp failed on the base-game RPX.' }
+$env:PATH = (@((Join-Path $toolchain 'llvm-mingw\bin'), (Join-Path $prefix 'bin'), "$env:SystemRoot\System32") + @($env:PATH -split ';' | Where-Object { $_ })) -join ';'
+$prebuiltRuntimeDirectory = $env:U_UNLOCKED_PREBUILT_RUNTIME_DIR
+if (-not [string]::IsNullOrWhiteSpace($prebuiltRuntimeDirectory) -and
+    (Test-Path -LiteralPath (Join-Path $prebuiltRuntimeDirectory 'runtime-manifest.json') -PathType Leaf)) {
+    $env:U_UNLOCKED_PREBUILT_RUNTIME_DIR = $prebuiltRuntimeDirectory
+    Write-Host 'Using the release-matched precompiled generic runtime; only local game code and final links remain.' -ForegroundColor Green
+} else {
+    Remove-Item Env:\U_UNLOCKED_PREBUILT_RUNTIME_DIR -ErrorAction SilentlyContinue
+}
+Invoke-CachedRecompile -Label 'update' -RpxPath $Rpx -OutputDirectory $updateGenerated -RecompilerPath $recompiler
+Invoke-CachedRecompile -Label 'base-game' -RpxPath $BaseRpx -OutputDirectory $baseGenerated -RecompilerPath $recompiler
 
 $configureArgs = @(
     '-S', $engineRoot, '-B', $build, '-G', 'Ninja',
@@ -67,26 +129,53 @@ $configureArgs = @(
 & cmake @configureArgs
 if ($LASTEXITCODE) { throw 'CMake configuration of the complete U Unlocked runtime failed.' }
 
+$prebuiltLauncher = $env:U_UNLOCKED_PREBUILT_LAUNCHER
+$prebuiltWuaExtractor = $env:U_UNLOCKED_PREBUILT_WUA_EXTRACTOR
+if (-not [string]::IsNullOrWhiteSpace($prebuiltLauncher) -and
+    -not (Test-Path -LiteralPath $prebuiltLauncher -PathType Leaf)) {
+    throw "The verified release launcher is missing: $prebuiltLauncher"
+}
+if (-not [string]::IsNullOrWhiteSpace($prebuiltWuaExtractor) -and
+    -not (Test-Path -LiteralPath $prebuiltWuaExtractor -PathType Leaf)) {
+    throw "The verified release WUA extractor is missing: $prebuiltWuaExtractor"
+}
+
 $targets = @(
     'smash_update_v3',
     'smash_update_v2',
     'smash_base_v3',
-    'smash_base_v2',
-    'smash-launcher',
-    'wua_extract'
+    'smash_base_v2'
 )
-Write-Host 'Building the Vulkan runtime, launcher, and all four game executables...' -ForegroundColor Cyan
+if ([string]::IsNullOrWhiteSpace($prebuiltLauncher)) { $targets += 'smash-launcher' }
+if ([string]::IsNullOrWhiteSpace($prebuiltWuaExtractor)) { $targets += 'wua_extract' }
+
+if (-not [string]::IsNullOrWhiteSpace($prebuiltLauncher) -and
+    -not [string]::IsNullOrWhiteSpace($prebuiltWuaExtractor)) {
+    Write-Host 'Building the Vulkan runtime and four game executables; reusing the verified release launcher and WUA extractor.' -ForegroundColor Cyan
+} else {
+    Write-Host 'Building the Vulkan runtime, launcher, WUA extractor, and all four game executables...' -ForegroundColor Cyan
+}
 & ninja -j $buildJobs -C $build @targets
 if ($LASTEXITCODE) { throw 'The complete U Unlocked build failed.' }
 
 New-Item -ItemType Directory -Force $play | Out-Null
+$launcherSource = if ([string]::IsNullOrWhiteSpace($prebuiltLauncher)) {
+    Join-Path $build 'U Unlocked.exe'
+} else {
+    $prebuiltLauncher
+}
+$wuaExtractorSource = if ([string]::IsNullOrWhiteSpace($prebuiltWuaExtractor)) {
+    Join-Path $build 'wua_extract.exe'
+} else {
+    $prebuiltWuaExtractor
+}
 $outputs = @(
     @{ Source = (Join-Path $build 'smash.exe'); Destination = 'smash.exe' },
     @{ Source = (Join-Path $build 'smash-compat.exe'); Destination = 'smash-compat.exe' },
     @{ Source = (Join-Path $build 'smash-base.exe'); Destination = 'smash-base.exe' },
     @{ Source = (Join-Path $build 'smash-base-compat.exe'); Destination = 'smash-base-compat.exe' },
-    @{ Source = (Join-Path $build 'U Unlocked.exe'); Destination = 'U Unlocked.exe' },
-    @{ Source = (Join-Path $build 'wua_extract.exe'); Destination = 'wua_extract.exe' }
+    @{ Source = $launcherSource; Destination = 'U Unlocked.exe' },
+    @{ Source = $wuaExtractorSource; Destination = 'wua_extract.exe' }
 )
 foreach ($output in $outputs) {
     if (-not (Test-Path -LiteralPath $output.Source -PathType Leaf)) {

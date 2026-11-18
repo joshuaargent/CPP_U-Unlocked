@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - 'feature/**'
   pull_request:
     branches:
       - main
@@ -123,6 +122,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Install pinned Python for release packaging
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+
       - name: Bootstrap compiler and use runner build utilities
         shell: pwsh
         run: |
@@ -131,9 +135,64 @@ jobs:
 
       - name: Fetch and build pinned Vulkan/runtime dependencies
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           ./engine/tools/windows/build-deps.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Pinned runtime dependency build failed.' }
+
+      - name: Package, relocate, and verify precompiled player dependencies
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'u-unlocked-prebuilt-dependencies.zip'
+          & ./engine/tools/windows/package-prebuilt-dependencies.ps1 -EngineRoot (Join-Path $PWD 'engine') -OutputArchive $archive
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'The precompiled dependency archive was not created.' }
+
+          $testEngine = Join-Path $env:RUNNER_TEMP 'relocated-engine'
+          New-Item -ItemType Directory -Force -Path (Join-Path $testEngine 'tools/windows') | Out-Null
+          Copy-Item -LiteralPath 'engine/dependencies.lock.json' -Destination $testEngine
+          Copy-Item -LiteralPath 'engine/tools/windows/build-deps.ps1' -Destination (Join-Path $testEngine 'tools/windows/build-deps.ps1')
+          & ./tools/windows/install-prebuilt-dependencies.ps1 -ArchivePath $archive -EngineRoot $testEngine
+          if (-not (Test-Path -LiteralPath (Join-Path $testEngine 'build-deps/prefix/lib/libvulkan-1.a') -PathType Leaf)) {
+            throw 'The relocated prebuilt Vulkan import library is missing.'
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $testEngine 'build-deps/prefix/bin/SDL3.dll') -PathType Leaf)) {
+            throw 'The relocated prebuilt SDL3 runtime is missing.'
+          }
+
+          $checkProject = Join-Path $env:RUNNER_TEMP 'prebuilt-sdl-cmake-check'
+          New-Item -ItemType Directory -Force -Path $checkProject | Out-Null
+          @'
+          cmake_minimum_required(VERSION 3.20)
+          project(PrebuiltSDLCheck LANGUAGES C CXX)
+          find_package(SDL3 REQUIRED CONFIG)
+          add_executable(prebuilt_sdl_check main.cpp)
+          target_link_libraries(prebuilt_sdl_check PRIVATE SDL3::SDL3)
+          '@ | Set-Content -LiteralPath (Join-Path $checkProject 'CMakeLists.txt') -Encoding UTF8
+          @'
+          #define SDL_MAIN_HANDLED
+          #include <SDL3/SDL.h>
+          int main() { return 0; }
+          '@ | Set-Content -LiteralPath (Join-Path $checkProject 'main.cpp') -Encoding UTF8
+          . ./tools/windows/toolchain-path.ps1
+          $compilerBin = Join-Path (Get-UUnlockedToolchainRoot) 'llvm-mingw/bin'
+          $env:PATH = "$compilerBin;$env:PATH"
+          $relocatedPrefix = Join-Path $testEngine 'build-deps/prefix'
+          cmake -S $checkProject -B (Join-Path $checkProject 'build') -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=x86_64-w64-mingw32-clang -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-clang++ "-DCMAKE_PREFIX_PATH=$relocatedPrefix"
+          if ($LASTEXITCODE -ne 0) { throw 'The relocated SDL3 CMake package did not configure.' }
+          cmake --build (Join-Path $checkProject 'build')
+          if ($LASTEXITCODE -ne 0) { throw 'The relocated SDL3 package did not compile and link.' }
+
+      - name: Create and verify the pinned dependency release bundle
+        shell: pwsh
+        run: |
+          $bundle = Join-Path $env:RUNNER_TEMP 'u-unlocked-dependency-bundle.zip'
+          python engine/tools/setup_deps.py --bundle-output $bundle
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $bundle -PathType Leaf)) {
+            throw 'Creating the pinned dependency release bundle failed.'
+          }
+          python engine/tools/setup_deps.py --bundle-archive $bundle
+          if ($LASTEXITCODE -ne 0) { throw 'Verifying the pinned dependency release bundle failed.' }
 
       - name: Build recompiler and runtime build utilities
         shell: pwsh
@@ -141,10 +200,19 @@ jobs:
           ./engine/tools/windows/build-recomp.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Recompiler and function finder build failed.' }
 
+      - name: Generate Windows game executable resource icon
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          if (-not (Test-Path -LiteralPath 'engine/runtime/res/u-unlocked.ico' -PathType Leaf)) {
+            throw 'The Windows game executable resource icon was not generated.'
+          }
+
       - name: Configure generated-code compile fixtures
         shell: pwsh
         run: |
-          $compilerBin = (Resolve-Path 'toolchain/llvm-mingw/bin').Path
+          . ./tools/windows/toolchain-path.ps1
+          $compilerBin = Join-Path (Get-UUnlockedToolchainRoot) 'llvm-mingw/bin'
           $env:PATH = "$compilerBin;$env:PATH"
           $updateFixture = (Resolve-Path 'engine/tests/cmake_game_targets/fixtures/update').Path
           $baseFixture = (Resolve-Path 'engine/tests/cmake_game_targets/fixtures/base').Path
@@ -154,10 +222,18 @@ jobs:
       - name: Compile Vulkan runtime, game host, CPU variants, launcher, and WUA tool
         shell: pwsh
         run: |
-          $compilerBin = (Resolve-Path 'toolchain/llvm-mingw/bin').Path
+          . ./tools/windows/toolchain-path.ps1
+          $compilerBin = Join-Path (Get-UUnlockedToolchainRoot) 'llvm-mingw/bin'
           $env:PATH = "$compilerBin;$env:PATH"
-          ninja -j 2 -C engine/build cafe_runtime smash_host_compile_check_v3 smash_host_compile_check_v2 smash_update_generated_v3 smash_update_generated_v2 smash_base_generated_v3 smash_base_generated_v2 smash-launcher wua_extract
+          ninja -j 2 -C engine/build cafe_runtime smash_host_compile_check_v3 smash_host_compile_check_v2 smash_update_generated_v3 smash_update_generated_v2 smash_base_generated_v3 smash_base_generated_v2 smash_update_v3 smash_update_v2 smash_base_v3 smash_base_v2 smash-launcher wua_extract
           if ($LASTEXITCODE -ne 0) { throw 'The complete Vulkan runtime, host, CPU variants, launcher, or WUA extractor failed to compile/link.' }
+
+      - name: Build and verify the complete player release package
+        shell: pwsh
+        run: |
+          ./tools/windows/new-u-unlocked-icon.ps1 -SourceRoot (Join-Path $PWD 'engine')
+          ./engine/tools/windows/package-release.ps1
+          ./engine/tests/verify_release_package.ps1
 
   validate:
     name: Validate source tree and project scripts
@@ -213,8 +289,9 @@ jobs:
         shell: pwsh
         run: |
           $root = (Resolve-Path '.').Path
-          $scriptRoots = @((Join-Path $root 'tools'), (Join-Path $root 'engine/tools'))
+          $scriptRoots = @((Join-Path $root 'tools'), (Join-Path $root 'engine/tools'), (Join-Path $root 'engine/tests'))
           $files = @($scriptRoots | ForEach-Object { Get-ChildItem -Path $_ -Filter '*.ps1' -Recurse -File })
+          $allParseErrors = @()
           foreach ($file in $files) {
             $tokens = $null
             $parseErrors = $null
@@ -223,11 +300,20 @@ jobs:
               [ref]$tokens,
               [ref]$parseErrors
             ) | Out-Null
-            if ($parseErrors.Count -gt 0) {
-              $parseErrors | ForEach-Object { Write-Error "$($file.FullName): $($_.Message)" }
-              throw "PowerShell syntax validation failed: $($file.FullName)"
+            foreach ($parseError in $parseErrors) {
+              $allParseErrors += "$($file.FullName):$($parseError.Extent.StartLineNumber):$($parseError.Extent.StartColumnNumber): $($parseError.Message)"
             }
           }
+          if ($allParseErrors.Count -gt 0) {
+            $allParseErrors | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+            throw 'PowerShell syntax validation failed. See all file and line diagnostics above.'
+          }
+
+      - name: Test prebuilt dependency installer integrity and rollback
+        shell: pwsh
+        run: |
+          & pwsh -NoProfile -File engine/tests/prebuilt_dependency_installer_tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Prebuilt dependency installer tests failed.' }
 
       - name: Test runtime activation recovery and rollback
         shell: pwsh
@@ -253,6 +339,7 @@ jobs:
         run: |
           $required = @(
             'LICENSES/RECOMPILATION-MIT-LICENSE.txt',
+            'LICENSES/NINJA-APACHE-2.0.txt',
             'engine/third_party/cemu_nex/LICENSE.txt',
             'engine/third_party/tinyxml2/LICENSE.txt'
           )

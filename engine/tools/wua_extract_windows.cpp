@@ -251,7 +251,10 @@ void extract_file(ZArchiveReader& reader, const Entry& entry, const fs::path& ro
     }
 
     try {
-        std::array<uint8_t, 1024 * 1024> buffer{};
+        // Keep the 1 MiB transfer buffer on the heap. A large local array can
+        // inflate the executable's entry-point stack frame under whole-TU
+        // optimisation, causing even the no-argument usage path to overflow.
+        std::vector<uint8_t> buffer(1024 * 1024);
         uint64_t offset = 0;
         while (offset < entry.size) {
             const uint64_t amount = std::min<uint64_t>(buffer.size(), entry.size - offset);

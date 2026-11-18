@@ -2,6 +2,7 @@
 """Fetch the exact dependency revisions in dependencies.lock.json without requiring Git."""
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -137,10 +138,14 @@ def download_archive(name, url, archive):
     attempts = 5
     last_error = None
     for attempt in range(1, attempts + 1):
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": "U-Unlocked-Dependency-Bootstrap", "Accept": "application/zip"}
-        )
+        headers = {
+            "User-Agent": "U-Unlocked-Dependency-Bootstrap",
+            "Accept": "application/zip",
+        }
+        github_token = os.environ.get("GITHUB_TOKEN", "").strip()
+        if github_token:
+            headers["Authorization"] = f"Bearer {github_token}"
+        request = urllib.request.Request(url, headers=headers)
         try:
             response = urllib.request.urlopen(request, timeout=90)
         except urllib.error.HTTPError as error:
@@ -259,11 +264,163 @@ def fetch_dependency(name, dependency):
     print(f"{name}: {revision} (downloaded and pinned)")
 
 
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def create_dependency_bundle(output, dependencies):
+    """Package already-verified pinned sources into a release bundle."""
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.unlink(missing_ok=True)
+    manifest = {"schema_version": 1, "revisions": {}, "files": []}
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as bundle:
+        for name, dependency in sorted(dependencies.items()):
+            source = ROOT / "third_party" / name
+            marker = source / MARKER
+            if not marker.is_file() or marker.read_text(encoding="ascii").strip() != dependency["revision"]:
+                raise RuntimeError(f"{name}: cannot bundle a missing or unverified dependency; expected {dependency['revision']}.")
+            manifest["revisions"][name] = dependency["revision"]
+            for path in sorted(source.rglob("*")):
+                if path.is_symlink():
+                    raise RuntimeError(f"{name}: refusing to bundle a symbolic link: {path}")
+                if not path.is_file():
+                    continue
+                relative = path.relative_to(source).as_posix()
+                if any(part in ("", ".", "..") or ":" in part for part in PurePosixPath(relative).parts):
+                    raise RuntimeError(f"{name}: unsafe dependency path: {relative}")
+                archive_path = f"third_party/{name}/{relative}"
+                manifest["files"].append({
+                    "path": archive_path,
+                    "sha256": sha256_file(path),
+                })
+                bundle.write(path, f"bundle/{archive_path}")
+        bundle.writestr(
+            "bundle/dependency-manifest.json",
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
+        )
+    if not output.is_file() or output.stat().st_size == 0:
+        raise RuntimeError("The dependency bundle was not created.")
+    print(f"Created verified dependency bundle: {output} ({output.stat().st_size} bytes)")
+
+
+def install_dependency_bundle(bundle_path, dependencies):
+    """Install only locked, marker-verified dependency trees from a release bundle."""
+    bundle_path = Path(bundle_path)
+    if not bundle_path.is_file():
+        raise RuntimeError(f"Dependency bundle does not exist: {bundle_path}")
+    # The release bundle is immutable and its outer asset hash is checked by
+    # the launcher. Once its verified manifest and every pinned revision are
+    # installed, avoid unpacking and hashing hundreds of megabytes on each run.
+    with zipfile.ZipFile(bundle_path) as bundle:
+        manifest_bytes = bundle.read("bundle/dependency-manifest.json")
+    manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    try:
+        bundle_manifest = json.loads(manifest_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Dependency bundle integrity manifest is invalid: {error}") from error
+    expected_revisions = {name: dependency["revision"] for name, dependency in dependencies.items()}
+    if not isinstance(bundle_manifest, dict) or bundle_manifest.get("schema_version") != 1 or bundle_manifest.get("revisions") != expected_revisions:
+        raise RuntimeError("Dependency bundle lock revisions do not match dependencies.lock.json.")
+    sentinel = ROOT / "third_party" / ".u-unlocked-dependency-bundle.sha256"
+    if sentinel.is_file() and sentinel.read_text(encoding="ascii").strip() == manifest_digest:
+        installed = all(
+            (ROOT / "third_party" / name / MARKER).is_file()
+            and (ROOT / "third_party" / name / MARKER).read_text(encoding="ascii").strip() == dependency["revision"]
+            for name, dependency in dependencies.items()
+        )
+        if installed:
+            print("Pinned dependency sources are already installed and verified; skipping bundle extraction.")
+            return
+    with tempfile.TemporaryDirectory(prefix="u-unlocked-dependency-bundle-") as temporary:
+        extracted = Path(temporary)
+        safe_extract(bundle_path, extracted)
+        source_root = extracted / "third_party"
+        manifest_path = extracted / "dependency-manifest.json"
+        if not source_root.is_dir() or not manifest_path.is_file():
+            raise RuntimeError("Dependency bundle is missing its source tree or integrity manifest.")
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise RuntimeError(f"Dependency bundle integrity manifest is invalid: {error}") from error
+        expected_revisions = {name: dependency["revision"] for name, dependency in dependencies.items()}
+        if not isinstance(manifest, dict) or manifest.get("schema_version") != 1 or manifest.get("revisions") != expected_revisions:
+            raise RuntimeError("Dependency bundle lock revisions do not match dependencies.lock.json.")
+        file_entries = manifest.get("files")
+        if not isinstance(file_entries, list):
+            raise RuntimeError("Dependency bundle integrity manifest has no valid file inventory.")
+        expected_hashes = {}
+        for entry in file_entries:
+            if not isinstance(entry, dict):
+                raise RuntimeError("Dependency bundle integrity manifest contains an invalid file entry.")
+            relative = entry.get("path")
+            digest = entry.get("sha256")
+            if not isinstance(relative, str) or not isinstance(digest, str) or len(digest) != 64:
+                raise RuntimeError("Dependency bundle integrity manifest contains an invalid path or SHA-256.")
+            parts = PurePosixPath(relative).parts
+            if len(parts) < 3 or parts[0] != "third_party" or parts[1] not in dependencies or any(part in ("", ".", "..") or ":" in part for part in parts):
+                raise RuntimeError(f"Dependency bundle manifest contains an unsafe path: {relative}")
+            if relative in expected_hashes or any(character not in "0123456789abcdef" for character in digest.lower()):
+                raise RuntimeError(f"Dependency bundle manifest contains a duplicate path or invalid hash: {relative}")
+            expected_hashes[relative] = digest.lower()
+        actual_files = {
+            path.relative_to(extracted).as_posix()
+            for path in source_root.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
+        if actual_files != set(expected_hashes):
+            raise RuntimeError("Dependency bundle file inventory does not match its integrity manifest.")
+        for relative, expected_hash in expected_hashes.items():
+            path = extracted.joinpath(*PurePosixPath(relative).parts)
+            actual_hash = sha256_file(path)
+            if actual_hash != expected_hash:
+                raise RuntimeError(f"Dependency bundle SHA-256 mismatch: {relative}")
+        sources = {}
+        for name, dependency in dependencies.items():
+            source = source_root / name
+            marker = source / MARKER
+            if not source.is_dir() or not marker.is_file():
+                raise RuntimeError(f"Dependency bundle is missing pinned dependency {name}.")
+            actual = marker.read_text(encoding="ascii").strip()
+            if actual != dependency["revision"]:
+                raise RuntimeError(f"{name}: dependency bundle revision mismatch; expected {dependency['revision']}, found {actual}.")
+            destination = ROOT / "third_party" / name
+            if destination.exists():
+                existing_marker = destination / MARKER
+                if not existing_marker.is_file() or existing_marker.read_text(encoding="ascii").strip() != dependency["revision"]:
+                    raise RuntimeError(f"Refusing to replace existing dependency directory {destination}; it does not match the locked revision.")
+            sources[name] = (source, destination)
+        for name, (source, destination) in sources.items():
+            if destination.exists():
+                print(f"{name}: {dependencies[name]['revision']} (already installed)")
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(source, destination)
+            print(f"{name}: {dependencies[name]['revision']} (installed from release bundle)")
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    sentinel.write_text(manifest_digest + "\n", encoding="ascii")
+
 def main():
     dependencies = json.loads((ROOT / "dependencies.lock.json").read_text(encoding="utf-8"))
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("names", nargs="*", help="Default: all dependencies in dependencies.lock.json")
+    parser.add_argument("--bundle-output", type=Path, help="Create a release bundle from already verified local dependencies.")
+    parser.add_argument("--bundle-archive", type=Path, default=Path(os.environ["U_UNLOCKED_DEPENDENCY_BUNDLE"]) if os.environ.get("U_UNLOCKED_DEPENDENCY_BUNDLE") else None, help="Install pinned dependencies from a release bundle before checking online sources.")
     args = parser.parse_args()
+    if args.bundle_output and args.bundle_archive:
+        parser.error("--bundle-output and --bundle-archive cannot be used together")
+    if args.bundle_output:
+        if args.names:
+            parser.error("dependency names cannot be combined with --bundle-output")
+        create_dependency_bundle(args.bundle_output, dependencies)
+        return
+    if args.bundle_archive:
+        install_dependency_bundle(args.bundle_archive, dependencies)
     selected = args.names or list(dependencies)
     unknown = [name for name in selected if name not in dependencies]
     if unknown:
