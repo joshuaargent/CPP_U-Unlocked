@@ -99,7 +99,7 @@ try {
         -not ($manifest.objects -is [array]) -or
         $manifest.objects.Count -lt 40 -or $manifest.objects.Count -gt 200 -or
         [int]$manifest.object_count -ne $manifest.objects.Count -or
-        -not ($manifest.libraries -is [array]) -or $manifest.libraries.Count -ne 6 -or
+        -not ($manifest.libraries -is [array]) -or $manifest.libraries.Count -ne 7 -or
         [int]$manifest.library_count -ne $manifest.libraries.Count -or
         -not ($manifest.host_variants -is [array]) -or $manifest.host_variants.Count -ne 2 -or
         ([string]$manifest.compiler_sha256) -notmatch '^[0-9a-fA-F]{64}$') {
