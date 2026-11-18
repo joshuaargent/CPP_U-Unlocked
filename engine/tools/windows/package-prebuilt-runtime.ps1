@@ -27,6 +27,10 @@ $librarySources = [ordered]@{
     'libcafe_title.a' = Join-Path $EngineRoot 'build\runtime\libcafe_title.a'
     'libcafe_latte.a' = Join-Path $EngineRoot 'build\runtime\libcafe_latte.a'
     'libzarchive.a' = Join-Path $EngineRoot 'build\third_party\ZArchive\libzarchive.a'
+    # ZArchive's objects call ZSTD_decompress. Its static dependency must travel
+    # with the generic runtime archive; source-build link interfaces are not
+    # preserved when the ZArchive target is replaced by an imported archive.
+    'libzstd.a' = Join-Path $EngineRoot 'build-deps\prefix\lib\libzstd.a'
 }
 foreach ($library in $librarySources.GetEnumerator()) {
     if (-not (Test-Path -LiteralPath $library.Value -PathType Leaf)) {
@@ -154,7 +158,7 @@ try {
         throw 'The prebuilt runtime archive was not created.'
     }
     $completed = $true
-    Write-Host "Created generic runtime object archive with $($records.Count) objects: $outputArchive" -ForegroundColor Green
+    Write-Host "Created generic runtime object archive with $($records.Count) objects and $($libraryRecords.Count) libraries: $outputArchive" -ForegroundColor Green
 } finally {
     if ($archive) { $archive.Dispose() }
     if (Test-Path -LiteralPath $stage -PathType Container) {
